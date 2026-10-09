@@ -42,7 +42,7 @@ def test_grade_solution_writes_report(tmp_path):
     result = runner.invoke(app, ["grade", "--dir", str(ws), "--task", "rate-limiter"])
     assert result.exit_code == 0, result.output
     report = (ws / "ib-report.md").read_text(encoding="utf-8")
-    assert "60.0/60" in report
+    assert "45.0/45" in report
 
 
 def test_grade_rejects_non_workspace(tmp_path):
