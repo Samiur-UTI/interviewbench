@@ -1,0 +1,58 @@
+criteria:
+  - id: stage1-bug-fixed
+    type: auto
+    stage: 1
+    weight: 20
+    description: Hidden stage 1 tests pass (bursts after idle periods are capped at capacity).
+
+  - id: stage2-feature
+    type: auto
+    stage: 2
+    weight: 20
+    description: Hidden stage 2 tests pass (retry_after is correct and side-effect free; invalid costs raise).
+
+  - id: stage3-scales
+    type: auto
+    stage: 3
+    weight: 20
+    description: Hidden stage 3 tests pass (idle keys evicted, behaviour unchanged, amortized O(1)).
+
+  - id: root-cause
+    type: judge
+    weight: 10
+    description: Fixes the root cause in the token refill logic instead of patching symptoms in callers.
+    levels:
+      0: No fix, or the change only hides the symptom (e.g. special-casing in RateLimiter).
+      1: The fix works but lives in the wrong layer or duplicates logic.
+      2: Refill is capped at capacity inside TokenBucket.
+      3: As 2, and NOTES.md explains why the bug only appeared after idle periods.
+
+  - id: code-quality
+    type: judge
+    weight: 10
+    description: Changes are small, readable, and fit the existing design and API.
+    levels:
+      0: Hard to follow, or breaks the existing public API.
+      1: Works but adds unnecessary complexity or duplication.
+      2: Clear and consistent with the codebase.
+      3: Clear, minimal, and handles edge cases (float precision, invalid input) cleanly.
+
+  - id: verification
+    type: judge
+    weight: 10
+    description: Adds or updates tests that would have caught the bug and cover the new behaviour.
+    levels:
+      0: No new tests.
+      1: Some tests, but they would not have caught the original bug.
+      2: A regression test for the bug plus tests for retry_after.
+      3: As 2, plus tests for eviction and edge cases, using FakeClock instead of sleeping.
+
+  - id: communication
+    type: judge
+    weight: 10
+    description: NOTES.md explains findings, changes, trade-offs, and how AI assistance was used and checked.
+    levels:
+      0: Empty or missing.
+      1: Lists changes only.
+      2: Explains root cause, changes, and trade-offs.
+      3: As 2, and says what the AI got wrong or what was verified by hand.

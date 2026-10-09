@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "interviewbench"
+version = "0.1.0"
+description = "Realistic AI-era coding interview tasks with rubrics, a grader, and an LLM leaderboard."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+dependencies = [
+    "typer>=0.12",
+    "rich>=13",
+    "pyyaml>=6",
+    "pytest>=8",
+]
+
+[project.scripts]
+interviewbench = "interviewbench.cli:app"
+ib = "interviewbench.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/interviewbench"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"tasks" = "interviewbench/_tasks"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

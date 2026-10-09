@@ -1,0 +1,50 @@
+id: rate-limiter
+title: Per-key token-bucket rate limiter
+level: mid
+language: python
+time_limit_minutes: 60
+summary: >
+  You've joined the API platform team. `ratelimiter/` is the in-process library every
+  service uses to rate-limit requests per API key. Read the code first; it's small.
+
+stages:
+  - title: Fix the bug
+    prompt: |
+      **Incident report:** several customers on the 5-requests-burst plan were able to send
+      hundreds of requests in a single second. It only happens to customers who had been
+      quiet for a while (overnight, after a deploy, etc.).
+
+      Find the root cause and fix it. Keep the public API unchanged.
+
+      Write down what you found in `NOTES.md`.
+
+  - title: Add a feature
+    prompt: |
+      Clients want to know *when* to retry instead of polling.
+
+      Add `RateLimiter.retry_after(key: str, cost: float = 1) -> float`:
+
+      - Returns the number of seconds until a request of `cost` for `key` would be allowed,
+        or `0.0` if it would be allowed right now.
+      - Must **not** consume tokens.
+      - Waiting exactly the returned time and then calling `allow(key, cost)` must succeed.
+
+      Also, a request whose `cost` is greater than the bucket capacity can never succeed, and
+      a `cost <= 0` makes no sense. Both `allow` and `retry_after` must raise `ValueError`
+      for these.
+
+  - title: Optimize
+    prompt: |
+      The limiter is now used per client IP. It sees millions of one-off keys a day and its
+      memory grows forever.
+
+      A bucket that has fully refilled behaves exactly like a brand-new bucket, so it doesn't
+      need to be stored. Make the limiter evict state it no longer needs:
+
+      - `len(limiter)` returns the number of keys currently tracked.
+      - Once a key has had no `allow` calls for at least `capacity / refill_rate` seconds,
+        it must no longer be tracked after the next call to `allow` or `retry_after`.
+      - Observable behaviour (`allow` / `retry_after` results) must be identical to a limiter
+        that never evicts.
+      - `allow` must stay fast: amortized O(1). 200,000 calls on distinct keys should take
+        well under a few seconds.
