@@ -131,6 +131,8 @@ def _validate(task: Task) -> None:
             raise TaskError(f"Criterion '{c.id}' must have a positive weight")
         if c.type == "auto" and c.stage not in stage_numbers:
             raise TaskError(f"Auto criterion '{c.id}' must reference an existing stage")
+        if c.type == "judge" and (len(c.levels) < 2 or sorted(c.levels) != list(range(len(c.levels)))):
+            raise TaskError(f"Judge criterion '{c.id}' needs levels numbered 0, 1, 2, ...")
 
 
 def load_all(root: Path | None = None) -> list[Task]:

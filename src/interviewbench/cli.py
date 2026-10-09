@@ -13,6 +13,7 @@ from rich.table import Table
 
 from . import __version__
 from .grader import DEFAULT_TIMEOUT, grade as grade_workspace
+from .judge import JudgeError, run_judge
 from .report import render, to_markdown
 from .tasks import Task, TaskError, get_task, load_all
 
@@ -118,6 +119,8 @@ def grade(
     task_id: Optional[str] = typer.Option(None, "--task", "-t", help="Task id (read from the workspace if omitted)"),
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Markdown report path"),
     timeout: int = typer.Option(DEFAULT_TIMEOUT, help="Per-stage test timeout in seconds"),
+    judge: bool = typer.Option(False, "--judge", help="Also score the judge criteria with Claude (needs an API key)"),
+    judge_model: Optional[str] = typer.Option(None, help="Claude model for --judge (default: $IB_JUDGE_MODEL or claude-opus-5-5)"),
 ) -> None:
     """Grade a workspace against the task's hidden tests and rubric."""
     if not dir.is_dir():
@@ -125,10 +128,19 @@ def grade(
     task = _task_from_workspace(dir, task_id)
     with console.status("Running hidden tests..."):
         result = grade_workspace(task, dir, timeout=timeout)
+    judge_error = None
+    if judge:
+        with console.status("Running the AI judge..."):
+            try:
+                run_judge(result, dir, model=judge_model, timeout=timeout)
+            except JudgeError as exc:
+                judge_error = str(exc)
     render(result, console)
     report_path = output or dir / "ib-report.md"
     report_path.write_text(to_markdown(result), encoding="utf-8")
     console.print(f"Report written to [green]{report_path}[/green]")
+    if judge_error:
+        _fail(f"AI judge failed, so only auto criteria were scored: {judge_error}")
 
 
 @app.command()

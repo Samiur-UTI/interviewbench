@@ -8,11 +8,18 @@ import tempfile
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .tasks import Criterion, Task
 
+if TYPE_CHECKING:
+    from .judge import Review
+
 DEFAULT_TIMEOUT = 120
-_IGNORE = shutil.ignore_patterns(".git", ".venv", "__pycache__", ".pytest_cache", "*.pyc", "ib-report.md")
+CANDIDATE_TESTS = 0  # StageResult.stage for the candidate's own test suite
+_IGNORE = shutil.ignore_patterns(
+    ".git", ".venv", "__pycache__", ".pytest_cache", "*.pyc", "ib-report.md", ".interviewbench.json"
+)
 
 
 @dataclass
@@ -46,6 +53,7 @@ class GradeResult:
     task: Task
     stages: list[StageResult]
     scores: list[CriterionScore]
+    review: Review | None = None
 
     @property
     def total_weight(self) -> float:
@@ -72,23 +80,30 @@ def run_stage_tests(task: Task, workspace: Path, stage: int, timeout: int = DEFA
         # a shadowing pytest.py) can't change how the hidden tests run.
         ini = tmp_path / "pytest.ini"
         ini.write_text(f"[pytest]\npythonpath = {work.as_posix()}\n", encoding="utf-8")
-        junit = tmp_path / "junit.xml"
-        cmd = [
-            sys.executable, "-m", "pytest", str(hidden),
-            "-c", str(ini), "--rootdir", str(tmp_path),
-            "--noconftest", "-p", "no:cacheprovider", "--import-mode=importlib",
-            "-q", f"--junitxml={junit}",
+        args = [
+            str(hidden), "-c", str(ini), "--rootdir", str(tmp_path),
+            "--noconftest", "--import-mode=importlib",
         ]
-        try:
-            proc = subprocess.run(
-                cmd, cwd=tmp_path, capture_output=True, text=True, timeout=timeout,
-                env=_clean_env(),
-            )
-        except subprocess.TimeoutExpired:
-            return StageResult(stage, 0, 0, error=f"Hidden tests timed out after {timeout}s")
-        if not junit.exists():
-            return StageResult(stage, 0, 0, error=_tail(proc.stdout + proc.stderr))
-        return _parse_junit(stage, junit)
+        return _run_pytest(stage, args, tmp_path, tmp_path / "junit.xml", timeout)
+
+
+def run_candidate_tests(workspace: Path, timeout: int = DEFAULT_TIMEOUT) -> StageResult:
+    """Run the tests the candidate wrote, the way they would run them: `python -m pytest` from the repo root."""
+    with tempfile.TemporaryDirectory(prefix="ib-", ignore_cleanup_errors=True) as tmp:
+        work = Path(tmp) / "work"
+        shutil.copytree(workspace, work, ignore=_IGNORE)
+        return _run_pytest(CANDIDATE_TESTS, [], work, Path(tmp) / "junit.xml", timeout)
+
+
+def _run_pytest(stage: int, args: list[str], cwd: Path, junit: Path, timeout: int) -> StageResult:
+    cmd = [sys.executable, "-m", "pytest", *args, "-p", "no:cacheprovider", "-q", f"--junitxml={junit}"]
+    try:
+        proc = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout, env=_clean_env())
+    except subprocess.TimeoutExpired:
+        return StageResult(stage, 0, 0, error=f"Tests timed out after {timeout}s")
+    if not junit.exists():
+        return StageResult(stage, 0, 0, error=_tail(proc.stdout + proc.stderr))
+    return _parse_junit(stage, junit)
 
 
 def _clean_env() -> dict[str, str]:

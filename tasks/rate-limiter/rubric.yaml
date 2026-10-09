@@ -2,20 +2,30 @@ criteria:
   - id: stage1-bug-fixed
     type: auto
     stage: 1
-    weight: 20
+    weight: 15
     description: Hidden stage 1 tests pass (bursts after idle periods are capped at capacity).
 
   - id: stage2-feature
     type: auto
     stage: 2
-    weight: 20
+    weight: 15
     description: Hidden stage 2 tests pass (retry_after is correct and side-effect free; invalid costs raise).
 
   - id: stage3-scales
     type: auto
     stage: 3
-    weight: 20
+    weight: 15
     description: Hidden stage 3 tests pass (idle keys evicted, behaviour unchanged, amortized O(1)).
+
+  - id: correctness
+    type: judge
+    weight: 15
+    description: The code is correct beyond what the hidden tests check, and the candidate's own tests pass.
+    levels:
+      0: Wrong in common cases, or the candidate's tests fail.
+      1: Works for the tested paths but has a real bug the tests miss (e.g. eviction changes results).
+      2: Correct, with at most minor edge-case gaps.
+      3: Correct, including float rounding, invalid input, and eviction boundary cases.
 
   - id: root-cause
     type: judge

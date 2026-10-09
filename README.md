@@ -29,6 +29,20 @@ Each task mirrors the new AI-enabled interview format: a small multi-file codeba
 
 Hidden tests check each stage; a weighted rubric scores the result.
 
+## AI judge
+
+Some rubric criteria (correctness beyond the tests, missed edge cases, code quality, root cause,
+communication) need a reviewer. `ib grade --judge` asks Claude to score them and lists any other
+issues it finds:
+
+```bash
+pip install -e ".[judge]"
+export ANTHROPIC_API_KEY=...        # or: ant auth login
+ib grade --dir ib-workspace/rate-limiter --judge
+```
+
+The model defaults to `claude-opus-5-5`; override it with `--judge-model` or `IB_JUDGE_MODEL`.
+
 ## License
 
 MIT

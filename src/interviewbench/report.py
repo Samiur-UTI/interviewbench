@@ -45,6 +45,10 @@ def render(result: GradeResult, console: Console) -> None:
         hidden = len(stage.failures) - MAX_FAILURES_SHOWN
         if hidden > 0:
             console.print(f"[dim]...and {hidden} more failing tests in stage {stage.stage}[/dim]")
+    if result.review:
+        console.print(f"\n[bold]AI review[/bold] ({result.review.model})")
+        for line in _review_lines(result):
+            console.print(line, markup=False)
     console.print(f"\n[bold]{summary_line(result)}[/bold]\n")
 
 
@@ -69,7 +73,20 @@ def to_markdown(result: GradeResult) -> str:
             lines += [f"- Stage {st.stage} could not run:", "", "```", st.error or "", "```"]
         for stage, f in failing:
             lines.append(f"- Stage {stage} `{f.name}`: {f.message}")
+    if result.review:
+        lines += ["", f"## AI review ({result.review.model})", "", *_review_lines(result)]
     lines += ["", "## Rubric", ""]
     for s in result.scores:
         lines.append(f"- **{s.criterion.id}** ({s.criterion.weight:.0f} pts): {s.criterion.description}")
     return "\n".join(lines) + "\n"
+
+
+def _review_lines(result: GradeResult) -> list[str]:
+    review = result.review
+    assert review is not None
+    tests = review.candidate_tests
+    ran = tests.error or f"{tests.passed}/{tests.total} passed"
+    lines = [review.summary, "", f"- Candidate's own tests: {ran}"]
+    lines += [f"- Missed edge case: {case}" for case in review.missed_edge_cases]
+    lines += [f"- [{i.severity}] {i.category} at {i.location}: {i.description}" for i in review.issues]
+    return lines

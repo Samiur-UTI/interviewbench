@@ -16,6 +16,9 @@ dependencies = [
     "pytest>=8",
 ]
 
+[project.optional-dependencies]
+judge = ["anthropic>=1.13,<2"]
+
 [project.scripts]
 interviewbench = "interviewbench.cli:app"
 ib = "interviewbench.cli:app"
