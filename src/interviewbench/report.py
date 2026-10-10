@@ -23,7 +23,10 @@ def summary_line(result: GradeResult) -> str:
 
 
 def render(result: GradeResult, console: Console) -> None:
-    console.print(f"\n[bold]{result.task.title}[/bold]  ({result.task.id})")
+    console.print(
+        f"\n[bold]{result.task.title}[/bold]  ({result.task.category}/{result.task.id}, "
+        f"{result.runner} runner)"
+    )
     table = Table(show_lines=False)
     table.add_column("Criterion")
     table.add_column("Type")
@@ -57,6 +60,8 @@ def to_markdown(result: GradeResult) -> str:
         f"# interviewbench report: {result.task.title}",
         "",
         f"**{summary_line(result)}**",
+        "",
+        f"Task: `{result.task.category}/{result.task.id}` · Hidden tests ran with the {result.runner} runner",
         "",
         "| Criterion | Type | Weight | Score | Evidence |",
         "|---|---|---:|---:|---|",

@@ -11,10 +11,14 @@ from __future__ import annotations
 import difflib
 import json
 import os
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .grader import _IGNORE, CriterionScore, GradeResult, StageResult, run_candidate_tests
+from .grader import (
+    _IGNORE, CriterionScore, GradeResult, StageResult, build_reference, run_candidate_tests,
+)
+from .runner import Runner, RunnerError, get_runner
 from .tasks import Criterion, Task
 
 DEFAULT_MODEL = "claude-opus-5-5"
@@ -27,7 +31,7 @@ ISSUE_CATEGORIES = (
 
 SYSTEM_PROMPT = """\
 You are the grader for a coding interview task. The candidate was given a small starter repo and \
-a three-stage brief (fix a bug, add a feature, optimize), and was allowed to use AI assistants. \
+a multi-stage brief (usually fix a bug, add a feature, optimize), and was allowed to use AI assistants. \
 Hidden tests already scored whether each stage works; your job is the part tests can't measure.
 
 Score every rubric criterion listed below at exactly one of its levels. Rules:
@@ -71,17 +75,28 @@ class Review:
 
 
 def run_judge(
-    result: GradeResult, workspace: Path, *, model: str | None = None, timeout: int = 120
+    result: GradeResult,
+    workspace: Path,
+    *,
+    runner: Runner | None = None,
+    model: str | None = None,
+    timeout: int | None = None,
 ) -> None:
     """Fill in the judge criteria of `result` and attach the review. Raises JudgeError."""
     task = result.task
     criteria = [c for c in task.criteria if c.type == "judge"]
-    candidate_tests = run_candidate_tests(workspace, timeout)
+    runner = runner or get_runner()
+    candidate_tests = run_candidate_tests(task, workspace, runner, timeout)
     model = model or os.environ.get("IB_JUDGE_MODEL", DEFAULT_MODEL)
+    with tempfile.TemporaryDirectory(prefix="ib-", ignore_cleanup_errors=True) as tmp:
+        try:
+            solution, _ = _read_tree(build_reference(task, Path(tmp) / "solution", runner))
+        except RunnerError as exc:
+            raise JudgeError(f"Could not build the reference solution: {exc}") from exc
 
     output = _call_claude(
         model,
-        system=_system_prompt(task, criteria),
+        system=_system_prompt(task, criteria, solution),
         user=_submission(task, workspace, result.stages, candidate_tests),
         schema=_output_schema(criteria),
     )
@@ -115,15 +130,14 @@ def _score(criterion: Criterion, judged: dict | None) -> CriterionScore:
 # --- Prompt ---------------------------------------------------------------------------------
 
 
-def _system_prompt(task: Task, criteria: list[Criterion]) -> str:
-    starter, _ = _read_tree(task.repo_dir)
-    solution, _ = _read_tree(task.solution_dir)
+def _system_prompt(task: Task, criteria: list[Criterion], solution: dict[str, str]) -> str:
+    starter, _ = _read_tree(task.starter_dir)
     hidden = {
-        f"stage{s.number}/{name}": text
+        f"{s.name}/{name}": text
         for s in task.stages
-        for name, text in _read_tree(task.hidden_tests_dir(s.number))[0].items()
+        for name, text in _read_tree(s.tests_dir)[0].items()
     }
-    brief = "\n\n".join(f"### Stage {s.number}: {s.title}\n{s.prompt}" for s in task.stages)
+    brief = "\n\n".join(f"### Stage {s.number}\n{s.prompt}" for s in task.stages)
     rubric = "\n\n".join(
         f"- id: {c.id} (weight {c.weight:g})\n  {c.description}\n"
         + "\n".join(f"  {level}: {text}" for level, text in sorted(c.levels.items()))
@@ -131,7 +145,8 @@ def _system_prompt(task: Task, criteria: list[Criterion]) -> str:
     )
     return "\n\n".join([
         SYSTEM_PROMPT,
-        f"<task>\n# {task.title}\n{task.summary}\n\n{brief}\n</task>",
+        f"<task>\n# {task.title} ({task.category}: {', '.join(task.tags)})\n\n{brief}\n</task>",
+        _tag("review_focus", "\n\n".join(task.focus)),
         f"<rubric>\n{rubric}\n</rubric>",
         _tag("starter_repo", _files_block(starter)),
         _tag("hidden_tests", _files_block(hidden)),
@@ -142,7 +157,7 @@ def _system_prompt(task: Task, criteria: list[Criterion]) -> str:
 def _submission(
     task: Task, workspace: Path, stages: list[StageResult], candidate_tests: StageResult
 ) -> str:
-    starter, _ = _read_tree(task.repo_dir)
+    starter, _ = _read_tree(task.starter_dir)
     final, omitted = _read_tree(workspace)
     changed = {name: text for name, text in final.items() if starter.get(name) != text}
     results = "\n".join(
