@@ -33,6 +33,7 @@ packages = ["src/interviewbench"]
 [tool.hatch.build.targets.wheel.force-include]
 "tasks" = "interviewbench/_bench/tasks"
 "rubrics" = "interviewbench/_bench/rubrics"
+"templates" = "interviewbench/_bench/templates"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

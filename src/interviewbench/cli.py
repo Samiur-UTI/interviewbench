@@ -17,7 +17,7 @@ from .grader import build_reference, grade as grade_workspace
 from .judge import JudgeError, run_judge
 from .report import render, to_markdown
 from .runner import RUNNERS, Runner, RunnerError, get_runner
-from .tasks import Task, TaskError, get_task, load_all
+from .tasks import Task, TaskError, categories, get_task, load_all, tasks_root, templates_root
 
 MARKER = ".interviewbench.json"
 DEFAULT_WORKSPACE = Path("ib-workspace")
@@ -69,12 +69,19 @@ def _print_stage(task: Task, number: int) -> None:
 
 
 @app.command("list")
-def list_tasks() -> None:
+def list_tasks(
+    category: Optional[str] = typer.Option(None, "--category", "-c", help="Only this category"),
+    tag: Optional[str] = typer.Option(None, "--tag", help="Only tasks with this tag"),
+) -> None:
     """List available tasks."""
     try:
         tasks = load_all()
     except TaskError as exc:
         _fail(str(exc))
+    tasks = [
+        t for t in tasks
+        if (category is None or t.category == category) and (tag is None or tag in t.tags)
+    ]
     table = Table()
     for col in ("ID", "Category", "Title", "Level", "Tags", "Time"):
         table.add_column(col)
@@ -155,6 +162,34 @@ def grade(
     console.print(f"Report written to [green]{report_path}[/green]")
     if judge_error:
         _fail(f"AI judge failed, so only auto criteria were scored: {judge_error}")
+
+
+@app.command()
+def new(
+    task_id: str = typer.Argument(..., help="New task id (its folder name), e.g. order-api"),
+    category: str = typer.Option(..., "--category", "-c", help="Task category, e.g. backend"),
+    template: Optional[str] = typer.Option(None, "--template", help="Folder under templates/ (default: the first <category>-* one)"),
+) -> None:
+    """Create a task skeleton from a template (run inside a clone of the repo)."""
+    known = categories()
+    if category not in known:
+        _fail(f"Unknown category '{category}'. Known: {', '.join(known)}. Add rubrics/{category}.yaml to create one.")
+    root = templates_root()
+    available = sorted(p.name for p in root.iterdir() if p.is_dir()) if root.is_dir() else []
+    template = template or next((t for t in available if t.startswith(f"{category}-")), None)
+    if template not in available:
+        _fail(f"No template for '{category}'. Available: {', '.join(available) or 'none'}. Pass --template.")
+    if any(d.name == task_id for d in tasks_root().glob("*/*")):
+        _fail(f"A task named '{task_id}' already exists")
+    dest = tasks_root() / category / task_id
+    shutil.copytree(root / template, dest)
+    for path in dest.rglob("*"):
+        if path.is_file() and path.suffix in (".toml", ".md", ".yaml"):
+            text = path.read_text(encoding="utf-8")
+            text = text.replace("{{task_id}}", task_id).replace("{{category}}", category)
+            path.write_text(text, encoding="utf-8", newline="\n")
+    console.print(f"Created [green]{dest}[/green] from templates/{template}.")
+    console.print(f"Fill in every TODO, then run [bold]ib validate {task_id} --run[/bold]. See docs/TASK_FORMAT.md.")
 
 
 @app.command()

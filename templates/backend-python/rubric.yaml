@@ -1,0 +1,30 @@
+# Inherits rubrics/base.yaml and rubrics/{{category}}.yaml. Add the auto criteria (one per stage),
+# override inherited criteria by id with task-specific levels, and keep the total at 100.
+
+focus: |
+  TODO: what a reviewer of this task should watch for (likely wrong fixes, subtle edge cases).
+
+criteria:
+  - id: stage1-bug-fixed
+    type: auto
+    stage: 1
+    weight: 15
+    description: "TODO: Hidden stage 1 tests pass (...)."
+
+  - id: stage2-feature
+    type: auto
+    stage: 2
+    weight: 15
+    description: "TODO: Hidden stage 2 tests pass (...)."
+
+  - id: stage3-optimized
+    type: auto
+    stage: 3
+    weight: 15
+    description: "TODO: Hidden stage 3 tests pass (...)."
+
+  - id: correctness
+    weight: 10
+
+  - id: communication
+    weight: 5

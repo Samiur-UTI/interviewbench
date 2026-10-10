@@ -15,6 +15,12 @@ def test_list_shows_tasks():
     assert "rate-limiter" in result.output and "backend" in result.output
 
 
+def test_list_filters_by_category_and_tag():
+    assert "rate-limiter" not in runner.invoke(app, ["list", "--category", "frontend"]).output
+    assert "rate-limiter" in runner.invoke(app, ["list", "--tag", "python"]).output
+    assert "rate-limiter" not in runner.invoke(app, ["list", "--tag", "react"]).output
+
+
 def test_start_creates_workspace(tmp_path):
     dest = tmp_path / "ws"
     result = runner.invoke(app, ["start", "rate-limiter", "--dir", str(dest)])
@@ -57,3 +63,23 @@ def test_validate_all_tasks():
     assert result.exit_code == 0, result.output
     assert "ok backend/rate-limiter" in result.output
 
+
+def test_new_creates_valid_skeleton(tmp_path, monkeypatch):
+    root = tmp_path / "bench"
+    for folder in ("rubrics", "templates"):
+        shutil.copytree(f"{folder}", root / folder)
+    (root / "tasks").mkdir()
+    monkeypatch.setenv("IB_ROOT", str(root))
+    result = runner.invoke(app, ["new", "order-api", "--category", "backend"])
+    assert result.exit_code == 0, result.output
+    task_toml = (root / "tasks" / "backend" / "order-api" / "task.toml").read_text(encoding="utf-8")
+    assert 'name = "interviewbench/order-api"' in task_toml
+    # The skeleton loads and passes static validation; only its TODO content is missing.
+    assert runner.invoke(app, ["validate", "order-api"]).exit_code == 0
+    assert runner.invoke(app, ["new", "order-api", "--category", "backend"]).exit_code == 1
+
+
+def test_new_rejects_unknown_category():
+    result = runner.invoke(app, ["new", "x", "--category", "mobile"])
+    assert result.exit_code == 1
+    assert "rubrics/mobile.yaml" in result.output
