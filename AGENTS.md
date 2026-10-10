@@ -8,18 +8,24 @@ three stages (fix a bug → add a feature → optimize), hidden tests per stage,
 The CLI grades a candidate's (or an LLM's) solution against the rubric.
 
 ## Layout
-- `src/interviewbench/` — CLI (`cli.py`), task/rubric loading (`tasks.py`), grading (`grader.py`), reports (`report.py`)
-- `tasks/<task-id>/` — `task.yaml`, `rubric.yaml`, `repo/` (starter code), `tests/stageN/` (hidden tests), `solution/`
+- `src/interviewbench/` — CLI (`cli.py`), task/rubric loading + validation (`tasks.py`), running task scripts in Docker or local bash (`runner.py`), grading (`grader.py`), AI judge (`judge.py`), reports (`report.py`)
+- `tasks/<category>/<task-id>/` — a Harbor multi-step task: `task.toml`, `environment/` (Dockerfile + `app/` starter), `tests/test.sh` (shared verifier), `steps/stage-N/` (instruction.md, hidden tests, solution/solve.sh), plus ib-only `rubric.yaml`
+- `rubrics/` — `base.yaml` + one file per category (a category exists iff its rubric file does)
+- `templates/` — task skeletons for `ib new`
+- `docs/TASK_FORMAT.md` — the task contract; keep it in sync with `tasks.py` validation
 - `tests/` — tests for the interviewbench package itself
 
 ## Commands
 - Install: `python -m venv .venv && .venv/Scripts/pip install -e .` (Windows) or `.venv/bin/pip install -e .`
 - Package tests: `.venv/Scripts/python -m pytest`
+- Package tests in containers: `IB_TEST_RUNNER=docker .venv/Scripts/python -m pytest`
 - Try a task: `ib list`, `ib start rate-limiter`, `ib grade --dir ib-workspace/rate-limiter`
+- Check tasks: `ib validate --run`; Harbor's own check: `harbor run -p tasks/backend -a oracle`
 
 ## Rules
 - Tasks must be original. Never copy real company interview questions or NDA'd material.
-- Every task: starter `repo/` must FAIL stage1 hidden tests; `solution/` must PASS all stages. `tests/test_tasks.py` enforces this.
-- Hidden tests import from the repo root (PYTHONPATH is set to the workspace copy).
+- Every task: starter `environment/app/` must FAIL stage 1 hidden tests; after solutions 1..N, stage N must PASS. `tests/test_tasks.py` enforces this.
+- Follow `docs/TASK_FORMAT.md`. Scripts use `$APP_DIR`/`$TESTS_DIR`/`$SOLUTION_DIR`/`$LOGS_DIR`, never hard-coded paths, and keep LF line endings.
+- Never add language-specific logic to the grader; it belongs in the task's `test.sh` and Dockerfile.
 - Keep dependencies minimal; no web UI in v1.
 - Coordinate via git: one agent per branch/file area at a time; commit small.

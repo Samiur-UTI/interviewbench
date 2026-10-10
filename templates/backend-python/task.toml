@@ -1,0 +1,45 @@
+schema_version = "1.4"
+multi_step_reward_strategy = "mean"
+
+[task]
+name = "interviewbench/{{task_id}}"
+version = "1.0.0"
+description = "TODO: one-line title"
+authors = [{ name = "TODO: your name" }]
+keywords = ["python"]
+
+[metadata]
+category = "{{category}}"                  # must match the folder: tasks/{{category}}/
+tags = ["python"]                          # TODO: stack, libraries, topics (used by `ib list --tag`)
+difficulty = "medium"                      # easy | medium | hard
+expert_time_estimate_min = 30
+junior_time_estimate_min = 90
+
+[metadata.interviewbench]
+level = "mid"                              # junior | mid | senior
+language = "python"
+time_limit_minutes = 60
+candidate_tests = '"${PYTHON:-python}" -m pytest -q -p no:cacheprovider --junitxml="$LOGS_DIR/junit.xml"'
+
+[[steps]]
+name = "stage-1"
+[steps.agent]
+timeout_sec = 1200
+
+[[steps]]
+name = "stage-2"
+[steps.agent]
+timeout_sec = 1200
+
+[[steps]]
+name = "stage-3"
+[steps.agent]
+timeout_sec = 1200
+
+[verifier]
+timeout_sec = 180
+
+[environment]
+build_timeout_sec = 600
+cpus = 1
+memory_mb = 2048

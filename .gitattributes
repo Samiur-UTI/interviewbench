@@ -1,0 +1,4 @@
+# Task scripts and container files run on Linux: keep LF even on Windows checkouts.
+*.sh        text eol=lf
+Dockerfile  text eol=lf
+*.toml      text eol=lf

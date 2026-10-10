@@ -1,0 +1,25 @@
+# Backend tasks: services, APIs, libraries, data stores.
+
+focus: |
+  Backend review focus: data integrity, behaviour under concurrent or repeated requests, keeping
+  the public API backward compatible, and clear handling of invalid input and failing
+  dependencies (database down, timeouts, retries).
+
+criteria:
+  - id: api-compatibility
+    type: judge
+    weight: 5
+    description: Existing callers keep working; the public API and its behaviour change only where the brief asks.
+    levels:
+      0: Breaks existing callers or changes behaviour the brief did not ask to change.
+      1: Compatible, but with an unrequested change in behaviour or signature.
+      2: Fully backward compatible.
+
+  - id: error-handling
+    type: judge
+    weight: 5
+    description: Invalid input and failure cases are rejected or handled explicitly and consistently.
+    levels:
+      0: Invalid input is silently accepted or crashes with an unhelpful error.
+      1: Most invalid input is handled, but inconsistently across entry points.
+      2: All entry points validate input the same way, with clear errors.

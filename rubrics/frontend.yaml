@@ -1,0 +1,25 @@
+# Frontend tasks: web UI components, state, client-side data fetching.
+
+focus: |
+  Frontend review focus: behaviour a user can observe (test behaviour, not screenshots),
+  accessibility (keyboard use, labels, focus), predictable state management, and handling of
+  slow, failing, or repeated network requests.
+
+criteria:
+  - id: accessibility
+    type: judge
+    weight: 5
+    description: New or changed UI is usable with a keyboard and a screen reader.
+    levels:
+      0: New controls can't be reached or understood without a mouse and sight.
+      1: Mostly accessible, with gaps (missing labels, lost focus, no live updates).
+      2: Keyboard and screen-reader friendly.
+
+  - id: state-management
+    type: judge
+    weight: 5
+    description: State lives in the right place and stays consistent across loading, error, and repeated actions.
+    levels:
+      0: State can become inconsistent (double submits, stale data, race conditions).
+      1: Consistent in normal use, but with edge cases (unmount mid-request, retries).
+      2: Consistent in all the cases the brief implies.

@@ -1,41 +1,31 @@
+# Criteria every task inherits. A category rubric (rubrics/<category>.yaml) adds to these, and a
+# task's rubric.yaml adds its `auto` criteria and can override or exclude anything by id.
+# Merge rule: same id -> fields are replaced (levels as a whole); final weights must total 100.
+
+focus: |
+  Judge what was submitted, not what was intended. Prefer the simplest change that fixes the
+  root cause and fits the existing design.
+
 criteria:
-  - id: stage1-bug-fixed
-    type: auto
-    stage: 1
-    weight: 15
-    description: Hidden stage 1 tests pass (bursts after idle periods are capped at capacity).
-
-  - id: stage2-feature
-    type: auto
-    stage: 2
-    weight: 15
-    description: Hidden stage 2 tests pass (retry_after is correct and side-effect free; invalid costs raise).
-
-  - id: stage3-scales
-    type: auto
-    stage: 3
-    weight: 15
-    description: Hidden stage 3 tests pass (idle keys evicted, behaviour unchanged, amortized O(1)).
-
   - id: correctness
     type: judge
     weight: 15
     description: The code is correct beyond what the hidden tests check, and the candidate's own tests pass.
     levels:
       0: Wrong in common cases, or the candidate's tests fail.
-      1: Works for the tested paths but has a real bug the tests miss (e.g. eviction changes results).
+      1: Works for the tested paths but has a real bug the tests miss.
       2: Correct, with at most minor edge-case gaps.
-      3: Correct, including float rounding, invalid input, and eviction boundary cases.
+      3: Correct, including edge cases and invalid input.
 
   - id: root-cause
     type: judge
     weight: 10
-    description: Fixes the root cause in the token refill logic instead of patching symptoms in callers.
+    description: Fixes the root cause of the bug instead of patching its symptoms.
     levels:
-      0: No fix, or the change only hides the symptom (e.g. special-casing in RateLimiter).
+      0: No fix, or the change only hides the symptom.
       1: The fix works but lives in the wrong layer or duplicates logic.
-      2: Refill is capped at capacity inside TokenBucket.
-      3: As 2, and NOTES.md explains why the bug only appeared after idle periods.
+      2: The fix is in the right place.
+      3: As 2, and NOTES.md explains why the bug happened.
 
   - id: code-quality
     type: judge
@@ -45,7 +35,7 @@ criteria:
       0: Hard to follow, or breaks the existing public API.
       1: Works but adds unnecessary complexity or duplication.
       2: Clear and consistent with the codebase.
-      3: Clear, minimal, and handles edge cases (float precision, invalid input) cleanly.
+      3: Clear, minimal, and handles edge cases cleanly.
 
   - id: verification
     type: judge
@@ -54,8 +44,8 @@ criteria:
     levels:
       0: No new tests.
       1: Some tests, but they would not have caught the original bug.
-      2: A regression test for the bug plus tests for retry_after.
-      3: As 2, plus tests for eviction and edge cases, using FakeClock instead of sleeping.
+      2: A regression test for the bug plus tests for the new feature.
+      3: As 2, plus tests for the optimization and edge cases.
 
   - id: communication
     type: judge

@@ -1,0 +1,26 @@
+# DevOps tasks: containers, CI pipelines, infrastructure as code, deploy scripts.
+# Tasks must never need real cloud accounts or credentials.
+
+focus: |
+  DevOps review focus: secrets handling, least privilege (non-root, minimal permissions),
+  pinned versions, clean startup and shutdown, and idempotency (running twice gives the same
+  result).
+
+criteria:
+  - id: security
+    type: judge
+    weight: 5
+    description: No secrets in code or images; runs with the least privilege it needs.
+    levels:
+      0: Leaks a secret, or runs privileged/as root without need.
+      1: No leaks, but broader permissions than needed.
+      2: No leaks and least privilege throughout.
+
+  - id: reproducibility
+    type: judge
+    weight: 5
+    description: Versions are pinned and re-running the change gives the same result.
+    levels:
+      0: Unpinned dependencies or non-idempotent steps that break on a second run.
+      1: Mostly pinned and idempotent, with gaps.
+      2: Fully pinned and idempotent.
