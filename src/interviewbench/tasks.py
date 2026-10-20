@@ -34,10 +34,14 @@ LEVELS = ("junior", "mid", "senior")
 DIFFICULTIES = ("easy", "medium", "hard")
 _ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 _LF_ONLY = ("*.sh", "Dockerfile", "*.toml")
-# Files `ib start` writes into a workspace. They are never graded, so a starter may not contain them.
+# Files `ib` writes into a workspace. They are never graded, so a starter may not contain them.
 MARKER = ".interviewbench.json"
 BRIEF = "TASK.md"
-WORKSPACE_FILES = (MARKER, BRIEF)
+REPORT = "ib-report.md"
+JUDGE_PROMPT = "ib-judge-prompt.md"
+JUDGE_REPLY = "ib-judge-reply.txt"
+ATTACK_PROMPT = "ib-attack-prompt.md"
+WORKSPACE_FILES = (MARKER, BRIEF, REPORT, JUDGE_PROMPT, JUDGE_REPLY, ATTACK_PROMPT)
 
 
 class TaskError(Exception):
@@ -87,6 +91,7 @@ class Task:
     path: Path
     verifier_timeout: int
     candidate_tests: str | None = None
+    attack_dir: str = "tests"  # where `ib break` puts attack tests, relative to the app folder
     cpus: int | None = None
     memory_mb: int | None = None
 
@@ -246,6 +251,7 @@ def load_task(task_dir: Path) -> Task:
             path=task_dir,
             verifier_timeout=int(config.get("verifier", {}).get("timeout_sec", 120)),
             candidate_tests=ib.get("candidate_tests"),
+            attack_dir=str(ib.get("attack_dir", "tests")).strip("/") or ".",
             cpus=env.get("cpus"),
             memory_mb=env.get("memory_mb"),
         )
