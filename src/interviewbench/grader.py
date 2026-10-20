@@ -15,8 +15,8 @@ if TYPE_CHECKING:
 
 CANDIDATE_TESTS = 0  # StageResult.stage for the candidate's own test suite
 _IGNORE = shutil.ignore_patterns(
-    ".git", ".venv", "node_modules", "__pycache__", ".pytest_cache", "*.pyc",
-    "ib-report.md", *WORKSPACE_FILES,
+    ".git", ".venv", ".vscode", "node_modules", "__pycache__", ".pytest_cache", "*.pyc",
+    *WORKSPACE_FILES,
 )
 
 

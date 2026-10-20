@@ -4,7 +4,7 @@ import shutil
 from typer.testing import CliRunner
 
 from conftest import RUNNER_KIND
-from interviewbench import cli
+from interviewbench import workspace as ws
 from interviewbench.cli import app
 from interviewbench.grader import _IGNORE
 from interviewbench.tasks import BRIEF, MARKER, bench_root
@@ -71,7 +71,7 @@ def test_start_refuses_a_folder_inside_the_repo():
 def test_start_opens_the_editor(tmp_path, monkeypatch):
     calls = []
     monkeypatch.setenv("IB_EDITOR", "my-editor --new-window")
-    monkeypatch.setattr(cli.subprocess, "Popen", lambda cmd, **kwargs: calls.append(cmd))
+    monkeypatch.setattr(ws, "_launch", calls.append)
     dest = tmp_path / "ws"
     result = runner.invoke(app, ["start", "rate-limiter", "--dir", str(dest)])
     assert result.exit_code == 0, result.output
