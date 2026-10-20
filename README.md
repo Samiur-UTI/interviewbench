@@ -7,16 +7,31 @@ and a leaderboard of how LLMs do on the same tasks.
 
 ## Quickstart
 
+Install `ib` as a tool, so it works in every terminal, including your editor's:
+
 ```bash
 git clone <repo-url> && cd interviewbench
-python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -e .
+uv tool install --editable .          # or: pipx install --editable .
 
-ib list                        # or: ib list --category backend --tag python
-ib start rate-limiter          # copies the starter repo to ib-workspace/rate-limiter
-ib prompt rate-limiter -s 1    # shows the stage 1 brief
-# ...solve it with any AI assistant you like...
-ib grade --dir ib-workspace/rate-limiter
+ib list                               # or: ib list --category backend --tag python
+ib start rate-limiter                 # your round starts here
+```
+
+`ib start` sets the round up the way a real AI-enabled interview feels:
+
+- Copies the starter code to `~/ib-workspaces/rate-limiter` (or `$IB_WORKSPACES/<task>`, or
+  `--dir`). It refuses folders inside this repo, because the repo holds the hidden tests and
+  reference solutions, which an AI assistant working there could read.
+- Opens that folder in your editor: `$IB_EDITOR` if set, else VS Code, Cursor or Windsurf
+  (`--no-open` to skip).
+- Writes the stage 1 brief, the time limit and the commands to `TASK.md` in the workspace,
+  and starts the clock.
+
+Then, in the workspace:
+
+```bash
+ib next      # reveal the next stage (added to TASK.md)
+ib grade     # run the hidden tests, score the rubric, show time used
 ```
 
 ## How a task works
@@ -61,9 +76,9 @@ communication) need a reviewer. `ib grade --judge` asks Claude to score them and
 issues it finds:
 
 ```bash
-pip install -e ".[judge]"
+uv tool install --editable ".[judge]" --force   # or: pipx install --editable ".[judge]" --force
 export ANTHROPIC_API_KEY=...        # or: ant auth login
-ib grade --dir ib-workspace/rate-limiter --judge
+ib grade --judge                    # inside the workspace
 ```
 
 The model defaults to `claude-opus-5-5`; override it with `--judge-model` or `IB_JUDGE_MODEL`.

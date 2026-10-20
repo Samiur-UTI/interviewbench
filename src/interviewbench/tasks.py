@@ -34,6 +34,10 @@ LEVELS = ("junior", "mid", "senior")
 DIFFICULTIES = ("easy", "medium", "hard")
 _ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 _LF_ONLY = ("*.sh", "Dockerfile", "*.toml")
+# Files `ib start` writes into a workspace. They are never graded, so a starter may not contain them.
+MARKER = ".interviewbench.json"
+BRIEF = "TASK.md"
+WORKSPACE_FILES = (MARKER, BRIEF)
 
 
 class TaskError(Exception):
@@ -273,6 +277,9 @@ def _validate(task: Task, config: dict) -> None:
         fail("missing environment/Dockerfile")
     if not task.starter_dir.is_dir():
         fail("missing environment/app/ (the starter code)")
+    for name in WORKSPACE_FILES:
+        if (task.starter_dir / name).exists():
+            fail(f"environment/app/{name} is reserved: `ib start` writes it into the workspace")
     if not task.stages:
         fail("task.toml must declare at least one [[steps]]")
     shared_test = (task.shared_tests_dir / "test.sh").is_file()
