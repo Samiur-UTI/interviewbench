@@ -144,6 +144,8 @@ Rules:
 - After applying the solutions of stages 1..N, all of stage N's hidden tests pass.
 - `harbor run -p tasks/<category> -a oracle` scores 1.0.
 - Shell scripts, Dockerfiles and `task.toml` use LF line endings (`.gitattributes` enforces it).
+- `environment/app/` doesn't contain `TASK.md` or `.interviewbench.json`: `ib start` writes those
+  into the workspace, and the grader and judge ignore them.
 
 ## Adding a task
 

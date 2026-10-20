@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .runner import Completed, Runner, RunnerError, Sandbox, get_runner
-from .tasks import Criterion, Stage, Task
+from .tasks import WORKSPACE_FILES, Criterion, Stage, Task
 
 if TYPE_CHECKING:
     from .judge import Review
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 CANDIDATE_TESTS = 0  # StageResult.stage for the candidate's own test suite
 _IGNORE = shutil.ignore_patterns(
     ".git", ".venv", "node_modules", "__pycache__", ".pytest_cache", "*.pyc",
-    "ib-report.md", ".interviewbench.json",
+    "ib-report.md", *WORKSPACE_FILES,
 )
 
 

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+import os
+import shlex
 import shutil
+import subprocess
 import tempfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import NoReturn, Optional
 
@@ -17,10 +20,12 @@ from .grader import build_reference, grade as grade_workspace
 from .judge import JudgeError, run_judge
 from .report import render, to_markdown
 from .runner import RUNNERS, Runner, RunnerError, get_runner
-from .tasks import Task, TaskError, categories, get_task, load_all, tasks_root, templates_root
+from .tasks import (
+    BRIEF, MARKER, Task, TaskError, bench_root, categories, get_task, load_all, tasks_root, templates_root,
+)
 
-MARKER = ".interviewbench.json"
-DEFAULT_WORKSPACE = Path("ib-workspace")
+# Editors tried in order when $IB_EDITOR is unset. Each opens a folder as `<editor> <folder>`.
+EDITORS = ("code", "cursor", "windsurf")
 
 app = typer.Typer(
     help="Realistic AI-era coding interview tasks with rubrics and a grader.",
@@ -49,13 +54,18 @@ def _task_or_exit(task_id: str) -> Task:
         _fail(str(exc))
 
 
+def _read_marker(workspace: Path) -> dict | None:
+    marker = workspace / MARKER
+    return json.loads(marker.read_text(encoding="utf-8")) if marker.is_file() else None
+
+
 def _task_from_workspace(workspace: Path, task_id: Optional[str]) -> Task:
     if task_id:
         return _task_or_exit(task_id)
-    marker = workspace / MARKER
-    if not marker.is_file():
+    marker = _read_marker(workspace)
+    if marker is None:
         _fail(f"{workspace} is not an interviewbench workspace (no {MARKER}). Pass --task <id>.")
-    return _task_or_exit(json.loads(marker.read_text(encoding="utf-8"))["task"])
+    return _task_or_exit(marker["task"])
 
 
 def _print_stage(task: Task, number: int) -> None:
@@ -66,6 +76,69 @@ def _print_stage(task: Task, number: int) -> None:
     console.print(f"\n[bold cyan]Stage {stage.number}/{len(task.stages)}[/bold cyan]\n")
     console.print(Markdown(stage.prompt))
     console.print()
+
+
+# --- Workspaces -----------------------------------------------------------------------------
+
+
+def default_workspace(task_id: str) -> Path:
+    """$IB_WORKSPACES/<task>, else ~/ib-workspaces/<task>: away from the repo's hidden tests."""
+    base = os.environ.get("IB_WORKSPACES")
+    return (Path(base).expanduser() if base else Path.home() / "ib-workspaces") / task_id
+
+
+def _is_inside(path: Path, root: Path) -> bool:
+    return path.resolve().is_relative_to(root.resolve())
+
+
+def _stage_section(task: Task, number: int) -> str:
+    stage = task.stage(number)
+    body = stage.prompt.partition("\n")[2].strip()
+    return f"## Stage {number}/{len(task.stages)}: {stage.title}\n\n{body}\n"
+
+
+def _brief(task: Task, started: datetime) -> str:
+    """TASK.md: what the candidate reads in their editor, like the instructions panel of a real round."""
+    local = started.astimezone()
+    ends = local + timedelta(minutes=task.time_limit_minutes)
+    return (
+        f"# {task.title}\n\n"
+        f"**Time limit:** {task.time_limit_minutes} min. Started at {local:%H:%M}, time is up at {ends:%H:%M}.\n\n"
+        f"{len(task.stages)} stages, revealed one at a time. Any AI assistant is allowed. In this folder:\n\n"
+        "- `ib next` reveals the next stage (it is added to this file).\n"
+        "- `ib grade` runs the hidden tests and scores your work.\n"
+        "- Write what you found and why in `NOTES.md`; it is graded too.\n\n"
+        "---\n\n"
+        + _stage_section(task, 1)
+    )
+
+
+def _editor_command() -> list[str] | None:
+    """$IB_EDITOR (set it to an empty string to never open an editor), else the first of EDITORS found."""
+    custom = os.environ.get("IB_EDITOR")
+    if custom is not None:
+        return [part.strip('"') for part in shlex.split(custom, posix=os.name != "nt")] or None
+    for name in EDITORS:
+        found = shutil.which(name)  # on Windows this resolves e.g. code -> ...\bin\code.cmd
+        if found:
+            return [found]
+    return None
+
+
+def _open_in_editor(folder: Path) -> str | None:
+    """Open `folder` in the candidate's editor without waiting. Returns the editor's name, or None."""
+    command = _editor_command()
+    if not command:
+        return None
+    try:
+        subprocess.Popen(
+            [*command, str(folder)],
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except OSError:
+        return None
+    return Path(command[0]).stem
 
 
 @app.command("list")
@@ -95,28 +168,65 @@ def list_tasks(
 @app.command()
 def start(
     task_id: str = typer.Argument(..., help="Task to start, e.g. rate-limiter"),
-    dir: Optional[Path] = typer.Option(None, "--dir", "-d", help="Where to create the workspace"),
+    dir: Optional[Path] = typer.Option(None, "--dir", "-d", help="Where to create the workspace (default: ~/ib-workspaces/<task>, or $IB_WORKSPACES/<task>)"),
     force: bool = typer.Option(False, "--force", help="Overwrite an existing workspace"),
+    open_editor: bool = typer.Option(True, "--open/--no-open", help="Open the workspace in your editor ($IB_EDITOR, else VS Code, Cursor or Windsurf)"),
 ) -> None:
-    """Copy a task's starter repo into a workspace and show the stage 1 brief."""
+    """Start a round: copy the starter code to a workspace outside the repo, write TASK.md, open your editor."""
     task = _task_or_exit(task_id)
-    dest = dir or DEFAULT_WORKSPACE / task.id
+    dest = (dir or default_workspace(task.id)).expanduser()
+    if _is_inside(dest, bench_root()):
+        _fail(
+            f"{dest} is inside {bench_root()}, which holds the hidden tests and reference solutions, "
+            f"so an AI assistant working there could read them. Pick a folder outside it, or leave out "
+            f"--dir to use {default_workspace(task.id)}."
+        )
     if dest.exists():
         if not force:
             _fail(f"{dest} already exists. Use --force to overwrite it (your changes there will be lost).")
         shutil.rmtree(dest)
     shutil.copytree(task.starter_dir, dest)
+    started = datetime.now(timezone.utc)
     (dest / MARKER).write_text(
-        json.dumps({"task": task.id, "started_at": datetime.now(timezone.utc).isoformat()}, indent=2),
+        json.dumps({"task": task.id, "started_at": started.isoformat(), "stage": 1}, indent=2),
         encoding="utf-8",
     )
+    (dest / BRIEF).write_text(_brief(task, started), encoding="utf-8")
+
+    editor = _open_in_editor(dest) if open_editor else None
     console.print(f"[bold]{task.title}[/bold] — {task.time_limit_minutes} min, {len(task.stages)} stages")
-    console.print(f"Workspace: [green]{dest}[/green]")
+    console.print(f"Workspace: [green]{dest}[/green]" + (f" (opened in {editor})" if editor else ""))
+    if not editor:
+        console.print(
+            "Open [bold]only this folder[/bold] in your editor, so your AI assistant can't see the "
+            f"hidden tests:  [bold]cd \"{dest}\"[/bold] then e.g. [bold]code .[/bold]"
+        )
+    ends = started.astimezone() + timedelta(minutes=task.time_limit_minutes)
+    console.print(f"The brief is in {BRIEF}. Your {task.time_limit_minutes} minutes started now; time is up at {ends:%H:%M}.")
     _print_stage(task, 1)
-    console.print(
-        f"Next: solve it (any AI assistant is allowed), then run [bold]ib grade --dir {dest}[/bold]. "
-        f"See the next stage with [bold]ib prompt --dir {dest} -s 2[/bold]."
-    )
+    console.print("In the workspace: [bold]ib next[/bold] reveals the next stage, [bold]ib grade[/bold] scores your work.")
+
+
+@app.command("next")
+def next_stage(
+    dir: Path = typer.Option(Path("."), "--dir", "-d", help="Workspace directory"),
+) -> None:
+    """Reveal the next stage: show its brief and add it to TASK.md."""
+    marker = _read_marker(dir)
+    if marker is None:
+        _fail(f"{dir} is not an interviewbench workspace (no {MARKER}). Run this inside the folder `ib start` made.")
+    task = _task_or_exit(marker["task"])
+    current = int(marker.get("stage", 1))
+    if current >= len(task.stages):
+        _fail(f"All {len(task.stages)} stages are already revealed. Run `ib grade` when you're done.")
+    number = current + 1
+    marker["stage"] = number
+    (dir / MARKER).write_text(json.dumps(marker, indent=2), encoding="utf-8")
+    brief = dir / BRIEF
+    existing = brief.read_text(encoding="utf-8") if brief.is_file() else f"# {task.title}\n"
+    brief.write_text(f"{existing.rstrip()}\n\n---\n\n{_stage_section(task, number)}", encoding="utf-8")
+    _print_stage(task, number)
+    console.print(f"Added to {BRIEF}.")
 
 
 @app.command()
@@ -125,7 +235,7 @@ def prompt(
     stage: int = typer.Option(1, "--stage", "-s", help="Stage number"),
     dir: Path = typer.Option(Path("."), "--dir", "-d", help="Workspace directory"),
 ) -> None:
-    """Show the brief for a stage."""
+    """Show the brief for a stage (reading ahead skips the real format; prefer `ib next`)."""
     _print_stage(_task_from_workspace(dir, task_id), stage)
 
 
@@ -157,6 +267,10 @@ def grade(
             except (JudgeError, RunnerError) as exc:
                 judge_error = str(exc)
     render(result, console)
+    marker = _read_marker(dir)
+    if marker and "started_at" in marker:
+        used = datetime.now(timezone.utc) - datetime.fromisoformat(marker["started_at"])
+        console.print(f"Time used: {int(used.total_seconds() // 60)} min of {task.time_limit_minutes}\n")
     report_path = output or dir / "ib-report.md"
     report_path.write_text(to_markdown(result), encoding="utf-8")
     console.print(f"Report written to [green]{report_path}[/green]")
