@@ -77,6 +77,13 @@ def test_missing_solve_script_is_rejected(bench):
         load_task(task_dir(bench))
 
 
+@pytest.mark.parametrize("name", ["TASK.md", ".interviewbench.json"])
+def test_starter_may_not_contain_workspace_files(bench, name):
+    (task_dir(bench) / "environment" / "app" / name).write_text("x", encoding="utf-8")
+    with pytest.raises(TaskError, match="reserved"):
+        load_task(task_dir(bench))
+
+
 def test_crlf_scripts_are_rejected(bench):
     script = task_dir(bench) / "tests" / "test.sh"
     script.write_bytes(script.read_bytes().replace(b"\n", b"\r\n"))
