@@ -15,11 +15,14 @@ def _pct(score: float | None) -> str:
 def summary_line(result: GradeResult) -> str:
     graded, total = result.graded_weight, result.total_weight
     pct = result.points / graded * 100 if graded else 0.0
-    line = f"Score: {result.points:.1f}/{graded:.0f} on auto-checked criteria ({pct:.0f}%)"
     pending = total - graded
-    if pending:
-        line += f"; {pending:.0f} of {total:.0f} rubric points need the AI judge"
-    return line
+    if not pending:
+        return f"Score: {result.points:.1f}/{total:.0f} ({pct:.0f}%)"
+    scope = "auto-checked criteria" if result.review is None else "the criteria graded so far"
+    return (
+        f"Score: {result.points:.1f}/{graded:.0f} on {scope} ({pct:.0f}%); "
+        f"{pending:.0f} of {total:.0f} rubric points need the AI judge"
+    )
 
 
 def render(result: GradeResult, console: Console) -> None:

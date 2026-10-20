@@ -67,7 +67,8 @@ See `tasks/backend/rate-limiter/task.toml` for a full example.
 | `[metadata.interviewbench].level` | `junior`, `mid` or `senior` |
 | `[metadata.interviewbench].language` | Main language |
 | `[metadata.interviewbench].time_limit_minutes` | Time limit for candidates |
-| `[metadata.interviewbench].candidate_tests` | Optional. Shell command run in `$APP_DIR` that runs the candidate's own tests and writes `$LOGS_DIR/junit.xml` (for the AI judge) |
+| `[metadata.interviewbench].candidate_tests` | Optional. Shell command run in `$APP_DIR` that runs the candidate's own tests and writes `$LOGS_DIR/junit.xml` (used by `ib test`, `ib break` and the AI judge) |
+| `[metadata.interviewbench].attack_dir` | Optional, default `tests`. Folder (relative to `$APP_DIR`) where `ib break` puts an attack test file so `candidate_tests` collects it |
 | `[[steps]]` | One per stage, named `stage-1`, `stage-2`, ... in order |
 | `[verifier].timeout_sec` | Per-stage test timeout, used by both Harbor and `ib` |
 | `[environment].cpus` / `memory_mb` | Container limits, used by both Harbor and `ib --runner docker` |
@@ -144,6 +145,9 @@ Rules:
 - After applying the solutions of stages 1..N, all of stage N's hidden tests pass.
 - `harbor run -p tasks/<category> -a oracle` scores 1.0.
 - Shell scripts, Dockerfiles and `task.toml` use LF line endings (`.gitattributes` enforces it).
+- `environment/app/` doesn't contain the files `ib` writes into a workspace: `TASK.md`,
+  `.interviewbench.json`, `ib-report.md`, `ib-judge-prompt.md`, `ib-judge-reply.txt` and
+  `ib-attack-prompt.md`. The grader and judge ignore them, and `.vscode/`.
 
 ## Adding a task
 

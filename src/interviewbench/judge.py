@@ -1,4 +1,7 @@
-"""AI judge: has Claude score a task's `judge` rubric criteria and review the submission.
+"""AI judge: has a model score a task's `judge` rubric criteria and review the submission.
+
+Backends: Claude (Anthropic API), any OpenAI-compatible chat API, or a pasted chatbot reply
+(`ib grade --judge-export` / `--judge-reply`). All of them are scored by `apply_judgment`.
 
 The judge sees the task brief, the rubric, the hidden tests, the reference solution, the
 candidate's diff against the starter repo, and the results of both test suites. Everything
@@ -11,7 +14,10 @@ from __future__ import annotations
 import difflib
 import json
 import os
+import re
 import tempfile
+import urllib.error
+import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -22,6 +28,8 @@ from .runner import Runner, RunnerError, get_runner
 from .tasks import Criterion, Task
 
 DEFAULT_MODEL = "claude-opus-5-5"
+BACKENDS = ("claude", "openai")
+OPENAI_TIMEOUT = 600
 MAX_FILE_BYTES = 100_000
 SEVERITIES = ("high", "medium", "low")
 ISSUE_CATEGORIES = (
@@ -74,6 +82,21 @@ class Review:
     issues: list[Issue] = field(default_factory=list)
 
 
+@dataclass
+class JudgeRequest:
+    """Everything the judge model is shown, plus what's needed to turn its answer into scores."""
+
+    system: str
+    user: str
+    schema: dict
+    criteria: list[Criterion]
+    candidate_tests: StageResult
+
+    def as_paste(self) -> str:
+        """One prompt for a chat window: any chatbot can be the judge."""
+        return f"{self.system}\n\n{self.user}\n\n{json_instructions(self.schema)}"
+
+
 def run_judge(
     result: GradeResult,
     workspace: Path,
@@ -81,26 +104,52 @@ def run_judge(
     runner: Runner | None = None,
     model: str | None = None,
     timeout: int | None = None,
+    backend: str | None = None,
 ) -> None:
-    """Fill in the judge criteria of `result` and attach the review. Raises JudgeError."""
+    """Fill in the judge criteria of `result` and attach the review. Raises JudgeError.
+
+    backend: "claude" (Anthropic API) or "openai" (any OpenAI-compatible chat API: OpenRouter, Gemini,
+    Groq, Ollama, LM Studio, vLLM...). Defaults to $IB_JUDGE_BACKEND, else "claude".
+    """
+    backend = backend or os.environ.get("IB_JUDGE_BACKEND") or "claude"
+    if backend not in BACKENDS:
+        raise JudgeError(f"Unknown judge backend '{backend}'; expected one of {BACKENDS}")
+    model = model or os.environ.get("IB_JUDGE_MODEL") or (DEFAULT_MODEL if backend == "claude" else None)
+    if not model:
+        raise JudgeError("The openai backend needs a model: pass --judge-model or set IB_JUDGE_MODEL")
+    # Check the backend's settings before spending time on tests.
+    label = model if backend == "claude" else f"{model} via {_openai_base_url()}"
+    request = prepare_judge(result, workspace, runner=runner, timeout=timeout)
+    call = _call_claude if backend == "claude" else _call_openai_compatible
+    output = call(model, system=request.system, user=request.user, schema=request.schema)
+    apply_judgment(result, request, output, label)
+
+
+def prepare_judge(
+    result: GradeResult, workspace: Path, *, runner: Runner | None = None, timeout: int | None = None
+) -> JudgeRequest:
+    """Run the candidate's own tests and build the judge prompt. Raises JudgeError."""
     task = result.task
     criteria = [c for c in task.criteria if c.type == "judge"]
     runner = runner or get_runner()
     candidate_tests = run_candidate_tests(task, workspace, runner, timeout)
-    model = model or os.environ.get("IB_JUDGE_MODEL", DEFAULT_MODEL)
     with tempfile.TemporaryDirectory(prefix="ib-", ignore_cleanup_errors=True) as tmp:
         try:
             solution, _ = _read_tree(build_reference(task, Path(tmp) / "solution", runner))
         except RunnerError as exc:
             raise JudgeError(f"Could not build the reference solution: {exc}") from exc
-
-    output = _call_claude(
-        model,
+    return JudgeRequest(
         system=_system_prompt(task, criteria, solution),
         user=_submission(task, workspace, result.stages, candidate_tests),
         schema=_output_schema(criteria),
+        criteria=criteria,
+        candidate_tests=candidate_tests,
     )
 
+
+def apply_judgment(result: GradeResult, request: JudgeRequest, output: dict, model: str) -> None:
+    """Score the judge criteria from the judge's answer (from any backend) and attach the review."""
+    output = _normalize(output)
     judged = {c["id"]: c for c in output["criteria"]}
     result.scores = [
         _score(s.criterion, judged.get(s.criterion.id)) if s.criterion.type == "judge" else s
@@ -109,11 +158,63 @@ def run_judge(
     result.review = Review(
         model=model,
         summary=output["summary"],
-        candidate_tests=candidate_tests,
+        candidate_tests=request.candidate_tests,
         missed_edge_cases=output["missed_edge_cases"],
         issues=sorted(
             (Issue(**i) for i in output["issues"]), key=lambda i: SEVERITIES.index(i.severity)
         ),
+    )
+
+
+def parse_reply(text: str) -> dict:
+    """The judge's JSON from a model reply that may wrap it in prose, code fences or <think> blocks."""
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
+    fenced = re.findall(r"```(?:json)?\s*(\{.*?\})\s*```", text, flags=re.DOTALL)
+    candidates = fenced[::-1] + [text[text.find("{"): text.rfind("}") + 1]]
+    for candidate in candidates:
+        try:
+            value = json.loads(candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            return value
+    raise JudgeError("The judge's reply contains no JSON object. Ask it to resend only the JSON.")
+
+
+def _normalize(output: dict) -> dict:
+    """Make answers from models without schema enforcement safe to score. Claude's always pass through unchanged."""
+    if not isinstance(output.get("criteria"), list):
+        raise JudgeError("The judge's answer has no 'criteria' list")
+    criteria = []
+    for c in output["criteria"]:
+        if not isinstance(c, dict) or "id" not in c:
+            continue
+        level = c.get("level")
+        if isinstance(level, str) and level.strip().isdigit():
+            level = int(level)
+        criteria.append({**c, "level": level, "rationale": str(c.get("rationale", ""))})
+    issues = []
+    for i in output.get("issues") or []:
+        if not isinstance(i, dict):
+            continue
+        issues.append(Issue(
+            severity=i.get("severity") if i.get("severity") in SEVERITIES else "low",
+            category=i.get("category") if i.get("category") in ISSUE_CATEGORIES else "other",
+            location=str(i.get("location", "")),
+            description=str(i.get("description", "")),
+        ).__dict__)
+    return {
+        "criteria": criteria,
+        "missed_edge_cases": [str(m) for m in output.get("missed_edge_cases") or []],
+        "issues": issues,
+        "summary": str(output.get("summary", "")),
+    }
+
+
+def json_instructions(schema: dict) -> str:
+    return (
+        "Reply with ONLY a JSON object (no prose) that matches this JSON Schema:\n"
+        f"```json\n{json.dumps(schema, indent=2)}\n```"
     )
 
 
@@ -289,3 +390,54 @@ def _call_claude(model: str, *, system: str, user: str, schema: dict) -> dict:
     if not texts:
         raise JudgeError("The judge returned no answer")
     return json.loads(texts[-1])
+
+
+def _openai_base_url() -> str:
+    base = os.environ.get("IB_JUDGE_BASE_URL", "").strip()
+    if not base:
+        raise JudgeError(
+            "The openai backend needs IB_JUDGE_BASE_URL, the provider's OpenAI-compatible endpoint, "
+            "e.g. https://openrouter.ai/api/v1 or http://localhost:11434/v1 (Ollama)"
+        )
+    return base.rstrip("/")
+
+
+def _call_openai_compatible(model: str, *, system: str, user: str, schema: dict) -> dict:
+    """Any OpenAI-compatible chat completions API, with the standard library only (no SDK needed).
+
+    Not every provider enforces JSON schemas, so the schema goes in the prompt and the reply is
+    parsed leniently, then normalized before scoring.
+    """
+    url = f"{_openai_base_url()}/chat/completions"
+    key = os.environ.get("IB_JUDGE_API_KEY") or os.environ.get("OPENAI_API_KEY")
+    body = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": f"{user}\n\n{json_instructions(schema)}"},
+        ],
+        "temperature": 0,
+    }
+    headers = {"Content-Type": "application/json"}
+    if key:
+        headers["Authorization"] = f"Bearer {key}"
+    request = urllib.request.Request(url, data=json.dumps(body).encode(), headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(request, timeout=OPENAI_TIMEOUT) as response:
+            data = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", "replace")[:500]
+        hint = " (check IB_JUDGE_API_KEY)" if exc.code in (401, 403) else ""
+        raise JudgeError(f"{url} returned HTTP {exc.code}{hint}: {detail}") from exc
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
+        raise JudgeError(f"Could not get an answer from {url}: {exc}") from exc
+    try:
+        choice = data["choices"][0]
+        content = choice["message"]["content"]
+    except (KeyError, IndexError, TypeError) as exc:
+        raise JudgeError(f"Unexpected response from {url}: {str(data)[:300]}") from exc
+    if isinstance(content, list):  # some providers return content parts
+        content = "".join(part.get("text", "") for part in content if isinstance(part, dict))
+    if choice.get("finish_reason") == "length":
+        raise JudgeError("The judge's answer was cut off; use a model with a larger output limit")
+    return parse_reply(content or "")

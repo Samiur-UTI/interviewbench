@@ -7,16 +7,37 @@ and a leaderboard of how LLMs do on the same tasks.
 
 ## Quickstart
 
+Install `ib` as a tool, so it works in every terminal, including your editor's:
+
 ```bash
 git clone <repo-url> && cd interviewbench
-python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -e .
+uv tool install --editable .          # or: pipx install --editable .
 
-ib list                        # or: ib list --category backend --tag python
-ib start rate-limiter          # copies the starter repo to ib-workspace/rate-limiter
-ib prompt rate-limiter -s 1    # shows the stage 1 brief
-# ...solve it with any AI assistant you like...
-ib grade --dir ib-workspace/rate-limiter
+ib list                               # or: ib list --category backend --tag python
+ib start rate-limiter                 # your round starts here
+```
+
+`ib start` sets the round up the way a real AI-enabled interview feels:
+
+- Copies the starter code to `~/ib-workspaces/rate-limiter` (or `$IB_WORKSPACES/<task>`, or
+  `--dir`). It refuses folders inside this repo, because the repo holds the hidden tests and
+  reference solutions, which an AI assistant working there could read.
+- Opens that folder in your editor: `$IB_EDITOR` if set, else VS Code, Cursor or Windsurf
+  (`--no-open` to skip). Point `IB_EDITOR` at any other editor, e.g. Qoder.
+- Writes the stage 1 brief, the time limit and the commands to `TASK.md`, and starts the clock.
+- Makes the workspace a git repo with the starter as its first commit (`--no-git` to skip), so
+  you can branch, diff and revert like in any project.
+- Adds the commands as editor tasks (*Terminal > Run Task*: run my tests, next stage, grade,
+  judge). They work even when `ib` isn't on the editor terminal's PATH.
+
+Then, in the workspace:
+
+```bash
+ib test      # run your own tests (no hidden tests, no spoilers)
+ib next      # commit and tag your work (stage-1, ...), then reveal the next stage in TASK.md
+ib grade     # run the hidden tests, score the rubric, show time used
+ib grade --judge          # ...and have an AI model review what tests can't measure
+ib break attack_test.py   # check tests an LLM wrote to break your code (see below)
 ```
 
 ## How a task works
@@ -57,16 +78,57 @@ The full contract is in [docs/TASK_FORMAT.md](docs/TASK_FORMAT.md).
 ## AI judge
 
 Some rubric criteria (correctness beyond the tests, missed edge cases, code quality, root cause,
-communication) need a reviewer. `ib grade --judge` asks Claude to score them and lists any other
-issues it finds:
+communication) need a reviewer. The judge sees the brief, the rubric, the hidden tests, the
+reference solution and your changes, scores those criteria and lists any other issues. Use any model:
+
+**Any chatbot, free.** Export the prompt, paste it into ChatGPT, Gemini, Claude.ai, DeepSeek or any
+other chat, and give `ib` the reply. Scoring is the same as with an API.
 
 ```bash
-pip install -e ".[judge]"
-export ANTHROPIC_API_KEY=...        # or: ant auth login
-ib grade --dir ib-workspace/rate-limiter --judge
+ib grade --judge-export                    # writes ib-judge-prompt.md (~10-15k tokens)
+# paste it into a chat, save the reply as ib-judge-reply.txt in the workspace
+ib grade --judge-reply ib-judge-reply.txt
 ```
 
-The model defaults to `claude-opus-5-5`; override it with `--judge-model` or `IB_JUDGE_MODEL`.
+**Any OpenAI-compatible API**: OpenRouter, Google AI Studio (Gemini), Groq, Mistral, or a local
+model with Ollama, LM Studio or vLLM. No extra packages needed.
+
+```bash
+export IB_JUDGE_BASE_URL=https://openrouter.ai/api/v1          # or http://localhost:11434/v1 for Ollama
+export IB_JUDGE_API_KEY=...                                    # not needed for local models
+ib grade --judge --judge-backend openai --judge-model <model id>
+```
+
+Set `IB_JUDGE_BACKEND=openai` and `IB_JUDGE_MODEL` to make that the default for `ib grade --judge`.
+Other OpenAI-compatible base URLs: `https://generativelanguage.googleapis.com/v1beta/openai`
+(Gemini), `https://api.groq.com/openai/v1` (Groq).
+
+**Claude API** (the default backend; the API enforces the answer's JSON schema):
+
+```bash
+uv tool install --editable ".[judge]" --force   # or: pipx install --editable ".[judge]" --force
+export ANTHROPIC_API_KEY=...                     # from platform.claude.com/settings/keys
+ib grade --judge                                 # model: claude-opus-5-5, or --judge-model / IB_JUDGE_MODEL
+```
+
+Prefer a judge from a different model family than the one that helped you solve the task: LLM
+judges tend to favour their own family's work. The exported prompt contains the hidden tests and
+the reference solution, so don't share it.
+
+## Try to break your code
+
+`ib break` checks attack tests written by any LLM. Each test runs on your code and on the task's
+reference solution, and only counts when the reference passes it, so a model that misreads the
+brief can't invent bugs:
+
+```bash
+ib break --prompt              # writes ib-attack-prompt.md: give it to any chatbot or coding agent
+# save the test file it writes OUTSIDE the workspace, e.g. ../attack_test.py
+ib break ../attack_test.py     # real break / survived / bad test, for each attack test
+```
+
+Your workspace isn't changed. The attack file runs with the task's own test command, so this
+works for any language.
 
 ## License
 
