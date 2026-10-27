@@ -115,6 +115,8 @@ the interpreter running `ib`).
 - `steps/stage-N/instruction.md` is exactly what the candidate or agent sees. Its first line is
   `# Title`.
 - Stage 1 sets the scene (what the code is, who uses it), since Harbor agents see nothing else.
+  State the business rules a solution must respect here or in the stage that needs them; the
+  business-alignment criterion can only grade rules the candidate was shown.
 - Use paths relative to the app root (`ratelimiter/bucket.py`), not `/app/...`.
 - Describe symptoms, not causes. Give exact contracts for features (signatures, errors).
 - Ask for notes in `NOTES.md` in every stage. The communication criterion grades them.
@@ -123,7 +125,8 @@ the interpreter running `ib`).
 
 Each task's rubric is three layers merged by criterion id:
 
-1. `rubrics/base.yaml`: correctness, root cause, code quality, verification, communication
+1. `rubrics/base.yaml`: correctness, root cause, code quality, verification, business alignment,
+   communication
 2. `rubrics/<category>.yaml`: category criteria (e.g. backend: API compatibility, error handling)
 3. the task's `rubric.yaml`
 
@@ -137,6 +140,11 @@ Rules:
   of its hidden tests passed.
 - `judge` criteria have levels numbered `0, 1, 2, ...`.
 - Weights are positive and total exactly 100.
+- A task that keeps `business-alignment` needs a `business` section in its `rubric.yaml`: who
+  uses the code, the business rules, and which rule wins when they conflict. It goes into the
+  AI judge's prompt only. Every rule must be stated or clearly implied by the brief or starter
+  repo, since candidates can't be held to rules they can't see. Tasks with no real business
+  context can `exclude: [business-alignment]` instead.
 
 ## Tests that must hold
 

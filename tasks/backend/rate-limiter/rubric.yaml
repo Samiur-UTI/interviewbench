@@ -5,6 +5,25 @@ focus: |
   Watch for eviction that changes observable results, float rounding in retry_after, and fixes
   that cap tokens in RateLimiter instead of TokenBucket.
 
+business: |
+  The limiter guards a shared API platform. Customers buy plans defined by a burst (capacity)
+  and a sustained rate (refill_rate); every service relies on the library to enforce them.
+
+  Rules (each stated or implied by the brief):
+  - A customer never gets more than their plan allows: at most `capacity` requests in a burst,
+    however long they were idle (stage 1 incident).
+  - A customer always gets what they pay for: after an idle period the full burst is available.
+    Fixes that over-throttle (resetting tokens to 0, capping below capacity) break paying customers.
+  - retry_after is a promise to clients: waiting exactly that long must succeed. Rounding must
+    err towards a slightly longer wait, never a shorter one that earns another 429 (stage 2).
+  - Requests that can never succeed (cost > capacity) or make no sense (cost <= 0) are client
+    bugs and must fail loudly with ValueError, not be silently throttled forever (stage 2).
+  - Eviction is invisible to customers: forgetting a key must never hand it extra tokens or
+    take any away (stage 3).
+
+  Priorities when they conflict: never exceeding a plan > never under-serving a plan > memory
+  and speed.
+
 criteria:
   - id: stage1-bug-fixed
     type: auto
@@ -41,6 +60,7 @@ criteria:
       3: As 2, and NOTES.md explains why the bug only appeared after idle periods.
 
   - id: code-quality
+    weight: 5
     levels:
       0: Hard to follow, or breaks the existing public API.
       1: Works but adds unnecessary complexity or duplication.
@@ -56,3 +76,10 @@ criteria:
 
   - id: communication
     weight: 5
+
+  - id: business-alignment
+    weight: 5
+    levels:
+      0: Breaks a plan (bursts above capacity after idle, eviction that grants free tokens) or over-throttles paying customers.
+      1: Plans are enforced, but a judgement call hurts clients (e.g. retry_after can round to a wait slightly too short for some rates).
+      2: Plans are enforced exactly in both directions, and every judgement call favours the customer contract.

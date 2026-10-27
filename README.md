@@ -57,7 +57,7 @@ The full contract is in [docs/TASK_FORMAT.md](docs/TASK_FORMAT.md).
 ## AI judge
 
 Some rubric criteria (correctness beyond the tests, missed edge cases, code quality, root cause,
-communication) need a reviewer. `ib grade --judge` asks Claude to score them and lists any other
+fit with the task's business rules, communication) need a reviewer. `ib grade --judge` asks Claude to score them and lists any other
 issues it finds:
 
 ```bash
