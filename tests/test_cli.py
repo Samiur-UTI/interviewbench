@@ -4,7 +4,10 @@ import shutil
 from typer.testing import CliRunner
 
 from conftest import RUNNER_KIND
-from interviewbench.cli import MARKER, app
+from interviewbench import workspace as ws
+from interviewbench.cli import app
+from interviewbench.grader import _IGNORE
+from interviewbench.tasks import BRIEF, MARKER, bench_root
 
 runner = CliRunner()
 
@@ -21,20 +24,92 @@ def test_list_filters_by_category_and_tag():
     assert "rate-limiter" not in runner.invoke(app, ["list", "--tag", "react"]).output
 
 
+def flat(output):
+    """CLI output with Rich's line wrapping undone."""
+    return " ".join(output.split())
+
+
+def start(dest, *extra):
+    return runner.invoke(app, ["start", "rate-limiter", "--dir", str(dest), "--no-open", *extra])
+
+
 def test_start_creates_workspace(tmp_path):
     dest = tmp_path / "ws"
-    result = runner.invoke(app, ["start", "rate-limiter", "--dir", str(dest)])
+    result = start(dest)
     assert result.exit_code == 0, result.output
     assert (dest / "ratelimiter" / "bucket.py").is_file()
-    assert json.loads((dest / MARKER).read_text())["task"] == "rate-limiter"
+    marker = json.loads((dest / MARKER).read_text())
+    assert marker["task"] == "rate-limiter" and marker["stage"] == 1
     assert "Fix the bug" in result.output
+    brief = (dest / BRIEF).read_text(encoding="utf-8")
+    assert "## Stage 1/3: Fix the bug" in brief and "Incident report" in brief
+    assert "Stage 2" not in brief  # later stages stay hidden until `ib next`
 
 
 def test_start_refuses_to_overwrite(tmp_path):
     dest = tmp_path / "ws"
-    runner.invoke(app, ["start", "rate-limiter", "--dir", str(dest)])
-    result = runner.invoke(app, ["start", "rate-limiter", "--dir", str(dest)])
+    start(dest)
+    assert start(dest).exit_code == 1
+    assert start(dest, "--force").exit_code == 0
+
+
+def test_start_defaults_to_a_folder_outside_the_repo(tmp_path, monkeypatch):
+    monkeypatch.setenv("IB_WORKSPACES", str(tmp_path / "rounds"))
+    result = runner.invoke(app, ["start", "rate-limiter", "--no-open"])
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "rounds" / "rate-limiter" / BRIEF).is_file()
+
+
+def test_start_refuses_a_folder_inside_the_repo():
+    inside = bench_root() / "ib-workspace" / "rate-limiter"
+    result = start(inside)
     assert result.exit_code == 1
+    assert "hidden tests" in flat(result.output)
+    assert not inside.exists()
+
+
+def test_start_opens_the_editor(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setenv("IB_EDITOR", "my-editor --new-window")
+    monkeypatch.setattr(ws, "_launch", calls.append)
+    dest = tmp_path / "ws"
+    result = runner.invoke(app, ["start", "rate-limiter", "--dir", str(dest)])
+    assert result.exit_code == 0, result.output
+    assert calls == [["my-editor", "--new-window", str(dest)]]
+    assert "opened in my-editor" in flat(result.output)
+
+
+def test_start_without_an_editor_says_how_to_open_the_folder(tmp_path, monkeypatch):
+    monkeypatch.setenv("IB_EDITOR", "")
+    result = runner.invoke(app, ["start", "rate-limiter", "--dir", str(tmp_path / "ws")])
+    assert result.exit_code == 0, result.output
+    assert "only this folder" in flat(result.output)
+
+
+def test_next_reveals_one_stage_at_a_time(tmp_path):
+    dest = tmp_path / "ws"
+    start(dest)
+    for number in (2, 3):
+        result = runner.invoke(app, ["next", "--dir", str(dest)])
+        assert result.exit_code == 0, result.output
+        assert json.loads((dest / MARKER).read_text())["stage"] == number
+        assert f"## Stage {number}/3" in (dest / BRIEF).read_text(encoding="utf-8")
+    result = runner.invoke(app, ["next", "--dir", str(dest)])
+    assert result.exit_code == 1 and "already revealed" in flat(result.output)
+
+
+def test_next_outside_a_workspace_errors(tmp_path):
+    result = runner.invoke(app, ["next", "--dir", str(tmp_path)])
+    assert result.exit_code == 1 and "not an interviewbench workspace" in flat(result.output)
+
+
+def test_workspace_files_are_never_graded(tmp_path, solution_dir):
+    ws = tmp_path / "ws"
+    shutil.copytree(solution_dir, ws)
+    (ws / BRIEF).write_text("# brief\n", encoding="utf-8")
+    copy = tmp_path / "copy"
+    shutil.copytree(ws, copy, ignore=_IGNORE)
+    assert not (copy / BRIEF).exists()
 
 
 def test_unknown_task_errors():
