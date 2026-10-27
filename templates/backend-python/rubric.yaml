@@ -4,6 +4,16 @@
 focus: |
   TODO: what a reviewer of this task should watch for (likely wrong fixes, subtle edge cases).
 
+# Scored by the business-alignment criterion. Every rule must be stated or clearly implied by the
+# brief or starter repo; the candidate can't be held to rules they can't know.
+business: |
+  TODO: who uses this code and what they pay for or rely on.
+
+  Rules:
+  - TODO: one line per business rule, naming the stage that states it.
+
+  Priorities when they conflict: TODO.
+
 criteria:
   - id: stage1-bug-fixed
     type: auto
@@ -26,5 +36,11 @@ criteria:
   - id: correctness
     weight: 10
 
+  - id: code-quality
+    weight: 5
+
   - id: communication
+    weight: 5
+
+  - id: business-alignment
     weight: 5

@@ -78,11 +78,8 @@ The full contract is in [docs/TASK_FORMAT.md](docs/TASK_FORMAT.md).
 ## AI judge
 
 Some rubric criteria (correctness beyond the tests, missed edge cases, code quality, root cause,
-communication) need a reviewer. The judge sees the brief, the rubric, the hidden tests, the
-reference solution and your changes, scores those criteria and lists any other issues. Use any model:
-
-**Any chatbot, free.** Export the prompt, paste it into ChatGPT, Gemini, Claude.ai, DeepSeek or any
-other chat, and give `ib` the reply. Scoring is the same as with an API.
+fit with the task's business rules, communication) need a reviewer. `ib grade --judge` asks Claude to score them and lists any other
+issues it finds:
 
 ```bash
 ib grade --judge-export                    # writes ib-judge-prompt.md (~10-15k tokens)

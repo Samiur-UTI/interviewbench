@@ -63,6 +63,7 @@ def test_judge_prompt_has_task_context_and_candidate_diff(captured, runner, solu
     assert "<hidden_tests>" in system and "class NeverEvictingLimiter" in system
     assert "+    def time_until(self, cost: float = 1) -> float:" in system
     assert "Backend review focus" in system and "eviction that changes observable results" in system
+    assert "<business_context>" in system and "never exceeding a plan" in system
     assert "+        self._tokens = min(self.capacity" in captured["user"]
     assert "Hidden stage 3 tests: " in captured["user"]
     assert captured["schema"]["properties"]["criteria"]["items"]["properties"]["id"]["enum"] == JUDGE_IDS

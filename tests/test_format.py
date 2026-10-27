@@ -43,6 +43,22 @@ def test_rubric_layers_merge_by_id(bench):
     assert {"api-compatibility", "error-handling"} <= by_id.keys()  # from backend.yaml
     assert [c.type for c in task.criteria[:3]] == ["auto"] * 3
     assert len(task.focus) == 3
+    assert by_id["business-alignment"].weight == 5  # task override of a base criterion
+    assert "never exceeding a plan" in task.business
+
+
+def test_business_alignment_needs_business_section(bench):
+    rubric = task_dir(bench) / "rubric.yaml"
+    edit(rubric, "business: |", "unused: |")
+    with pytest.raises(TaskError, match="needs a `business` section"):
+        load_task(task_dir(bench))
+
+    # Excluding the criterion makes the section optional (code-quality takes back its weight).
+    edit(rubric, "  - id: code-quality\n    weight: 5\n", "  - id: code-quality\n    weight: 10\n")
+    without_override = rubric.read_text(encoding="utf-8").split("  - id: business-alignment")[0]
+    rubric.write_text(without_override + "exclude: [business-alignment]\n", encoding="utf-8")
+    task = load_task(task_dir(bench))
+    assert "business-alignment" not in {c.id for c in task.criteria} and task.business == ""
 
 
 def test_exclude_drops_inherited_criterion(bench):

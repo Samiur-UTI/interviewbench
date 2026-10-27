@@ -28,6 +28,7 @@ else:  # pragma: no cover
     import tomli as tomllib
 
 CRITERION_TYPES = ("auto", "judge")
+BUSINESS_CRITERION = "business-alignment"
 TOTAL_WEIGHT = 100
 TASK_ORG = "interviewbench"
 LEVELS = ("junior", "mid", "senior")
@@ -89,6 +90,8 @@ class Task:
     criteria: list[Criterion]
     focus: list[str]
     path: Path
+    # From the task's rubric.yaml only: the business context and rules the judge scores against.
+    business: str
     verifier_timeout: int
     candidate_tests: str | None = None
     attack_dir: str = "tests"  # where `ib break` puts attack tests, relative to the app folder
@@ -249,6 +252,7 @@ def load_task(task_dir: Path) -> Task:
             criteria=criteria,
             focus=focus,
             path=task_dir,
+            business=str(layers[-1][1].get("business") or "").strip(),
             verifier_timeout=int(config.get("verifier", {}).get("timeout_sec", 120)),
             candidate_tests=ib.get("candidate_tests"),
             attack_dir=str(ib.get("attack_dir", "tests")).strip("/") or ".",
@@ -314,6 +318,9 @@ def _validate(task: Task, config: dict) -> None:
             fail(f"auto criterion '{c.id}' must reference an existing stage")
         if c.type == "judge" and (len(c.levels) < 2 or sorted(c.levels) != list(range(len(c.levels)))):
             fail(f"judge criterion '{c.id}' needs levels numbered 0, 1, 2, ...")
+    if BUSINESS_CRITERION in ids and not task.business:
+        fail(f"rubric.yaml needs a `business` section for the '{BUSINESS_CRITERION}' criterion, "
+             f"or `exclude: [{BUSINESS_CRITERION}]`")
     missing = stage_numbers - {c.stage for c in task.criteria if c.type == "auto"}
     if missing:
         fail(f"every stage needs an auto criterion; missing for stage(s) {sorted(missing)}")

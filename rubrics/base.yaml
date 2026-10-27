@@ -47,6 +47,17 @@ criteria:
       2: A regression test for the bug plus tests for the new feature.
       3: As 2, plus tests for the optimization and edge cases.
 
+  # Scored against the task rubric's `business` section, which every task using this criterion
+  # must provide. Each rule there must be stated or clearly implied by the brief or starter repo.
+  - id: business-alignment
+    type: judge
+    weight: 10
+    description: The solution serves the business need behind the brief and respects its business rules, including in judgement calls the tests don't pin down.
+    levels:
+      0: Breaks a business rule, or a judgement call works against the users or business the brief describes.
+      1: Respects the explicit rules, but a judgement call (defaults, limits, rounding, failure behaviour) goes against the business need.
+      2: Respects every rule, and judgement calls favour what the business needs.
+
   - id: communication
     type: judge
     weight: 10
