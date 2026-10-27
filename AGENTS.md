@@ -8,7 +8,7 @@ three stages (fix a bug → add a feature → optimize), hidden tests per stage,
 The CLI grades a candidate's (or an LLM's) solution against the rubric.
 
 ## Layout
-- `src/interviewbench/` — CLI (`cli.py`), task/rubric loading + validation (`tasks.py`), running task scripts in Docker or local bash (`runner.py`), grading (`grader.py`), AI judge (`judge.py`), reports (`report.py`)
+- `src/interviewbench/` — CLI (`cli.py`), task/rubric loading + validation (`tasks.py`), candidate workspaces: TASK.md, git, editor tasks (`workspace.py`), running task scripts in Docker or local bash (`runner.py`), grading (`grader.py`), AI judge with claude/openai-compatible/pasted backends (`judge.py`), `ib break` (`breaker.py`), reports (`report.py`)
 - `tasks/<category>/<task-id>/` — a Harbor multi-step task: `task.toml`, `environment/` (Dockerfile + `app/` starter), `tests/test.sh` (shared verifier), `steps/stage-N/` (instruction.md, hidden tests, solution/solve.sh), plus ib-only `rubric.yaml`
 - `rubrics/` — `base.yaml` + one file per category (a category exists iff its rubric file does)
 - `templates/` — task skeletons for `ib new`
@@ -19,7 +19,7 @@ The CLI grades a candidate's (or an LLM's) solution against the rubric.
 - Install: `python -m venv .venv && .venv/Scripts/pip install -e .` (Windows) or `.venv/bin/pip install -e .`
 - Package tests: `.venv/Scripts/python -m pytest`
 - Package tests in containers: `IB_TEST_RUNNER=docker .venv/Scripts/python -m pytest`
-- Try a task: `ib list`, `ib start rate-limiter`, `ib grade --dir ib-workspace/rate-limiter`
+- Try a task: `ib start rate-limiter` (workspace goes to ~/ib-workspaces/, never inside the repo), then `ib test` / `ib next` / `ib grade [--judge]` / `ib break` in that folder
 - Check tasks: `ib validate --run`; Harbor's own check: `harbor run -p tasks/backend -a oracle`
 
 ## Rules
