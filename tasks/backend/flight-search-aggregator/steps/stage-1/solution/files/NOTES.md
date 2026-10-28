@@ -2,38 +2,65 @@
 
 ## Stage 1: what was wrong, why, and how I fixed it
 
-**Missing business fares, low result counts: the dedup key.** `itineraryKey` was the list of
-flight numbers only. Two offers on XB581/XB582 were "the same trip" whether they were economy (K)
-or business (J), and whether they flew on 1 or 2 December. The merge then kept the cheaper one,
-which is almost always economy, so business fares vanished and counts dropped. The key now
-follows README rule 3: per journey, per segment, flight number + departure time (UTC) + booking
-class. Journey boundaries are part of the key, so the same segments grouped differently are
-different trips. Supplier and price are deliberately *not* in the key: the same trip from
-AeroLink and SkyMesh must still merge to the cheaper one.
+**Duplicate trips and negative travel times: Tessera dates.** Tessera schedules carry local times
+but no date. A flight's date is the group's slice date for its leg plus
+`legTable[].schedules[].departureDayOffset`, and its arrival date is that plus the schedule's
+`arrival.dayOffset` (`docs/suppliers/tessera.md`, section 4.2). `parseTessera` dated every flight
+of a leg on the slice date and never read `departureDayOffset`; the field wasn't even in our types,
+which were written from a sample that didn't have it.
 
-**PRICE_MISMATCH on about 1 in 6 AeroLink bookings: float money.** `toMinorUnits` did
-`Math.floor(parseFloat(x) * 100)`. Most 2-decimal values have no exact binary representation, so
-for some of them (about 5%) the product lands just below the integer, e.g.
-`578.68 * 100 = 57867.99999999999`, and `floor` drops a cent. AeroLink totals are the sum of
-a converted base and converted taxes (about 3 amounts with decimals per offer), so roughly one
-offer in six was 1-3 cents low, which the price check before booking rejects. Whole-dollar amounts
-(carrier service fees) are always exact, which is why only some offers were off. SkyMesh sends an
-integer `totalMinor`, so it never went through this code. It also accepted garbage: `"1e3"`
-became 100000, `"12,50"` became 1200.
+Why only some itineraries: Tessera omits default values, so the offset is only sent when it isn't 0,
+which is when a connection departs on a later local day than the leg started, typically after an
+overnight flight. In the QA capture (`dev/captures/tessera-qa-4471.json`) XB581 leaves Dubai at
+22:30 on 1 Dec and lands in Delhi at 03:00 on 2 Dec; XB4417 (`departureDayOffset: 1`) leaves Delhi
+at 06:15 on 2 Dec. We dated XB4417 on 1 Dec, a day too early:
 
-Fix: `toMinorUnits` parses `^\d+(\.\d{1,2})?$` as integers (dollars * 100 + cents) and throws on
-anything else; `parseAeroLink` turns that into a `SupplierPayloadError` for the whole payload
-(README rule 1: never guess a price).
+- the connection "left" 20 h 45 min before XB581 landed, and the outbound journey lasted
+  -725 minutes, so the itinerary showed -280 minutes instead of 1160;
+- its departure time is part of the trip key (README rule 3), so it no longer matched the same
+  trip from Caravel and Keystone, and both copies were shown, at 1402.50 and 1406.80.
 
-Tests: merge regressions (K vs J, another day, journey split), exact conversion of every
-7th cent value up to $100,000, rejection of malformed amounts, and the README example.
+The arrival offset was already applied, but on top of the wrong departure date, so it was wrong by
+the same day.
 
-## Stage 2: deadlines and partial results (design and trade-offs)
+Fix: `readLeg` reads `departureDayOffset` (0 when omitted), and `legFlights` dates each flight
+from slice date + its offset, and its arrival from that departure date. I didn't touch durations,
+dedup or `legTable[].elapsedMinutes`: they were symptoms, and patching them would have hidden a
+wrong departure time that we would then persist and try to book.
 
-## Stage 3: responsiveness and scaling (where the time went, what I changed, what it costs)
+**PRICE_MISMATCH on Caravel and Keystone bookings: float money.** `toMinorUnits` did
+`Math.floor(parseFloat(x) * 100)`. Most 2-decimal values have no exact binary representation, and
+for some the product lands just below the integer: `1037.11 * 100 = 103710.99999999999`, so
+`floor` dropped a cent (`"0.29"` -> 28, `"4.35"` -> 434). Caravel sends every amount as a decimal
+string and Keystone as `"USD1037.11"`, so both went through it. Tessera sends integer cents and
+never did, which is why its bookings never failed. It also accepted garbage: `"1e3"` became 100000,
+and Keystone's `slice(3)` accepted any currency.
+
+Fix:
+- `toMinorUnits` parses `^(0|[1-9]\d*)\.\d{2}$` as integers (dollars * 100 + cents) and throws a
+  `SupplierPayloadError` on anything else (README rule 1: never guess an amount).
+- `parseUsd` checks the `USD` prefix before converting; Keystone uses it.
+- Now that parsing is exact, the parsers cross-check what the supplier sends: Caravel
+  `grandTotal = total + fees` and the traveller prices add up to `total`; Keystone
+  `basePrice + taxes = totalPrice`, the pricingInfo totals add up to it, and each type's total
+  splits evenly over its passengers. A payload that fails one is a supplier error rather than a
+  price we can't honour. (These would have fired at random with float parsing.)
+
+Tests: the QA capture's dates and durations, the arrival offset counted from the flight's own
+departure, the Tessera copy merging with Caravel's again, exact conversion of every 7th cent value
+up to $100,000, rejection of malformed amounts, and the cross-checks.
+
+Not changed, worth discussing: the trip key ignores the fare basis. Two suppliers can sell the same
+booking class under different fare bases (a negotiated fare against a public one), with different
+rules. README rule 3 says booking class decides, so I kept it.
+
+## Stage 2: persistence and paging (design and trade-offs)
+
+## Stage 3: the 1-second budget (where the time went, what I changed, what it costs)
 
 ## How I used AI assistance (and what I checked myself)
 
-I asked an assistant to explain the PRICE_MISMATCH pattern; it suggested `Math.round`, which
-would also have fixed the totals, but would still have accepted `"1e3"` and `"12,50"`. I checked
-the float claim with node (`578.68 * 100`) and with the exhaustive test above.
+I asked an assistant to explain the negative durations; it first suggested taking durations from
+`legTable[].elapsedMinutes`, which would have hidden the wrong departure time. I traced the chain
+from `itinerary.legs[].ref` through `legTable` to `scheduleTable` against the capture myself, and
+checked the float claim in node (`1037.11 * 100`) and with the exhaustive test.

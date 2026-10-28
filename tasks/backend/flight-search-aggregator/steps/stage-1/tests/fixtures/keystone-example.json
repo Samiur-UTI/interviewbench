@@ -1,0 +1,212 @@
+{
+  "searchRsp": {
+    "traceId": "ks-0b77",
+    "responseTimeMs": 2140,
+    "currency": "USD",
+    "segmentIndex": {
+      "seg": [
+        {
+          "key": "q8Zt/AAAAg==", "group": 0, "carrier": "XB", "flightNumber": "581",
+          "origin": "DXB", "destination": "DEL",
+          "departs": "2026-12-01T22:30:00.000+04:00", "arrives": "2026-12-02T03:00:00.000+05:30",
+          "flightTime": 180, "equipment": "738", "changeOfPlane": false
+        },
+        {
+          "key": "q8Zt/AAABg==", "group": 0, "carrier": "XB", "flightNumber": "4417",
+          "origin": "DEL", "destination": "SIN",
+          "departs": "2026-12-02T06:15:00.000+05:30", "arrives": "2026-12-02T14:25:00.000+08:00",
+          "flightTime": 340, "equipment": "320", "changeOfPlane": false,
+          "codeshareInfo": { "operatingCarrier": "ZK", "operatingFlightNumber": "112", "#text": "ZEPHYR KAPPA AIRWAYS" }
+        },
+        {
+          "key": "q8Zt/AAAHg==", "group": 1, "carrier": "ZK", "flightNumber": "9",
+          "origin": "SIN", "destination": "DXB",
+          "departs": "2026-12-08T01:35:00.000+08:00", "arrives": "2026-12-08T05:00:00.000+04:00",
+          "flightTime": 445, "equipment": "359", "changeOfPlane": false
+        },
+        {
+          "key": "q8Zt/AAAIg==", "group": 0, "carrier": "XB", "flightNumber": "583",
+          "origin": "DXB", "destination": "DEL",
+          "departs": "2026-12-01T08:05:00.000+04:00", "arrives": "2026-12-01T12:35:00.000+05:30",
+          "flightTime": 180, "equipment": "738", "changeOfPlane": false
+        },
+        {
+          "key": "q8Zt/AAA+g==", "group": 0, "carrier": "XB", "flightNumber": "4419",
+          "origin": "DEL", "destination": "SIN",
+          "departs": "2026-12-01T14:50:00.000+05:30", "arrives": "2026-12-01T23:00:00.000+08:00",
+          "flightTime": 340, "equipment": "320", "changeOfPlane": false,
+          "codeshareInfo": { "operatingCarrier": "ZK", "operatingFlightNumber": "118", "#text": "ZEPHYR KAPPA AIRWAYS" }
+        }
+      ]
+    },
+    "fareInfoIndex": {
+      "fareInfo": [
+        { "key": "fI0x/1==", "fareBasis": "KLOWXW", "paxType": "ADT", "origin": "DXB", "destination": "SIN", "departureDate": "2026-12-01", "amount": "USD238.00", "brand": { "name": "SAVER" } },
+        { "key": "fI0x/2==", "fareBasis": "QSAV1", "paxType": "ADT", "origin": "SIN", "destination": "DXB", "departureDate": "2026-12-08", "amount": "USD174.00", "brand": { "name": "SAVER" } },
+        { "key": "fI0x/3==", "fareBasis": "KLOWXWCH", "paxType": "CNN", "origin": "DXB", "destination": "SIN", "departureDate": "2026-12-01", "amount": "USD178.50", "brand": { "name": "SAVER" } },
+        { "key": "fI0x/4==", "fareBasis": "QSAV1CH", "paxType": "CNN", "origin": "SIN", "destination": "DXB", "departureDate": "2026-12-08", "amount": "USD130.50", "brand": { "name": "SAVER" } },
+        { "key": "fI0x/5==", "fareBasis": "JFLXXW", "paxType": "ADT", "origin": "DXB", "destination": "SIN", "departureDate": "2026-12-01", "amount": "USD1116.00", "brand": { "name": "FLEX" } },
+        { "key": "fI0x/6==", "fareBasis": "JFLXXWCH", "paxType": "CNN", "origin": "DXB", "destination": "SIN", "departureDate": "2026-12-01", "amount": "USD837.00", "brand": { "name": "FLEX" } }
+      ]
+    },
+    "routeIndex": {
+      "route": {
+        "key": "rT1==",
+        "leg": [
+          { "key": "lG0==", "group": 0, "origin": "DXB", "destination": "SIN" },
+          { "key": "lG1==", "group": 1, "origin": "SIN", "destination": "DXB" }
+        ]
+      }
+    },
+    "pricePoints": {
+      "pricePoint": [
+        {
+          "key": "pP1==",
+          "totalPrice": "USD1406.80", "basePrice": "USD1133.00", "taxes": "USD273.80",
+          "completeItinerary": true,
+          "pricingInfo": [
+            {
+              "key": "pI1a==", "platingCarrier": "XB", "totalPrice": "USD1016.70", "basePrice": "USD824.00", "taxes": "USD192.70",
+              "refundable": false, "latestTicketingTime": "2026-11-24T23:59:00.000+04:00",
+              "fareInfoRef": [ { "key": "fI0x/1==" }, { "key": "fI0x/2==" } ],
+              "passengerType": [ { "code": "ADT" }, { "code": "ADT" } ],
+              "flightOptions": {
+                "flightOption": [
+                  {
+                    "legRef": "lG0==", "origin": "DXB", "destination": "SIN",
+                    "option": [
+                      {
+                        "key": "oA1==", "travelTime": "P0DT11H55M0S",
+                        "bookingInfo": [
+                          { "bookingCode": "K", "bookingCount": 4, "cabinClass": "Economy", "fareInfoRef": "fI0x/1==", "segmentRef": "q8Zt/AAAAg==" },
+                          { "bookingCode": "K", "bookingCount": 6, "cabinClass": "Economy", "fareInfoRef": "fI0x/1==", "segmentRef": "q8Zt/AAABg==" }
+                        ],
+                        "connection": { "segmentIndex": 0 }
+                      },
+                      {
+                        "key": "oA2==", "travelTime": "P0DT10H55M0S",
+                        "bookingInfo": [
+                          { "bookingCode": "K", "bookingCount": 5, "cabinClass": "Economy", "fareInfoRef": "fI0x/1==", "segmentRef": "q8Zt/AAAIg==" },
+                          { "bookingCode": "K", "bookingCount": 8, "cabinClass": "Economy", "fareInfoRef": "fI0x/1==", "segmentRef": "q8Zt/AAA+g==" }
+                        ],
+                        "connection": { "segmentIndex": 0 }
+                      }
+                    ]
+                  },
+                  {
+                    "legRef": "lG1==", "origin": "SIN", "destination": "DXB",
+                    "option": {
+                      "key": "oA3==", "travelTime": "P0DT7H25M0S",
+                      "bookingInfo": { "bookingCode": "Q", "bookingCount": 9, "cabinClass": "Economy", "fareInfoRef": "fI0x/2==", "segmentRef": "q8Zt/AAAHg==" }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "key": "pI1b==", "platingCarrier": "XB", "totalPrice": "USD390.10", "basePrice": "USD309.00", "taxes": "USD81.10",
+              "refundable": false, "latestTicketingTime": "2026-11-24T23:59:00.000+04:00",
+              "fareInfoRef": [ { "key": "fI0x/3==" }, { "key": "fI0x/4==" } ],
+              "passengerType": { "code": "CNN", "age": 8 },
+              "flightOptions": {
+                "flightOption": [
+                  {
+                    "legRef": "lG0==", "origin": "DXB", "destination": "SIN",
+                    "option": [
+                      {
+                        "key": "oB1==", "travelTime": "P0DT11H55M0S",
+                        "bookingInfo": [
+                          { "bookingCode": "K", "bookingCount": 4, "cabinClass": "Economy", "fareInfoRef": "fI0x/3==", "segmentRef": "q8Zt/AAAAg==" },
+                          { "bookingCode": "K", "bookingCount": 6, "cabinClass": "Economy", "fareInfoRef": "fI0x/3==", "segmentRef": "q8Zt/AAABg==" }
+                        ],
+                        "connection": { "segmentIndex": 0 }
+                      },
+                      {
+                        "key": "oB2==", "travelTime": "P0DT10H55M0S",
+                        "bookingInfo": [
+                          { "bookingCode": "K", "bookingCount": 5, "cabinClass": "Economy", "fareInfoRef": "fI0x/3==", "segmentRef": "q8Zt/AAAIg==" },
+                          { "bookingCode": "K", "bookingCount": 8, "cabinClass": "Economy", "fareInfoRef": "fI0x/3==", "segmentRef": "q8Zt/AAA+g==" }
+                        ],
+                        "connection": { "segmentIndex": 0 }
+                      }
+                    ]
+                  },
+                  {
+                    "legRef": "lG1==", "origin": "SIN", "destination": "DXB",
+                    "option": {
+                      "key": "oB3==", "travelTime": "P0DT7H25M0S",
+                      "bookingInfo": { "bookingCode": "Q", "bookingCount": 9, "cabinClass": "Economy", "fareInfoRef": "fI0x/4==", "segmentRef": "q8Zt/AAAHg==" }
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "key": "pP2==",
+          "totalPrice": "USD3883.60", "basePrice": "USD3547.50", "taxes": "USD336.10",
+          "completeItinerary": true,
+          "pricingInfo": [
+            {
+              "key": "pI2a==", "platingCarrier": "XB", "totalPrice": "USD2816.90", "basePrice": "USD2580.00", "taxes": "USD236.90",
+              "refundable": true, "latestTicketingTime": "2026-11-24T23:59:00.000+04:00",
+              "fareInfoRef": [ { "key": "fI0x/5==" }, { "key": "fI0x/2==" } ],
+              "passengerType": [ { "code": "ADT" }, { "code": "ADT" } ],
+              "flightOptions": {
+                "flightOption": [
+                  {
+                    "legRef": "lG0==", "origin": "DXB", "destination": "SIN",
+                    "option": {
+                      "key": "oC1==", "travelTime": "P0DT11H55M0S",
+                      "bookingInfo": [
+                        { "bookingCode": "J", "bookingCount": 2, "cabinClass": "Business", "fareInfoRef": "fI0x/5==", "segmentRef": "q8Zt/AAAAg==" },
+                        { "bookingCode": "J", "bookingCount": 3, "cabinClass": "Business", "fareInfoRef": "fI0x/5==", "segmentRef": "q8Zt/AAABg==" }
+                      ],
+                      "connection": { "segmentIndex": 0 }
+                    }
+                  },
+                  {
+                    "legRef": "lG1==", "origin": "SIN", "destination": "DXB",
+                    "option": {
+                      "key": "oC2==", "travelTime": "P0DT7H25M0S",
+                      "bookingInfo": { "bookingCode": "Q", "bookingCount": 9, "cabinClass": "Economy", "fareInfoRef": "fI0x/2==", "segmentRef": "q8Zt/AAAHg==" }
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "key": "pI2b==", "platingCarrier": "XB", "totalPrice": "USD1066.70", "basePrice": "USD967.50", "taxes": "USD99.20",
+              "refundable": true, "latestTicketingTime": "2026-11-24T23:59:00.000+04:00",
+              "fareInfoRef": [ { "key": "fI0x/6==" }, { "key": "fI0x/4==" } ],
+              "passengerType": { "code": "CNN", "age": 8 },
+              "flightOptions": {
+                "flightOption": [
+                  {
+                    "legRef": "lG0==", "origin": "DXB", "destination": "SIN",
+                    "option": {
+                      "key": "oD1==", "travelTime": "P0DT11H55M0S",
+                      "bookingInfo": [
+                        { "bookingCode": "J", "bookingCount": 2, "cabinClass": "Business", "fareInfoRef": "fI0x/6==", "segmentRef": "q8Zt/AAAAg==" },
+                        { "bookingCode": "J", "bookingCount": 3, "cabinClass": "Business", "fareInfoRef": "fI0x/6==", "segmentRef": "q8Zt/AAABg==" }
+                      ],
+                      "connection": { "segmentIndex": 0 }
+                    }
+                  },
+                  {
+                    "legRef": "lG1==", "origin": "SIN", "destination": "DXB",
+                    "option": {
+                      "key": "oD2==", "travelTime": "P0DT7H25M0S",
+                      "bookingInfo": { "bookingCode": "Q", "bookingCount": 9, "cabinClass": "Economy", "fareInfoRef": "fI0x/4==", "segmentRef": "q8Zt/AAAHg==" }
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
