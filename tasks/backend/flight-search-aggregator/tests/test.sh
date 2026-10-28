@@ -17,10 +17,15 @@ unset NODE_OPTIONS
 # Run from $TESTS_DIR with its own package.json. The hidden tests import the app by absolute
 # path (tests/helpers/app.ts), so nothing in the candidate's folder changes how they run.
 cd "$TESTS_DIR"
-node --test --test-force-exit --test-concurrency=1 --test-timeout=20000 \
+
+# Only this stage's hidden tests. If every step uploads into the same /tests, earlier stages'
+# files are still there; each stage's tests/ carries a STAGE file with its number, and the
+# latest upload overwrites it.
+STAGE="$(tr -d '[:space:]' < "$TESTS_DIR/STAGE")"
+node --no-warnings=ExperimentalWarning --test --test-force-exit --test-concurrency=1 --test-timeout=20000 \
   --test-reporter=junit --test-reporter-destination="$LOGS_DIR/junit.xml" \
   --test-reporter=spec --test-reporter-destination=stdout \
-  "$TESTS_DIR"/*.test.ts
+  "$TESTS_DIR"/stage"$STAGE"*.test.ts
 
 # Reward = fraction of hidden tests passed, so partial work gets partial credit.
 node "$TESTS_DIR/reward.mjs" "$LOGS_DIR/junit.xml" "$LOGS_DIR/reward.txt"

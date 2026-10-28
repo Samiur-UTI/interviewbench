@@ -4,80 +4,95 @@
 #  + business-alignment 10 + communication 5 + api-compatibility 5 + error-handling 5).
 
 focus: |
-  Watch for: dedup keys fixed by adding supplier or price (which stops real duplicates merging);
-  money parsed with Math.round on floats instead of exact integer parsing, or garbage amounts
-  still accepted; timeouts that leave timers, listeners or supplier calls running;
-  Promise.all replaced by allSettled but with no deadline; all-suppliers-failed reported as an
-  empty 200; a deadline that also covers parsing; worker pools that leak threads, hang searches
-  when a worker dies, or copy huge payloads back and forth; "optimisations" that change result
-  order.
+  Watch for:
+  - Stage 1: a Tessera "fix" that patches durations, the dedup key or legTable elapsed times
+    instead of dating each flight from its slice date plus departureDayOffset; dedup keys
+    weakened by adding supplier or price; money parsed with Math.round on floats instead of
+    exact integer parsing, or garbage amounts still accepted. Leaving fareBasis out of the trip
+    key follows README rule 3; mentioning it in NOTES.md is a senior observation, not a
+    requirement.
+  - Stage 2: persisting before seat filtering or de-duplication; answering before the rows are
+    committed; synchronous=OFF, journal_mode=MEMORY/OFF or ":memory:" shortcuts; OFFSET or
+    load-all-then-sort paging that skips or repeats offers on ties; cursors not scoped to their
+    search and sort; preferred_airline that filters instead of reordering. Replacing
+    `itineraries` with `page` in SearchResult was requested by the brief and is not an
+    api-compatibility violation.
+  - Stage 3: weakening durability to hit the budget; OFFSET or load-all paging, including JSON
+    aggregation in SQL; a sort index that doesn't end in the offer id; statements prepared per
+    row; parsing still on the main thread; a deadline that also covers parsing; worker pools
+    that leak threads, hang a search when a worker dies, or copy huge payloads back and forth;
+    "optimisations" that change results or order. Writing to the database on the main thread,
+    in one transaction or in chunks, is allowed.
 
 business: |
   The client is an online travel agency. The flight-search service feeds the results page for
   B2C customers (web and app) and for B2B travel agents booking for clients, including corporate
-  clients who fly business class.
+  clients who fly business class. The price check and booking service reads offers from the
+  database this service writes.
 
   Rules (each stated in README.md or a stage brief):
-  - Never show a fare the supplier can't honour. The shown total equals the supplier's to the
-    cent. Offers with too few seats are hidden, before duplicates are merged. An amount that
-    can't be read exactly makes that supplier's response an error, never a guess (README,
-    stage 1).
-  - Prices are integer US cents. AeroLink sends converted amounts with up to 2 decimals
-    (README).
-  - Different trips are never merged. Same journeys, flight numbers, departure times and booking
-    class, or it's a different product. Fare conditions are determined by booking class
-    (README).
-  - Duplicates are shown once, at the cheapest price. Ties go to the preferred supplier. Order:
-    price, duration, preference, supplierRef (README).
-  - Partial results beat no results. A slow or broken supplier must not delay past the deadline
-    or sink the others (stage 2).
-  - "Couldn't ask anyone" is not "no flights". When every supplier fails, return 503, never an
-    empty 200 (stage 2).
-  - Don't pay for searches nobody waits for. Timed-out or abandoned supplier calls are aborted
-    (stage 2).
-  - One agent's big search must not stall everyone else's. Optimisation must not change any
-    result, and a supplier that answered in time is not a timeout (stage 3).
+  - Never show a fare the supplier can't honour. The total equals the supplier's total for the
+    whole party, to the cent, and includes the supplier's fees. Offers with fewer seats than
+    adults + children are hidden, before duplicates are merged. An amount or reference that
+    can't be resolved exactly makes that supplier's response an error, never a guess (README).
+  - Prices are integer US cents (README).
+  - Same trip means the same journeys and, per segment, the same marketing flight number, UTC
+    departure, airports, booking code and cabin. Codeshares under different flight numbers and
+    different booking codes are different products (README).
+  - Duplicates are shown once, at the cheapest price, whatever the sort; on a tie the preferred
+    (earlier) supplier wins (README).
+  - The four sort preferences are exact total orders ending in the offer id; preferred_airline
+    reorders by the validating carrier and never filters (README).
+  - What we show is what we persisted: a search is answered only after its rows are committed,
+    and the database's durability settings are not weakened (README, stage 2).
+  - Paging is stable: no offer twice, none skipped, even while other searches are written
+    (README, stage 2).
+  - Partial results beat no results; when no supplier answered, the search is a 503, never an
+    empty 200 (README).
+  - The first page is ready within 1 s of the last supplier answer, parsing doesn't stall the
+    service, and a supplier that answered in time is not a timeout (stage 3).
 
-  Priorities when they conflict: correct, honourable fares and never merging different trips >
-  returning partial results quickly and honestly > responsiveness and speed. For example,
-  rejecting a whole supplier response because one amount is malformed is correct; silently
-  skipping or rounding the bad offer is not.
+  Priorities when they conflict: honest fares and correct trips > persisted before shown, and
+  durability > stable paging > partial results > the 1 s budget and responsiveness. Dropping
+  durability to hit 1 s is wrong. Answering after the deadline with partial results is right.
+  Rejecting a whole supplier response because one amount or reference is malformed is correct;
+  silently skipping or rounding the bad offer is not.
 
 criteria:
   - id: stage1-bug-fixed
     type: auto
     stage: 1
     weight: 15
-    description: Hidden stage 1 tests pass (different trips are not merged; AeroLink totals are exact; malformed amounts are rejected).
+    description: Hidden stage 1 tests pass (next-day connections dated correctly, no duplicate trips, exact totals for every supplier, malformed amounts rejected).
 
   - id: stage2-feature
     type: auto
     stage: 2
     weight: 15
-    description: Hidden stage 2 tests pass (concurrent fan-out, deadline, cancellation, partial results, 503 when all fail, nothing left running).
+    description: Hidden stage 2 tests pass (rows committed before the response, every sort pages correctly under ties, stable and validated cursors).
 
   - id: stage3-scales
     type: auto
     stage: 3
     weight: 15
-    description: Hidden stage 3 tests pass (merge scales, event loop stays responsive while parsing, results unchanged, clean shutdown).
+    description: Hidden stage 3 tests pass (batched writes, reused statements, index-seek keyset pages, durability kept, parsing off the event loop, 1 s processing budget).
 
   - id: correctness
     weight: 10
     levels:
       0: Wrong in common cases, or the candidate's tests fail.
-      1: Works for the tested paths but has a real bug the tests miss (e.g. a late supplier response lands in results, or a worker crash hangs a search).
+      1: Works for the tested paths but has a real bug the tests miss (e.g. a cursor that skips offers on ties, or a worker crash that hangs a search).
       2: Correct, with at most minor edge-case gaps.
-      3: Correct, including abort/timeout races, worker failures, and invalid input.
+      3: Correct, including timeout races, worker failures, failed or empty searches, and invalid input.
 
   - id: root-cause
     weight: 10
-    description: Fixes both stage 1 root causes where they live (the dedup key, exact decimal parsing) instead of patching results afterwards.
+    description: Fixes both stage 1 root causes where they live (Tessera's flight dates, exact decimal parsing) instead of patching results afterwards.
     levels:
-      0: No fix, or the change only hides the symptom (e.g. adding 1 cent, special-casing business class, Math.ceil).
-      1: Works but in the wrong layer (e.g. fixing prices in the merge or handler) or still parses money through floats.
-      2: Both fixes are in the dedup key and in exact string-to-cents parsing.
-      3: As 2, and NOTES.md explains why only some amounts were off and why SkyMesh was unaffected.
+      0: No fix, or the change only hides the symptom (e.g. clamping negative durations, adding 1 cent, Math.ceil).
+      1: Works but in the wrong layer (e.g. fixing durations or the dedup key, fixing prices in the merge) or still parses money through floats.
+      2: The date fix is where Tessera's leg-to-schedule chain is resolved, and money is parsed exactly from strings.
+      3: As 2, and NOTES.md explains why only next-day connections were affected (the offset is omitted when 0) and why Tessera never had the cent problem.
 
   - id: code-quality
     weight: 5
@@ -87,15 +102,15 @@ criteria:
     levels:
       0: No new tests.
       1: Some tests, but they would not have caught the original bugs.
-      2: Regression tests for both bugs plus tests for deadlines and partial results using controllable fakes.
-      3: As 2, plus tests for merge scaling or equivalence and for worker failure or shutdown.
+      2: Regression tests for both bugs plus tests for persistence and paging.
+      3: As 2, plus tests for paging under ties, batched writes or query plans, and worker failure.
 
   - id: business-alignment
     weight: 10
     levels:
-      0: Breaks a rule (a price differing from the supplier's, business merged into economy, an empty 200 when every supplier failed, changed result order).
-      1: Rules hold, but a judgement call works against users or the business (e.g. a timed-out supplier's late result leaks into the response, timed-out calls aren't aborted, bad offers are skipped silently).
-      2: Every rule holds, and judgement calls favour honest fares first, then partial results, then speed.
+      0: Breaks a rule (a price differing from the supplier's, different trips merged, responding before commit, weakened durability, preferred_airline filtering instead of reordering, changed result order, an empty 200 when every supplier failed).
+      1: Rules hold, but a judgement call works against users or the business (e.g. a default page size or limit that works against users, cursors that leak across searches, bad offers skipped silently).
+      2: Every rule holds, and judgement calls favour honest fares first, then durability and stable paging, then partial results, then speed.
 
   - id: communication
     weight: 5
