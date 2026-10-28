@@ -21,16 +21,16 @@ function fakeClient(name: string, format: SupplierFormat, raw: string): Supplier
 const request = (passengers = 1): SearchRequest => ({
   tripType: "return",
   legs: [
-    { origin: "DAC", destination: "DXB", date: "2026-12-01" },
-    { origin: "DXB", destination: "DAC", date: "2026-12-10" },
+    { origin: "LHR", destination: "DXB", date: "2026-12-01" },
+    { origin: "DXB", destination: "LHR", date: "2026-12-10" },
   ],
   passengers,
 });
 
 const service = () =>
   new FlightSearchService([
-    fakeClient("aerolink", "aerolink", fixture("aerolink-dac-dxb.json")),
-    fakeClient("skymesh", "skymesh", fixture("skymesh-dac-dxb.json")),
+    fakeClient("aerolink", "aerolink", fixture("aerolink-lhr-dxb.json")),
+    fakeClient("skymesh", "skymesh", fixture("skymesh-lhr-dxb.json")),
   ]);
 
 test("search merges every supplier's offers", async () => {
@@ -47,7 +47,7 @@ test("offers without enough seats are hidden", async () => {
 });
 
 test("invalid requests are rejected before asking suppliers", async () => {
-  const client = fakeClient("aerolink", "aerolink", fixture("aerolink-dac-dxb.json"));
+  const client = fakeClient("aerolink", "aerolink", fixture("aerolink-lhr-dxb.json"));
   const svc = new FlightSearchService([client]);
   await assert.rejects(async () => svc.search({ ...request(), passengers: 0 }), ValidationError);
   assert.equal(client.calls, 0);

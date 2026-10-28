@@ -1,13 +1,12 @@
 # flight-search
 
-The service behind Jatri Travels' flight results page. Jatri Travels is an online travel agency
-in Dhaka. Its users are:
+The service behind the flight results page of an online travel agency. Its users are:
 
 - **B2C customers** on the website and app;
 - **B2B travel agents** on the agent portal, who search for their clients (often multi-city),
   including corporate clients who fly business class.
 
-Most searches are international (DAC-DXB, DAC-SIN, DAC-KUL): one-way, return or multi-city.
+Most searches are international (LHR-DXB, LHR-SIN, LHR-JFK): one-way, return or multi-city.
 
 ## How a search works
 
@@ -16,11 +15,11 @@ Most searches are international (DAC-DXB, DAC-SIN, DAC-KUL): one-way, return or 
    The order of the clients passed to the constructor is the **supplier preference order**.
 3. Each raw response is parsed into the common `Itinerary` shape (`src/types.ts`):
    - **AeroLink** (`src/suppliers/aerolink.ts`): nested JSON, local times with UTC offsets.
-     Fares and carrier taxes are filed in foreign currencies (USD/AED/SGD/MYR); AeroLink converts
-     them to BDT and sends decimal strings with up to 2 decimals. Bangladesh taxes (e.g. `BD`)
-     come in whole taka.
+     Fares and carrier taxes are filed in local currencies (EUR/GBP/AED/SGD); AeroLink converts
+     them to USD and sends decimal strings with up to 2 decimals. Carrier service fees (e.g. `YR`)
+     come in whole dollars.
    - **SkyMesh** (`src/suppliers/skymesh.ts`): flat JSON, one row per fare, segments packed into
-     pipe-delimited strings, UTC timestamps, and a total already in poisha.
+     pipe-delimited strings, UTC timestamps, and a total already in US cents.
 4. Offers without enough seats are dropped, then duplicates are merged and the list is sorted
    (`src/merge.ts`).
 
@@ -29,11 +28,11 @@ Most searches are international (DAC-DXB, DAC-SIN, DAC-KUL): one-way, return or 
 ## Business rules
 
 1. **Never show a fare the supplier can't honour.**
-   - The price we show equals the supplier's total, to the poisha.
+   - The price we show equals the supplier's total, to the cent.
    - Offers with fewer seats than passengers are hidden. The seat check happens before
      duplicates are merged, so a sold-out cheap copy can't hide an available one.
    - An amount we can't read exactly is a supplier error. Never guess or round.
-2. **Prices are integer poisha in BDT** inside the service (1 BDT = 100 poisha).
+2. **Prices are integer US cents** inside the service (1 USD = 100 cents).
 3. **Two offers are the same trip only if** they have the same journeys and, segment by segment,
    the same flight number, departure time and booking class.
    - Economy and business are different products.

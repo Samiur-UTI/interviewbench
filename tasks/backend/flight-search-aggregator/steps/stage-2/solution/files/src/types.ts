@@ -1,7 +1,7 @@
 export type SupplierFormat = "aerolink" | "skymesh";
 export type TripType = "oneway" | "return" | "multicity";
 
-/** One requested leg: airport codes ("DAC") and a local date ("YYYY-MM-DD"). */
+/** One requested leg: airport codes ("LHR") and a local date ("YYYY-MM-DD"). */
 export interface Leg {
   origin: string;
   destination: string;
@@ -33,7 +33,7 @@ export interface Itinerary {
   supplier: string; // SupplierClient.name
   supplierRef: string;
   journeys: Journey[];
-  totalPrice: number; // integer poisha (BDT), all passengers, all taxes
+  totalPrice: number; // integer US cents, all passengers, all taxes
   seatsAvailable: number;
   durationMinutes: number; // sum over journeys of (last arrival - first departure)
 }

@@ -1,6 +1,6 @@
 # Fix the search results
 
-You've joined the flights team at Jatri Travels, an online travel agency in Dhaka. This repo is
+You've joined the flights team at an online travel agency. This repo is
 `flight-search`: the service behind the flight results page for B2C customers (website and app)
 and for B2B travel agents (agent portal). It asks every configured fare supplier at once (today
 AeroLink and SkyMesh, see `src/suppliers/`), converts their very different payloads into one
@@ -13,7 +13,7 @@ Two tickets landed this week:
    disappeared on several routes, even though the airline sells them. Economy shows up fine for
    the same flights. Result counts are also lower than what the suppliers send us."
 2. **Bookings:** "Some AeroLink bookings, roughly one in six, fail the price check at booking
-   with PRICE_MISMATCH. Our quoted total is a few poisha lower than AeroLink's. SkyMesh bookings
+   with PRICE_MISMATCH. Our quoted total is a few cents lower than AeroLink's. SkyMesh bookings
    never fail this way."
 
 Find the root causes and fix them. Keep the public API in `src/index.ts` unchanged.

@@ -1,11 +1,11 @@
 // SkyMesh: flat JSON, one row per fare. Segments are pipe-delimited strings:
 //   flightNumber|from|to|depUTC(yyyyMMddHHmm)|arrUTC|bookingClass|journeyNo
-// and the total is already an integer in poisha.
+// and the total is already an integer in cents.
 //
-// { "status": "OK", "cur": "BDT",
-//   "fares": [{ "ref": "SM-55102", "fareBasis": "KOWBD", "avail": 4, "totalMinor": 5091781,
-//               "segs": ["XB581|DAC|DXB|202612011540|202612012105|K|1",
-//                        "XB582|DXB|DAC|202612092315|202612100420|K|2"] }] }
+// { "status": "OK", "cur": "USD",
+//   "fares": [{ "ref": "SM-55102", "fareBasis": "KOWGB", "avail": 4, "totalMinor": 66808,
+//               "segs": ["XB581|LHR|DXB|202612011540|202612012105|K|1",
+//                        "XB582|DXB|LHR|202612092315|202612100420|K|2"] }] }
 
 import { SupplierPayloadError } from "../errors.ts";
 import { minutesBetween, parseCompactUtc } from "../time.ts";
@@ -49,7 +49,7 @@ function toJourneys(value: unknown, path: string): Journey[] {
 export function parseSkyMesh(raw: string, supplier: string): Itinerary[] {
   const doc = obj(parseJson(raw, supplier), supplier);
   if (doc.status !== "OK") throw new SupplierPayloadError(`${supplier}: status ${String(doc.status)}`);
-  if (doc.cur !== "BDT") throw new SupplierPayloadError(`${supplier}: currency must be BDT`);
+  if (doc.cur !== "USD") throw new SupplierPayloadError(`${supplier}: currency must be USD`);
   return arr(doc.fares, `${supplier}.fares`).map((value, i) => {
     const path = `${supplier}.fares[${i}]`;
     const fare = obj(value, path);

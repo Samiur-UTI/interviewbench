@@ -28,7 +28,7 @@ function slowMerge(lists: Itinerary[][], preference: string[]): Itinerary[] {
 function market(n: number, seed: number): Itinerary[][] {
   let s = seed;
   const rand = () => (s = (s * 1103515245 + 12345) % 2 ** 31) / 2 ** 31;
-  const base = parseAeroLink(fixture("aerolink-dac-dxb.json"), "aerolink")[0];
+  const base = parseAeroLink(fixture("aerolink-lhr-dxb.json"), "aerolink")[0];
   const lists: Itinerary[][] = [[], [], []];
   for (let i = 0; i < n; i++) {
     const trip = Math.floor(rand() * (n / 3));
@@ -39,7 +39,7 @@ function market(n: number, seed: number): Itinerary[][] {
       id: `${PREFERENCE[supplier]}:R${i}`,
       supplier: PREFERENCE[supplier],
       supplierRef: `R${i}`,
-      totalPrice: 4_000_000 + Math.floor(rand() * 4) * 1000 + supplier,
+      totalPrice: 40_000 + Math.floor(rand() * 4) * 10 + supplier,
       durationMinutes: 600 + Math.floor(rand() * 3) * 30,
       journeys: [
         {
@@ -68,7 +68,7 @@ test("merging 150,000 offers takes well under a second or two", () => {
 });
 
 test("parserThreads must be a positive integer", () => {
-  const client = { name: "a", format: "aerolink" as const, search: async () => fixture("aerolink-dac-dxb.json") };
+  const client = { name: "a", format: "aerolink" as const, search: async () => fixture("aerolink-lhr-dxb.json") };
   for (const parserThreads of [0, -1, 1.5]) {
     assert.throws(() => new FlightSearchService([client], { parserThreads }), ValidationError);
   }

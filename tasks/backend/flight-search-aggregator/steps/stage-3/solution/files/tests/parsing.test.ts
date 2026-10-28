@@ -10,15 +10,15 @@ const client = (name: string, format: SupplierFormat, raw: () => string): Suppli
 const request: SearchRequest = {
   tripType: "return",
   legs: [
-    { origin: "DAC", destination: "DXB", date: "2026-12-01" },
-    { origin: "DXB", destination: "DAC", date: "2026-12-10" },
+    { origin: "LHR", destination: "DXB", date: "2026-12-01" },
+    { origin: "DXB", destination: "LHR", date: "2026-12-10" },
   ],
   passengers: 1,
 };
 
 test("parsing in threads gives the same results as before", async () => {
   const svc = new FlightSearchService(
-    [client("aerolink", "aerolink", () => fixture("aerolink-dac-dxb.json")), client("skymesh", "skymesh", () => fixture("skymesh-dac-dxb.json"))],
+    [client("aerolink", "aerolink", () => fixture("aerolink-lhr-dxb.json")), client("skymesh", "skymesh", () => fixture("skymesh-lhr-dxb.json"))],
     { parserThreads: 2 },
   );
   try {
@@ -30,11 +30,11 @@ test("parsing in threads gives the same results as before", async () => {
 });
 
 test("a payload that fails in a thread is a supplier error, and the next search works", async () => {
-  let raw = JSON.stringify({ currency: "BDT", offers: [{ offerId: "x" }] });
+  let raw = JSON.stringify({ currency: "USD", offers: [{ offerId: "x" }] });
   const svc = new FlightSearchService([client("aerolink", "aerolink", () => raw)], { parserThreads: 1 });
   try {
     assert.equal((await svc.searchWithStatus(request)).suppliers[0].status, "error");
-    raw = fixture("aerolink-dac-dxb.json");
+    raw = fixture("aerolink-lhr-dxb.json");
     assert.equal((await svc.searchWithStatus(request)).suppliers[0].status, "ok");
   } finally {
     await svc.close();
@@ -42,7 +42,7 @@ test("a payload that fails in a thread is a supplier error, and the next search 
 });
 
 test("close() is idempotent and later searches reject", async () => {
-  const svc = new FlightSearchService([client("aerolink", "aerolink", () => fixture("aerolink-dac-dxb.json"))], { parserThreads: 1 });
+  const svc = new FlightSearchService([client("aerolink", "aerolink", () => fixture("aerolink-lhr-dxb.json"))], { parserThreads: 1 });
   await svc.searchWithStatus(request);
   await svc.close();
   await svc.close();
@@ -51,7 +51,7 @@ test("close() is idempotent and later searches reject", async () => {
 
 test("closing the pool rejects queued jobs instead of hanging them", async () => {
   const pool = new WorkerPool(1);
-  const jobs = [1, 2, 3].map(() => pool.parse("aerolink", fixture("aerolink-dac-dxb.json"), "aerolink"));
+  const jobs = [1, 2, 3].map(() => pool.parse("aerolink", fixture("aerolink-lhr-dxb.json"), "aerolink"));
   const settled = Promise.allSettled(jobs);
   await pool.close();
   assert.ok((await settled).every((s) => s.status === "rejected"));
