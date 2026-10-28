@@ -1,0 +1,102 @@
+# Inherits rubrics/base.yaml and rubrics/backend.yaml. Entries below add criteria or override
+# inherited ones by id. Total weight: 45 auto + 55 judge = 100
+# (15 + 15 + 15 + correctness 10 + root-cause 10 + code-quality 5 + verification 5
+#  + business-alignment 10 + communication 5 + api-compatibility 5 + error-handling 5).
+
+focus: |
+  Watch for: dedup keys fixed by adding supplier or price (which stops real duplicates merging);
+  money parsed with Math.round on floats instead of exact integer parsing, or garbage amounts
+  still accepted; timeouts that leave timers, listeners or supplier calls running;
+  Promise.all replaced by allSettled but with no deadline; all-suppliers-failed reported as an
+  empty 200; a deadline that also covers parsing; worker pools that leak threads, hang searches
+  when a worker dies, or copy huge payloads back and forth; "optimisations" that change result
+  order.
+
+business: |
+  Example Travels is an online travel agency. The flight-search service feeds the results page for
+  B2C customers (web and app) and for B2B travel agents booking for clients, including corporate
+  clients who fly business class.
+
+  Rules (each stated in README.md or a stage brief):
+  - Never show a fare the supplier can't honour. The shown total equals the supplier's to the
+    poisha. Offers with too few seats are hidden, before duplicates are merged. An amount that
+    can't be read exactly makes that supplier's response an error, never a guess (README,
+    stage 1).
+  - Prices are integer poisha in BDT. AeroLink sends converted amounts with up to 2 decimals
+    (README).
+  - Different trips are never merged. Same journeys, flight numbers, departure times and booking
+    class, or it's a different product. Fare conditions are determined by booking class
+    (README).
+  - Duplicates are shown once, at the cheapest price. Ties go to the preferred supplier. Order:
+    price, duration, preference, supplierRef (README).
+  - Partial results beat no results. A slow or broken supplier must not delay past the deadline
+    or sink the others (stage 2).
+  - "Couldn't ask anyone" is not "no flights". When every supplier fails, return 503, never an
+    empty 200 (stage 2).
+  - Don't pay for searches nobody waits for. Timed-out or abandoned supplier calls are aborted
+    (stage 2).
+  - One agent's big search must not stall everyone else's. Optimisation must not change any
+    result, and a supplier that answered in time is not a timeout (stage 3).
+
+  Priorities when they conflict: correct, honourable fares and never merging different trips >
+  returning partial results quickly and honestly > responsiveness and speed. For example,
+  rejecting a whole supplier response because one amount is malformed is correct; silently
+  skipping or rounding the bad offer is not.
+
+criteria:
+  - id: stage1-bug-fixed
+    type: auto
+    stage: 1
+    weight: 15
+    description: Hidden stage 1 tests pass (different trips are not merged; AeroLink totals are exact; malformed amounts are rejected).
+
+  - id: stage2-feature
+    type: auto
+    stage: 2
+    weight: 15
+    description: Hidden stage 2 tests pass (concurrent fan-out, deadline, cancellation, partial results, 503 when all fail, nothing left running).
+
+  - id: stage3-scales
+    type: auto
+    stage: 3
+    weight: 15
+    description: Hidden stage 3 tests pass (merge scales, event loop stays responsive while parsing, results unchanged, clean shutdown).
+
+  - id: correctness
+    weight: 10
+    levels:
+      0: Wrong in common cases, or the candidate's tests fail.
+      1: Works for the tested paths but has a real bug the tests miss (e.g. a late supplier response lands in results, or a worker crash hangs a search).
+      2: Correct, with at most minor edge-case gaps.
+      3: Correct, including abort/timeout races, worker failures, and invalid input.
+
+  - id: root-cause
+    weight: 10
+    description: Fixes both stage 1 root causes where they live (the dedup key, exact decimal parsing) instead of patching results afterwards.
+    levels:
+      0: No fix, or the change only hides the symptom (e.g. adding 1 poisha, special-casing business class, Math.ceil).
+      1: Works but in the wrong layer (e.g. fixing prices in the merge or handler) or still parses money through floats.
+      2: Both fixes are in the dedup key and in exact string-to-poisha parsing.
+      3: As 2, and NOTES.md explains why only some amounts were off and why SkyMesh was unaffected.
+
+  - id: code-quality
+    weight: 5
+
+  - id: verification
+    weight: 5
+    levels:
+      0: No new tests.
+      1: Some tests, but they would not have caught the original bugs.
+      2: Regression tests for both bugs plus tests for deadlines and partial results using controllable fakes.
+      3: As 2, plus tests for merge scaling or equivalence and for worker failure or shutdown.
+
+  - id: business-alignment
+    weight: 10
+    levels:
+      0: Breaks a rule (a price differing from the supplier's, business merged into economy, an empty 200 when every supplier failed, changed result order).
+      1: Rules hold, but a judgement call works against users or the business (e.g. a timed-out supplier's late result leaks into the response, timed-out calls aren't aborted, bad offers are skipped silently).
+      2: Every rule holds, and judgement calls favour honest fares first, then partial results, then speed.
+
+  - id: communication
+    weight: 5
+  # From rubrics/backend.yaml: api-compatibility 5, error-handling 5 (unchanged).
