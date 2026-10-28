@@ -1,0 +1,206 @@
+{
+  "shopResponse": {
+    "version": "6.4.0",
+    "messages": [
+      { "severity": "Info", "type": "SERVER", "code": "TRANSACTIONID", "text": "tx-6630-c1" }
+    ],
+    "statistics": { "itineraryCount": 2 },
+    "scheduleTable": [
+      {
+        "id": 1, "stops": 0, "eTicketable": true, "elapsedMinutes": 180,
+        "departure": { "airport": "DXB", "country": "AE", "time": "08:05:00+04:00", "terminal": "3" },
+        "arrival": { "airport": "DEL", "country": "IN", "time": "12:35:00+05:30", "terminal": "3" },
+        "carrier": { "marketing": "XB", "marketingFlightNumber": 583, "operating": "XB", "operatingFlightNumber": 583, "equipment": { "code": "738" } }
+      },
+      {
+        "id": 3, "stops": 0, "eTicketable": true, "elapsedMinutes": 180,
+        "departure": { "airport": "DXB", "country": "AE", "time": "14:30:00+04:00", "terminal": "3" },
+        "arrival": { "airport": "DEL", "country": "IN", "time": "19:00:00+05:30", "terminal": "3" },
+        "carrier": { "marketing": "XB", "marketingFlightNumber": 581, "operating": "XB", "operatingFlightNumber": 581, "equipment": { "code": "738" } }
+      },
+      {
+        "id": 7, "stops": 0, "eTicketable": true, "elapsedMinutes": 445,
+        "departure": { "airport": "SIN", "country": "SG", "time": "01:35:00+08:00", "terminal": "3" },
+        "arrival": { "airport": "DXB", "country": "AE", "time": "05:00:00+04:00", "terminal": "1" },
+        "carrier": { "marketing": "ZK", "marketingFlightNumber": 9, "operating": "ZK", "operatingFlightNumber": 9, "equipment": { "code": "359" } }
+      },
+      {
+        "id": 9, "stops": 0, "eTicketable": true, "elapsedMinutes": 340,
+        "departure": { "airport": "DEL", "country": "IN", "time": "14:50:00+05:30", "terminal": "3" },
+        "arrival": { "airport": "SIN", "country": "SG", "time": "23:00:00+08:00", "terminal": "2" },
+        "carrier": { "marketing": "XB", "marketingFlightNumber": 4419, "operating": "ZK", "operatingFlightNumber": 118, "codeShared": "ZEPHYR KAPPA AIRWAYS", "equipment": { "code": "320" } }
+      },
+      {
+        "id": 14, "stops": 0, "eTicketable": true, "elapsedMinutes": 340,
+        "departure": { "airport": "DEL", "country": "IN", "time": "21:15:00+05:30", "terminal": "3" },
+        "arrival": { "airport": "SIN", "country": "SG", "time": "05:25:00+08:00", "terminal": "2", "dayOffset": 1 },
+        "carrier": { "marketing": "XB", "marketingFlightNumber": 4417, "operating": "ZK", "operatingFlightNumber": 112, "codeShared": "ZEPHYR KAPPA AIRWAYS", "equipment": { "code": "320" } }
+      }
+    ],
+    "taxTable": [
+      { "id": 1, "code": "AE", "amountCents": 3000, "currency": "USD", "country": "AE" },
+      { "id": 2, "code": "YQ", "amountCents": 4500, "currency": "USD" },
+      { "id": 3, "code": "SG", "amountCents": 1920, "currency": "USD", "country": "SG" },
+      { "id": 4, "code": "SG", "amountCents": 610, "currency": "USD", "country": "SG" },
+      { "id": 5, "code": "YQ", "amountCents": 6925, "currency": "USD" },
+      { "id": 6, "code": "YQ", "amountCents": 6310, "currency": "USD" },
+      { "id": 7, "code": "SG", "amountCents": 2135, "currency": "USD", "country": "SG" }
+    ],
+    "fareComponentTable": [
+      { "id": 11, "governingCarrier": "XB", "fareBasis": "KLOWXW", "paxType": "ADT", "fareAmountCents": 23800, "startAirport": "DXB", "endAirport": "SIN", "direction": "EH" },
+      { "id": 12, "governingCarrier": "XB", "fareBasis": "KLOWXWCH", "paxType": "CNN", "fareAmountCents": 17850, "startAirport": "DXB", "endAirport": "SIN", "direction": "EH" },
+      { "id": 13, "governingCarrier": "ZK", "fareBasis": "QSAV1", "paxType": "ADT", "fareAmountCents": 17400, "startAirport": "SIN", "endAirport": "DXB", "direction": "EH" },
+      { "id": 14, "governingCarrier": "ZK", "fareBasis": "QSAV1CH", "paxType": "CNN", "fareAmountCents": 13050, "startAirport": "SIN", "endAirport": "DXB", "direction": "EH" },
+      { "id": 15, "governingCarrier": "XB", "fareBasis": "JFLXXW", "paxType": "ADT", "fareAmountCents": 111600, "startAirport": "DXB", "endAirport": "SIN", "direction": "EH" },
+      { "id": 16, "governingCarrier": "XB", "fareBasis": "JFLXXWCH", "paxType": "CNN", "fareAmountCents": 83700, "startAirport": "DXB", "endAirport": "SIN", "direction": "EH" },
+      { "id": 17, "governingCarrier": "XB", "fareBasis": "LSTPXW", "paxType": "ADT", "fareAmountCents": 39800, "startAirport": "DXB", "endAirport": "DXB", "direction": "EH" },
+      { "id": 18, "governingCarrier": "XB", "fareBasis": "LSTPXWCH", "paxType": "CNN", "fareAmountCents": 29850, "startAirport": "DXB", "endAirport": "DXB", "direction": "EH" }
+    ],
+    "legTable": [
+      { "id": 2, "elapsedMinutes": 655, "schedules": [ { "ref": 3 }, { "ref": 14 } ] },
+      { "id": 4, "elapsedMinutes": 655, "schedules": [ { "ref": 1 }, { "ref": 9 } ] },
+      { "id": 5, "elapsedMinutes": 445, "schedules": [ { "ref": 7 } ] }
+    ],
+    "groups": [
+      {
+        "header": {
+          "slices": [
+            { "date": "2026-12-01", "from": "DXB", "to": "SIN" },
+            { "date": "2026-12-08", "from": "SIN", "to": "DXB" }
+          ]
+        },
+        "itineraries": [
+          {
+            "id": 1,
+            "source": "ADVJR1",
+            "legs": [ { "ref": 2 }, { "ref": 5 } ],
+            "quotes": [
+              {
+                "brandId": "SAVER",
+                "fare": {
+                  "validatingCarrier": "XB",
+                  "eTicketable": true,
+                  "lastTicketDate": "2026-11-24",
+                  "paxQuotes": [
+                    {
+                      "paxQuote": {
+                        "paxType": "ADT", "paxCount": 2, "nonRefundable": true,
+                        "fareComponents": [
+                          { "ref": 11, "segments": [
+                            { "segment": { "bookingCode": "K", "cabinCode": "Y", "seatsAvailable": 4, "mealCode": "M" } },
+                            { "segment": { "bookingCode": "K", "cabinCode": "Y", "seatsAvailable": 6 } } ] },
+                          { "ref": 13, "segments": [
+                            { "segment": { "bookingCode": "Q", "cabinCode": "Y", "seatsAvailable": 9, "mealCode": "M" } } ] }
+                        ],
+                        "taxes": [ { "ref": 1 }, { "ref": 2 }, { "ref": 3 } ],
+                        "perPaxTotal": { "totalCents": 50620, "baseCents": 41200, "taxCents": 9420, "currency": "USD" }
+                      }
+                    },
+                    {
+                      "paxQuote": {
+                        "paxType": "CNN", "paxCount": 1, "nonRefundable": true,
+                        "fareComponents": [
+                          { "ref": 12, "segments": [
+                            { "segment": { "bookingCode": "K", "cabinCode": "Y", "seatsAvailable": 4, "mealCode": "M" } },
+                            { "segment": { "bookingCode": "K", "cabinCode": "Y", "seatsAvailable": 6 } } ] },
+                          { "ref": 14, "segments": [
+                            { "segment": { "bookingCode": "Q", "cabinCode": "Y", "seatsAvailable": 9, "mealCode": "M" } } ] }
+                        ],
+                        "taxes": [ { "ref": 1 }, { "ref": 2 }, { "ref": 4 } ],
+                        "perPaxTotal": { "totalCents": 39010, "baseCents": 30900, "taxCents": 8110, "currency": "USD" }
+                      }
+                    }
+                  ],
+                  "totalFare": { "totalCents": 140250, "baseCents": 113300, "taxCents": 26950, "currency": "USD" }
+                }
+              },
+              {
+                "brandId": "FLEX",
+                "fare": {
+                  "validatingCarrier": "XB",
+                  "eTicketable": true,
+                  "lastTicketDate": "2026-11-24",
+                  "paxQuotes": [
+                    {
+                      "paxQuote": {
+                        "paxType": "ADT", "paxCount": 2, "nonRefundable": false,
+                        "fareComponents": [
+                          { "ref": 15, "segments": [
+                            { "segment": { "bookingCode": "J", "cabinCode": "C", "seatsAvailable": 2, "mealCode": "D" } },
+                            { "segment": { "bookingCode": "J", "cabinCode": "C", "seatsAvailable": 3 } } ] },
+                          { "ref": 13, "segments": [
+                            { "segment": { "bookingCode": "Q", "cabinCode": "Y", "seatsAvailable": 9, "mealCode": "M" } } ] }
+                        ],
+                        "taxes": [ { "ref": 1 }, { "ref": 5 }, { "ref": 3 } ],
+                        "perPaxTotal": { "totalCents": 140845, "baseCents": 129000, "taxCents": 11845, "currency": "USD" }
+                      }
+                    },
+                    {
+                      "paxQuote": {
+                        "paxType": "CNN", "paxCount": 1, "nonRefundable": false,
+                        "fareComponents": [
+                          { "ref": 16, "segments": [
+                            { "segment": { "bookingCode": "J", "cabinCode": "C", "seatsAvailable": 2, "mealCode": "D" } },
+                            { "segment": { "bookingCode": "J", "cabinCode": "C", "seatsAvailable": 3 } } ] },
+                          { "ref": 14, "segments": [
+                            { "segment": { "bookingCode": "Q", "cabinCode": "Y", "seatsAvailable": 9, "mealCode": "M" } } ] }
+                        ],
+                        "taxes": [ { "ref": 1 }, { "ref": 6 }, { "ref": 4 } ],
+                        "perPaxTotal": { "totalCents": 106670, "baseCents": 96750, "taxCents": 9920, "currency": "USD" }
+                      }
+                    }
+                  ],
+                  "totalFare": { "totalCents": 388360, "baseCents": 354750, "taxCents": 33610, "currency": "USD" }
+                }
+              }
+            ]
+          },
+          {
+            "id": 2,
+            "source": "ADVJR1",
+            "legs": [ { "ref": 4 }, { "ref": 5 } ],
+            "quotes": [
+              {
+                "brandId": "SAVER",
+                "fare": {
+                  "validatingCarrier": "XB",
+                  "eTicketable": true,
+                  "lastTicketDate": "2026-11-24",
+                  "paxQuotes": [
+                    {
+                      "paxQuote": {
+                        "paxType": "ADT", "paxCount": 2, "nonRefundable": true,
+                        "fareComponents": [
+                          { "ref": 17, "segments": [
+                            { "segment": { "bookingCode": "L", "cabinCode": "Y", "seatsAvailable": 7 } },
+                            { "segment": { "bookingCode": "L", "cabinCode": "Y", "seatsAvailable": 9 } },
+                            { "segment": { "bookingCode": "Q", "cabinCode": "Y", "seatsAvailable": 9, "mealCode": "M" } } ] }
+                        ],
+                        "taxes": [ { "ref": 1 }, { "ref": 2 }, { "ref": 7 } ],
+                        "perPaxTotal": { "totalCents": 49435, "baseCents": 39800, "taxCents": 9635, "currency": "USD" }
+                      }
+                    },
+                    {
+                      "paxQuote": {
+                        "paxType": "CNN", "paxCount": 1, "nonRefundable": true,
+                        "fareComponents": [
+                          { "ref": 18, "segments": [
+                            { "segment": { "bookingCode": "L", "cabinCode": "Y", "seatsAvailable": 7 } },
+                            { "segment": { "bookingCode": "L", "cabinCode": "Y", "seatsAvailable": 9 } },
+                            { "segment": { "bookingCode": "Q", "cabinCode": "Y", "seatsAvailable": 9, "mealCode": "M" } } ] }
+                        ],
+                        "taxes": [ { "ref": 1 }, { "ref": 2 }, { "ref": 4 } ],
+                        "perPaxTotal": { "totalCents": 37960, "baseCents": 29850, "taxCents": 8110, "currency": "USD" }
+                      }
+                    }
+                  ],
+                  "totalFare": { "totalCents": 136830, "baseCents": 109450, "taxCents": 27380, "currency": "USD" }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
