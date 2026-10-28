@@ -1,164 +1,134 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
-import { getEventListeners } from "node:events";
-import { FlightSearchService, handleSearch, NoSuppliersAvailableError, ValidationError } from "../src/index.ts";
-import type { SearchRequest, SupplierClient, SupplierFormat } from "../src/index.ts";
+import { FlightSearchService, handleGetPage, handleSearch, SearchNotFoundError, ValidationError } from "../src/index.ts";
+import type { Itinerary, SearchRequest, SupplierClient, SupplierFormat } from "../src/index.ts";
 
-const fixture = (name: string): string => readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8");
+// The three fixtures answer the same search: DXB -> SIN on 1 Dec, SIN -> DXB on 8 Dec, 2 adults + 1 child.
+const fixture = (format: SupplierFormat): string => readFileSync(new URL(`./fixtures/${format}-dxb-sin.json`, import.meta.url), "utf8");
 
-function fakeClient(name: string, format: SupplierFormat, raw: string): SupplierClient & { calls: number } {
+function fakeClient(format: SupplierFormat, respond: () => Promise<string> = async () => fixture(format)): SupplierClient & { calls: number } {
   return {
-    name,
+    name: format,
     format,
     calls: 0,
-    async search() {
+    search() {
       this.calls++;
-      return raw;
+      return respond();
     },
   };
 }
 
-const request = (passengers = 1): SearchRequest => ({
+const request = (adults = 2, children = 1): SearchRequest => ({
   tripType: "return",
   legs: [
-    { origin: "LHR", destination: "DXB", date: "2026-12-01" },
-    { origin: "DXB", destination: "LHR", date: "2026-12-10" },
+    { origin: "DXB", destination: "SIN", date: "2026-12-01" },
+    { origin: "SIN", destination: "DXB", date: "2026-12-08" },
   ],
-  passengers,
+  passengers: { adults, children },
 });
 
-const service = () =>
-  new FlightSearchService([
-    fakeClient("aerolink", "aerolink", fixture("aerolink-lhr-dxb.json")),
-    fakeClient("skymesh", "skymesh", fixture("skymesh-lhr-dxb.json")),
-  ]);
+const allThree = () => [fakeClient("caravel"), fakeClient("tessera"), fakeClient("keystone")];
+const dbPath = () => join(mkdtempSync(join(tmpdir(), "flight-search-")), "search.db");
+const service = (clients: SupplierClient[] = allThree(), path = dbPath()) => new FlightSearchService(clients, { dbPath: path });
+const ids = (offers: Itinerary[]) => offers.map((it) => it.id);
+const MERGED = ["tessera:2.1", "tessera:1.1", "keystone:pP1==|oA2==|oA3=="]; // cheapest first
 
-test("search merges every supplier's offers", async () => {
-  const results = await service().search(request());
-  assert.deepEqual(
-    results.map((it) => it.id),
-    ["skymesh:SM-55102", "aerolink:AL-000124", "skymesh:SM-55103"],
-  );
-});
-
-test("offers without enough seats are hidden", async () => {
-  const results = await service().search(request(2));
-  assert.ok(!results.some((it) => it.id === "aerolink:AL-000124"));
-});
-
-test("invalid requests are rejected before asking suppliers", async () => {
-  const client = fakeClient("aerolink", "aerolink", fixture("aerolink-lhr-dxb.json"));
-  const svc = new FlightSearchService([client]);
-  await assert.rejects(async () => svc.search({ ...request(), passengers: 0 }), ValidationError);
-  assert.equal(client.calls, 0);
-});
-
-test("the HTTP handler maps results and validation errors", async () => {
-  const ok = await handleSearch(service(), request());
-  assert.equal(ok.status, 200);
-  assert.equal((ok.body as { itineraries: unknown[] }).itineraries.length, 3);
-  const bad = await handleSearch(service(), { tripType: "oneway", legs: [], passengers: 1 });
-  assert.equal(bad.status, 400);
-});
-
-// --- Stage 2: deadlines, cancellation and partial results ----------------------------------
-
-/** A client whose calls settle only when the test says so. */
-function controlledClient(name: string, format: SupplierFormat) {
-  const calls: { signal?: AbortSignal; resolve: (raw: string) => void; reject: (e: unknown) => void }[] = [];
-  const client: SupplierClient = {
-    name,
-    format,
-    search: (_req, signal) => new Promise<string>((resolve, reject) => calls.push({ signal, resolve, reject })),
-  };
-  return { client, calls };
-}
-
-const failing = (name: string, format: SupplierFormat): SupplierClient => ({
-  name,
-  format,
-  search: async () => {
-    throw new Error("HTTP 500");
-  },
-});
-
-const al = () => fakeClient("aerolink", "aerolink", fixture("aerolink-lhr-dxb.json"));
-const sm = () => fakeClient("skymesh", "skymesh", fixture("skymesh-lhr-dxb.json"));
-
-test("searchWithStatus reports every supplier in client order", async () => {
-  const result = await new FlightSearchService([al(), sm()]).searchWithStatus(request());
+test("a search is stored and its first page returned, cheapest first", async () => {
+  const result = await service().searchWithStatus(request());
   assert.equal(result.partial, false);
-  assert.deepEqual(result.suppliers, [
-    { supplier: "aerolink", status: "ok", offers: 2 },
-    { supplier: "skymesh", status: "ok", offers: 2 },
-  ]);
+  assert.equal(result.total, 3);
+  assert.deepEqual(ids(result.page.offers), MERGED);
+  assert.equal(result.page.nextCursor, null);
 });
 
-test("all suppliers are asked before any answers", async () => {
-  const a = controlledClient("aerolink", "aerolink");
-  const b = controlledClient("skymesh", "skymesh");
-  const pending = new FlightSearchService([a.client, b.client]).searchWithStatus(request());
-  await new Promise((r) => setImmediate(r));
-  assert.equal(a.calls.length + b.calls.length, 2);
-  a.calls[0].resolve(fixture("aerolink-lhr-dxb.json"));
-  b.calls[0].resolve(fixture("skymesh-lhr-dxb.json"));
-  assert.equal((await pending).partial, false);
-});
-
-test("a failing supplier gives partial results", async () => {
-  const result = await new FlightSearchService([failing("aerolink", "aerolink"), sm()]).searchWithStatus(request());
-  assert.equal(result.partial, true);
-  assert.equal(result.suppliers[0].status, "error");
-  assert.deepEqual(result.itineraries.map((it) => it.id), ["skymesh:SM-55102", "skymesh:SM-55103"]);
-});
-
-test("a slow supplier times out, is aborted, and its late answer is ignored", async () => {
-  const slow = controlledClient("skymesh", "skymesh");
-  const result = await new FlightSearchService([al(), slow.client]).searchWithStatus(request(), { timeoutMs: 20 });
-  assert.equal(result.suppliers[1].status, "timeout");
-  assert.equal(slow.calls[0].signal?.aborted, true);
-  const before = structuredClone(result);
-  slow.calls[0].resolve(fixture("skymesh-lhr-dxb.json"));
-  await new Promise((r) => setImmediate(r));
-  assert.deepEqual(result, before);
-});
-
-test("the caller aborting cancels every supplier call and leaves no listener behind", async () => {
-  const a = controlledClient("aerolink", "aerolink");
-  const controller = new AbortController();
-  const pending = new FlightSearchService([a.client]).searchWithStatus(request(), { signal: controller.signal });
-  await new Promise((r) => setImmediate(r));
-  const reason = new Error("user left");
-  controller.abort(reason);
-  await assert.rejects(async () => pending, (err) => err === reason);
-  assert.equal(a.calls[0].signal?.aborted, true);
-  assert.equal(getEventListeners(controller.signal, "abort").length, 0);
-});
-
-test("an already-aborted signal makes no supplier calls", async () => {
-  const a = al();
-  const reason = new Error("gone");
-  await assert.rejects(async () => new FlightSearchService([a]).searchWithStatus(request(), { signal: AbortSignal.abort(reason) }), (e) => e === reason);
-  assert.equal(a.calls, 0);
-});
-
-test("invalid timeouts are rejected before any call", async () => {
-  const a = al();
-  const svc = new FlightSearchService([a]);
-  for (const timeoutMs of [0, -1, 1.5, 30_001, Number.NaN]) {
-    await assert.rejects(async () => svc.searchWithStatus(request(), { timeoutMs }), ValidationError);
+test("rows are committed before the search resolves", async () => {
+  const path = dbPath();
+  const result = await service(allThree(), path).searchWithStatus({ ...request(), preferredCarrier: "XB" });
+  const db = new DatabaseSync(path, { readOnly: true });
+  try {
+    const search = db.prepare("SELECT status, preferred_carrier FROM searches WHERE search_id = ?").get(result.searchId);
+    assert.deepEqual({ ...search }, { status: "complete", preferred_carrier: "XB" });
+    const offers = db.prepare("SELECT offer_id FROM offers WHERE search_id = ? ORDER BY offer_id").all(result.searchId);
+    assert.deepEqual(offers.map((r) => r.offer_id), [...MERGED].sort());
+  } finally {
+    db.close();
   }
-  assert.equal(a.calls, 0);
-  assert.throws(() => new FlightSearchService([a], { defaultTimeoutMs: 0 }), ValidationError);
 });
 
-test("when every supplier fails: no empty 200", async () => {
-  const svc = new FlightSearchService([failing("aerolink", "aerolink"), failing("skymesh", "skymesh")]);
+test("pages walk every offer once, and are read back exactly as parsed", async () => {
+  const svc = service();
+  const { searchId, page } = await svc.searchWithStatus(request(), { limit: 1 });
+  const seen = [...page.offers];
+  let cursor = page.nextCursor;
+  while (cursor !== null) {
+    const next = await svc.getPage(searchId, { cursor, limit: 1 });
+    seen.push(...next.offers);
+    cursor = next.nextCursor;
+  }
+  assert.deepEqual(ids(seen), MERGED);
+  const fresh = await service(allThree()).searchWithStatus(request());
+  assert.deepEqual(seen, fresh.page.offers);
+});
+
+test("a new service on the same database serves the pages", async () => {
+  const path = dbPath();
+  const { searchId } = await service(allThree(), path).searchWithStatus(request());
+  const page = await service(allThree(), path).getPage(searchId, { sort: "fastest" });
+  assert.equal(page.offers.length, 3);
+});
+
+test("cursors are checked against their search and sort", async () => {
+  const svc = service();
+  const { searchId, page } = await svc.searchWithStatus(request(), { limit: 2 });
+  const other = await svc.searchWithStatus(request());
+  const cursor = page.nextCursor as string;
+  await assert.rejects(async () => svc.getPage(other.searchId, { cursor }), ValidationError);
+  await assert.rejects(async () => svc.getPage(searchId, { cursor, sort: "fastest" }), ValidationError);
+  await assert.rejects(async () => svc.getPage(searchId, { cursor: `${cursor}A` }), ValidationError);
+  await assert.rejects(async () => svc.getPage(searchId, { limit: 201 }), ValidationError);
+  await assert.rejects(async () => svc.getPage("missing", {}), SearchNotFoundError);
+  await assert.rejects(async () => svc.getPage(searchId, { sort: "preferred_airline" }), ValidationError);
+});
+
+test("preferred_airline puts the plating carrier first without hiding the others", async () => {
+  const svc = service();
+  const { searchId } = await svc.searchWithStatus({ ...request(), preferredCarrier: "ZK", sort: "preferred_airline" });
+  const page = await svc.getPage(searchId, { sort: "preferred_airline" });
+  assert.equal(page.offers.length, 3);
+  const firstOther = page.offers.findIndex((it) => it.validatingCarrier !== "ZK");
+  assert.ok(page.offers.slice(firstOther).every((it) => it.validatingCarrier !== "ZK"));
+});
+
+test("when every supplier fails the search is stored as failed, with an empty page", async () => {
+  const down = () => [fakeClient("caravel", async () => Promise.reject(new Error("HTTP 503")))];
+  const svc = service(down());
   const result = await svc.searchWithStatus(request());
-  assert.deepEqual(result.itineraries, []);
-  assert.equal(result.partial, true);
-  await assert.rejects(async () => svc.search(request()), NoSuppliersAvailableError);
-  const http = await handleSearch(svc, request());
-  assert.equal(http.status, 503);
+  assert.equal(result.total, 0);
+  assert.deepEqual(await svc.getPage(result.searchId, {}), { offers: [], nextCursor: null });
+  assert.equal((await handleSearch(service(down()), request())).status, 503);
+});
+
+test("a supplier that misses the deadline is stored as a timeout", async () => {
+  const hanging = fakeClient("keystone", () => new Promise<string>(() => {}));
+  const result = await service([fakeClient("caravel"), fakeClient("tessera"), hanging]).searchWithStatus(request(), { timeoutMs: 50 });
+  assert.deepEqual(
+    result.suppliers.map((s) => `${s.supplier}:${s.status}`),
+    ["caravel:ok", "tessera:ok", "keystone:timeout"],
+  );
+  assert.deepEqual(ids(result.page.offers), ["tessera:2.1", "tessera:1.1"]);
+});
+
+test("the HTTP handlers map results and errors", async () => {
+  const svc = service();
+  const ok = await handleSearch(svc, request());
+  assert.equal(ok.status, 200);
+  const { searchId } = ok.body as { searchId: string };
+  assert.equal((await handleSearch(svc, { tripType: "oneway", legs: [], passengers: { adults: 1, children: 0 } })).status, 400);
+  assert.equal((await handleGetPage(svc, { searchId, sort: "fewest_stops" })).status, 200);
+  assert.equal((await handleGetPage(svc, { searchId, limit: 0 })).status, 400);
+  assert.equal((await handleGetPage(svc, { searchId: "missing" })).status, 404);
 });

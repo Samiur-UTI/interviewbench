@@ -1,60 +1,77 @@
-# Deadlines and partial results
+# Persist results and page through them
 
-Today one slow or broken supplier ruins the whole search: if SkyMesh hangs, customers stare at a
-spinner until the gateway gives up, and if AeroLink sends one bad payload, everyone gets an error
-even though SkyMesh answered fine.
+The results page is moving to server-side paging. Product and the booking team agreed on:
 
-Product rules for this change:
+- **What we show is what we persisted.** Price check and booking read the offer from the
+  database by `searchId` and `offerId`. A search must be answered only after all its rows are
+  committed. `src/db/schema.ts` is the data team's schema: keep its tables and columns, and
+  don't weaken the durability settings in `openDatabase` (no `synchronous=OFF`, no
+  `journal_mode=OFF/MEMORY`, no in-memory database).
+- **Users choose the order.** `cheapest`, `fastest`, `fewest_stops`, `preferred_airline`; the
+  exact orders are in `README.md`. The search request's `sort` picks the first page; the user
+  can switch order later without searching again.
+- **Paging is stable**: no offer twice, none skipped, even while other searches are written.
 
-- **Partial results beat no results.** A supplier that fails or misses the deadline must not
-  delay or sink the others.
-- **"We couldn't ask anyone" is not "there are no flights".** If every supplier fails, the API
-  must say so (HTTP 503), never return an empty 200.
-- **Don't keep paying for searches nobody is waiting for.** Supplier calls we stop waiting for
-  must be cancelled through their `AbortSignal`.
+Changes (export the new types and errors from `src/index.ts`):
 
-Add to `FlightSearchService` (export new types and errors from `src/index.ts`):
+    constructor(clients: SupplierClient[], options: { dbPath: string; defaultTimeoutMs?: number })
 
-```ts
-constructor(clients: SupplierClient[], options?: { defaultTimeoutMs?: number })  // default 8000
+    searchWithStatus(req: SearchRequest, options?: { timeoutMs?: number; limit?: number })
+      : Promise<SearchResult>
+    getPage(searchId: string, options?: { sort?: SortPreference; cursor?: string; limit?: number })
+      : Promise<Page>
 
-searchWithStatus(req: SearchRequest, options?: { timeoutMs?: number; signal?: AbortSignal })
-  : Promise<SearchResult>
+    interface Offer extends Itinerary {}   // as read back from the database
+    interface Page { offers: Offer[]; nextCursor: string | null }
+    interface SearchResult {
+      searchId: string;                   // new, unique (e.g. crypto.randomUUID())
+      partial: boolean;
+      suppliers: SupplierStatus[];        // as before
+      total: number;                      // offers stored for this search
+      page: Page;                         // first page, in req.sort (default "cheapest")
+    }
 
-interface SupplierStatus {
-  supplier: string;                    // SupplierClient.name
-  status: "ok" | "error" | "timeout";
-  offers: number;                      // itineraries parsed from this supplier, before seat
-                                       // filtering and de-duplication; 0 unless "ok"
-  error?: string;                      // short message when status is "error"
-}
-interface SearchResult {
-  itineraries: Itinerary[];            // same rules as before
-  partial: boolean;                    // true if any supplier is not "ok"
-  suppliers: SupplierStatus[];         // one per client, in client order
-}
-```
+`SearchResult.page` replaces `itineraries`: that is a requested product change.
 
-Behaviour:
+Persisting:
+- Write one `searches` row and one `supplier_results` row per supplier. For each offer, write
+  an `offers` row with its sort columns, plus its `offer_segments` and `offer_prices` rows.
+  Column formats are in `README.md` (`trip_key`, UTC times).
+- `searches.status` is `complete`, or `failed` when every supplier failed. A failed search
+  still answers 503 and stores no offers; its pages are empty.
+- Only offers that would be shown are stored: seat-filtered and de-duplicated.
 
-- All suppliers are called concurrently, each with its own `AbortSignal`.
-- `timeoutMs` (default: the service's `defaultTimeoutMs`) is one deadline for the whole fan-out,
-  measured from the call. It covers waiting for suppliers, not parsing their responses. A
-  supplier that hasn't responded by then gets status `"timeout"` and its signal is aborted.
-  Anything it returns or throws later is ignored.
-- A supplier whose call rejects, or whose payload can't be parsed, gets status `"error"`.
-- `searchWithStatus` does not reject because suppliers failed. If all fail, it resolves with no
-  itineraries and `partial: true`.
-- If the caller's `signal` aborts (or is already aborted), every pending supplier call is aborted
-  (or none is made) and `searchWithStatus` rejects with the signal's `reason`.
-- For an invalid request, or an invalid `timeoutMs` (it must be an integer from 1 to 30000),
-  `searchWithStatus` rejects with `ValidationError` before any supplier is called.
-- Once the returned promise settles, nothing the search started may keep the process alive, and
-  no listeners may remain on the caller's `signal`.
-- `search(req)` keeps returning `Itinerary[]`, using the same logic. It returns partial results
-  when some suppliers fail, and rejects with a new exported `NoSuppliersAvailableError` when
-  every supplier failed.
-- `handleSearch` returns 200 with `{ itineraries, partial, suppliers }`, 400 for a
-  `ValidationError`, and 503 with `{ error, suppliers }` when every supplier failed.
+Paging:
+- `limit` is an integer from 1 to 200; the default is 50. `getPage`'s `sort` defaults to
+  `"cheapest"`.
+- `nextCursor` is `null` on the last page. Otherwise it is base64url (no padding) of the JSON
+  `{"v":1,"s":<searchId>,"o":<sort>,"k":[<sort key values of the last offer on the page>, <its offerId>]}`.
+  The sort key values, in order:
 
-Explain your design and its trade-offs in `NOTES.md`.
+  | Sort | Keys |
+  |---|---|
+  | `cheapest` | total cents, then duration minutes |
+  | `fastest` | duration, then total |
+  | `fewest_stops` | stops, then total |
+  | `preferred_airline` | pref rank (0 or 1), then total |
+
+- The next page starts strictly after the cursor's position in the chosen order. A well-formed
+  cursor is a position: it doesn't have to point at an offer that exists.
+- `getPage` and `searchWithStatus` reject with `ValidationError` for:
+  - a bad `limit`;
+  - a cursor that doesn't decode to that shape, or that belongs to another search or another
+    sort;
+  - `preferred_airline` on a search without `preferredCarrier`.
+- `getPage` rejects with a new `SearchNotFoundError` for an unknown `searchId`.
+- Pages are read from the database: a new service on the same `dbPath` must serve them.
+
+HTTP (`src/http/search-handler.ts`):
+- `handleSearch` returns 200 `{ searchId, partial, suppliers, total, page }`, or 400/503 as
+  before.
+- New `handleGetPage(service, { searchId, sort?, cursor?, limit? })` returns:
+  - 200 with a `Page`;
+  - 400 for a `ValidationError`;
+  - 404 for `SearchNotFoundError`.
+
+Keep it correct and simple; making it fast is next. Run the tests with `npm test`, and explain
+your design in `NOTES.md`.

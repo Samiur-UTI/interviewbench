@@ -1,24 +1,27 @@
 // Public API. Other services (and the HTTP layer) import only from here.
 export type {
+  Cabin,
   Itinerary,
   Journey,
   Leg,
-  SearchOptions,
+  Passengers,
+  PaxPrice,
+  PaxType,
   SearchRequest,
-  SearchResult,
   Segment,
-  ServiceOptions,
+  SortPreference,
   SupplierFormat,
-  SupplierStatus,
   TripType,
 } from "./types.ts";
 export type { SupplierClient } from "./suppliers/types.ts";
-export { NoSuppliersAvailableError, SupplierPayloadError, ValidationError } from "./errors.ts";
+export { SearchNotFoundError, SupplierPayloadError, ValidationError } from "./errors.ts";
 export { toMinorUnits } from "./money.ts";
-export { minutesBetween, parseCompactUtc, toUtcIso } from "./time.ts";
+export { addDays, localToUtcIso, minutesBetween, toUtcIso } from "./time.ts";
 export { validateSearchRequest } from "./validate.ts";
-export { parseAeroLink, parsePayload, parseSkyMesh } from "./suppliers/index.ts";
+export { parseCaravel, parseKeystone, parsePayload, parseTessera } from "./suppliers/index.ts";
 export { compareItineraries, itineraryKey, mergeItineraries } from "./merge.ts";
 export { FlightSearchService } from "./search-service.ts";
-export { handleSearch } from "./http/search-handler.ts";
-export type { HttpResponse } from "./http/search-handler.ts";
+export type { Page, PageOptions, SearchOptions, SearchResult, ServiceOptions, SupplierStatus } from "./search-service.ts";
+export type { Offer } from "./db/search-store.ts";
+export { handleGetPage, handleSearch } from "./http/search-handler.ts";
+export type { HttpResponse, PageQuery } from "./http/search-handler.ts";
