@@ -1,42 +1,81 @@
-// Stage 3 hidden tests (part 2): the event loop stays responsive while a very large payload is
-// parsed, and the deadline still covers waiting only.
+// Stage 3 hidden tests (part 2): parsing stays off the event loop, and the deadline covers
+// waiting only. Its own file, so its own process: nothing else disturbs the measurements.
 //
 // How the responsiveness bound works:
-// - J = time JSON.parse of the big payload takes on this machine, measured in a separate worker
+// - The big payload is a Caravel response whose per-traveller, per-segment amenity lists make it
+//   large while its offers stay few, so returning parsed offers from a thread stays cheap.
+// - J = how long JSON.parse of that payload takes on this machine, measured in a separate worker
 //   (helpers/calibrate-worker.ts), so the measurement neither blocks nor fills this thread's heap.
-// - The payload (about 2,600 offers x 30 KB, ~77 MB) grows until J >= 150 ms, capped at 128 MB.
-// - A 5 ms heartbeat runs during one search over that payload; its longest gap must be under
-//   max(50, 0.5 * J). Any approach that runs JSON.parse over the whole payload on the main thread
-//   blocks for at least J, so it can't pass; off-thread parsing leaves only the copy to the
-//   worker and the (small) result on this thread.
+//   The payload grows by 1.25x until J >= 150 ms, capped at 128 MB.
+// - A 5 ms heartbeat runs during one search over that payload. Writing to the database on the main
+//   thread is allowed, so only the gaps before the first main-thread write to an offers table
+//   count (the gap containing that write counts up to the write). The longest counted gap must be
+//   under max(50, 0.5 * J). Any JSON.parse of the whole payload on the main thread happens before
+//   any write and blocks for at least J, so it can't pass.
 //
-// Merge-gate measurements (record J, maxGap, maxGap/J, payload size, pass/fail):
-// - Host (Windows 11, 16 cores, Node 24.13.1, local runner), 76.3 MB / 2600 offers:
-//   stage-3 reference 20/20 pass: J 237-279 ms, maxGap 17.0-23.8 ms, maxGap/J 0.068-0.098
-//   (worst 0.098 <= 0.35 target). Stage-2 reference (main-thread parse) 3/3 fail:
-//   maxGap 271-273 ms, maxGap/J 1.11-1.13. Peak RSS ~480-560 MB.
-// - Docker --cpus=2 / --cpus=1: NOT YET MEASURED (Docker daemon unavailable when the task was
-//   written). Run before merging; see the spec's merge gate.
+// Host measurements (Windows 11, 16 cores, Node 24.13.1), 5 runs of the stage-3 reference:
+// 67.5 MB / 3,125 offers, J 165-167 ms, maxGap 18.6-24.9 ms (maxGap/J 0.11-0.15, bound ~83 ms),
+// peak RSS ~760 MB. The stage-2 reference (main-thread parse): maxGap 256 ms, fails.
+// Docker (--cpus=2 / --cpus=1): not yet measured; the Docker daemon was unavailable.
 //
-// performance.now and setInterval are captured before the app is imported, so code under test
-// can't replace the measuring tools.
+// performance.now, setInterval and the statement methods are captured before the app is imported,
+// so code under test can't replace the measuring tools.
 const now = performance.now.bind(performance);
 const every = setInterval;
 const stopEvery = clearInterval;
 
 import assert from "node:assert/strict";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { DatabaseSync, StatementSync } from "node:sqlite";
 import { Worker } from "node:worker_threads";
 import { after, before, test } from "node:test";
 import { loadApp } from "./helpers/app.ts";
 import { neverResolving, resolving } from "./helpers/fakes.ts";
-import { ANY_REQUEST, aeroLinkRaw, genMarket, skyMeshRaw, toItineraries } from "./helpers/payloads.ts";
-import type { GenOffer } from "./helpers/payloads.ts";
-import { referenceSearch } from "./helpers/reference.ts";
+import { caravelPayload, createWorld, keystonePayload, tesseraPayload } from "./helpers/payloads.ts";
+import type { SearchRequest } from "./helpers/payloads.ts";
+import { referenceOffers } from "./helpers/reference.ts";
 
-const START_OFFERS = 2600;
-const BULK_BYTES = 30_000;
+const START_OFFERS = 2000;
+const AMENITIES = 12;
 const TARGET_J_MS = 150;
 const MAX_BYTES = 128 * 1024 * 1024;
+
+// ---- the main-thread write marker ------------------------------------------------------------
+
+const OFFER_WRITE = /^\s*(INSERT|REPLACE|UPDATE)\b[\s\S]*\b(offers|offer_segments|offer_prices)\b/i;
+let armed = false;
+let firstWriteAt: number | undefined;
+const mark = (sql: unknown) => {
+  if (armed && firstWriteAt === undefined && OFFER_WRITE.test(String(sql))) firstWriteAt = now();
+};
+{
+  const run = StatementSync.prototype.run;
+  StatementSync.prototype.run = function (this: StatementSync, ...args: any[]) {
+    mark(this.sourceSQL);
+    return run.apply(this, args as never);
+  };
+  const exec = DatabaseSync.prototype.exec;
+  DatabaseSync.prototype.exec = function (this: DatabaseSync, sql: string) {
+    mark(sql);
+    return exec.call(this, sql);
+  };
+  // Every tag store has its own prototype, so patch each one as it is created.
+  const createTagStore = DatabaseSync.prototype.createTagStore;
+  DatabaseSync.prototype.createTagStore = function (this: DatabaseSync, ...args: any[]) {
+    const store = createTagStore.apply(this, args as never);
+    const proto = Object.getPrototypeOf(store);
+    const original = proto.run;
+    proto.run = function (strings: TemplateStringsArray, ...values: unknown[]) {
+      mark(Array.from(strings).join("?"));
+      return original.call(this, strings, ...values);
+    };
+    return store;
+  };
+}
+
+// ---- data --------------------------------------------------------------------------------------
 
 const services: { close?: () => Promise<void> }[] = [];
 after(async () => {
@@ -44,17 +83,19 @@ after(async () => {
 });
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const freshDbPath = (): string => join(mkdtempSync(join(tmpdir(), "ib-s3r-")), "search.db");
 
 interface Big {
-  raw: string;
+  request: SearchRequest;
+  caravel: string; // the big payload
+  tessera: string;
+  keystone: string;
+  warmCaravel: string; // a small Caravel payload, for the warm-up search
   offers: number;
   J: number;
   mb: number;
-  smallRaw: string;
-  bigSmallRaw: string; // same format as the big supplier, but tiny: for the warm-up search
-  expectedCount: number;
+  expectedTotal: number;
 }
-
 let big: Big;
 
 before(async () => {
@@ -66,81 +107,93 @@ before(async () => {
       calibrator.postMessage(raw);
     });
   let n = START_OFFERS;
-  let raw = "";
-  let offers: GenOffer[] = [];
-  let J = 0;
-  for (;;) {
-    [offers] = genMarket(401, n, 1, { dupRatio: 0, seats: [1, 9] });
-    raw = aeroLinkRaw(offers, { seed: 401, bulkBytes: BULK_BYTES });
-    J = await calibrate(raw);
-    if (J >= TARGET_J_MS || raw.length >= MAX_BYTES * 0.97) break;
-    n = Math.floor(n * Math.min(1.5, (MAX_BYTES * 0.97) / raw.length));
+  let world = createWorld({ seed: 401, offersPerSupplier: n });
+  let payload = caravelPayload(world, { amenities: AMENITIES });
+  let J = await calibrate(payload.raw);
+  while (J < TARGET_J_MS && payload.raw.length * 1.25 < MAX_BYTES) {
+    n = Math.round(n * 1.25);
+    world = createWorld({ seed: 401, offersPerSupplier: n });
+    payload = caravelPayload(world, { amenities: AMENITIES });
+    J = await calibrate(payload.raw);
   }
   await calibrator.terminate();
-  const [small] = genMarket(402, 40, 1);
-  const [tiny] = genMarket(403, 20, 1);
-  const expectedCount = referenceSearch(
-    [
-      { name: "aerolink", itineraries: toItineraries(offers, "aerolink") },
-      { name: "skymesh", itineraries: toItineraries(small, "skymesh") },
-    ],
-    1,
-  ).length;
+  // Suppliers B and C are normal size: the same request, another world.
+  const normal = createWorld({ seed: 402, offersPerSupplier: 250 });
+  const tessera = tesseraPayload(normal);
+  const keystone = keystonePayload(normal);
   big = {
-    raw,
-    offers: n,
+    request: world.request,
+    caravel: payload.raw,
+    tessera: tessera.raw,
+    keystone: keystone.raw,
+    warmCaravel: caravelPayload(createWorld({ seed: 403, offersPerSupplier: 50 })).raw,
+    offers: payload.expected.length,
     J,
-    mb: raw.length / 1024 / 1024,
-    smallRaw: skyMeshRaw(small),
-    bigSmallRaw: aeroLinkRaw(tiny),
-    expectedCount,
+    mb: payload.raw.length / 1024 / 1024,
+    expectedTotal: referenceOffers(
+      [
+        { name: "caravel", itineraries: payload.expected },
+        { name: "tessera", itineraries: tessera.expected },
+        { name: "keystone", itineraries: keystone.expected },
+      ],
+      world.request.passengers,
+    ).length,
   };
   await sleep(200); // let this thread's GC settle before measuring
 }, { timeout: 60_000 });
 
-test("s3 event loop stays responsive while parsing", { timeout: 60_000 }, async (t) => {
+test("s3 parsing stays off the event loop", { timeout: 60_000 }, async (t) => {
   const app = await loadApp();
-  let raw = big.bigSmallRaw;
+  let caravel = big.warmCaravel;
   const svc = new app.FlightSearchService(
-    [resolving("aerolink", "aerolink", () => raw), resolving("skymesh", "skymesh", big.smallRaw)],
-    { parserThreads: 1 },
+    [resolving("caravel", "caravel", () => caravel), resolving("tessera", "tessera", big.tessera), resolving("keystone", "keystone", big.keystone)],
+    { dbPath: freshDbPath(), parserThreads: 1 },
   );
   services.push(svc);
-  await svc.searchWithStatus(ANY_REQUEST); // warm-up: start threads, compile code paths
-  raw = big.raw;
+  await svc.searchWithStatus(big.request); // warm-up: start threads, compile code paths
+  caravel = big.caravel;
   await sleep(50);
 
+  const gaps: [start: number, end: number][] = [];
   let last = now();
-  let maxGap = 0;
   const heartbeat = every(() => {
     const t1 = now();
-    maxGap = Math.max(maxGap, t1 - last);
+    gaps.push([last, t1]);
     last = t1;
   }, 5);
   let result;
+  firstWriteAt = undefined;
+  armed = true;
   try {
-    result = await svc.searchWithStatus(ANY_REQUEST);
+    result = await svc.searchWithStatus(big.request);
     await sleep(30);
   } finally {
+    armed = false;
     stopEvery(heartbeat);
   }
-  maxGap = Math.max(maxGap, now() - last);
+  gaps.push([last, now()]);
 
+  const writeAt = firstWriteAt;
+  let maxGap = 0;
+  for (const [start, end] of gaps) {
+    if (writeAt === undefined || end <= writeAt) maxGap = Math.max(maxGap, end - start);
+    else if (start < writeAt) maxGap = Math.max(maxGap, writeAt - start);
+  }
   const bound = Math.max(50, 0.5 * big.J);
   t.diagnostic(
     `payload ${big.mb.toFixed(1)} MB (${big.offers} offers), J ${big.J.toFixed(1)} ms, maxGap ${maxGap.toFixed(1)} ms, ` +
-      `maxGap/J ${(maxGap / big.J).toFixed(3)}, bound ${bound.toFixed(1)} ms, ` +
+      `maxGap/J ${(maxGap / big.J).toFixed(3)}, bound ${bound.toFixed(1)} ms, main-thread write ${writeAt === undefined ? "none" : "seen"}, ` +
       `peak RSS ${(process.resourceUsage().maxRSS / 1024).toFixed(0)} MB`,
   );
   assert.deepEqual(
     result.suppliers.map((s: { status: string }) => s.status),
-    ["ok", "ok"],
+    ["ok", "ok", "ok"],
   );
-  assert.equal(result.itineraries.length, big.expectedCount);
+  assert.equal(result.total, big.expectedTotal);
   assert.ok(
     maxGap < bound,
-    `the event loop was blocked for ${maxGap.toFixed(0)} ms; the limit is ${bound.toFixed(0)} ms ` +
-      `(half of the ${big.J.toFixed(0)} ms JSON.parse of this ${big.mb.toFixed(0)} MB payload takes here)`,
+    `the event loop was blocked for ${maxGap.toFixed(0)} ms before the search started writing; the limit is ` +
+      `${bound.toFixed(0)} ms (half of the ${big.J.toFixed(0)} ms JSON.parse of this ${big.mb.toFixed(0)} MB payload takes here)`,
   );
 });
 
@@ -150,17 +203,18 @@ test("s3 deadline covers waiting, not parsing", { timeout: 60_000 }, async (t) =
   const timeoutMs = Math.max(20, Math.floor(big.J / 3));
   const svc = new app.FlightSearchService(
     [
-      resolving("aerolink", "aerolink", big.raw),
-      resolving("skymesh", "skymesh", big.smallRaw),
-      neverResolving("hanging", "skymesh"),
+      resolving("caravel", "caravel", big.caravel),
+      resolving("tessera", "tessera", big.tessera),
+      resolving("keystone", "keystone", big.keystone),
+      neverResolving("hanging", "keystone"),
     ],
-    { parserThreads: 1 },
+    { dbPath: freshDbPath(), parserThreads: 1 },
   );
   services.push(svc);
-  const result = await svc.searchWithStatus(ANY_REQUEST, { timeoutMs });
+  const result = await svc.searchWithStatus(big.request, { timeoutMs });
   t.diagnostic(`timeoutMs ${timeoutMs}`);
   assert.deepEqual(
     result.suppliers.map((s: { supplier: string; status: string }) => `${s.supplier}:${s.status}`),
-    ["aerolink:ok", "skymesh:ok", "hanging:timeout"],
+    ["caravel:ok", "tessera:ok", "keystone:ok", "hanging:timeout"],
   );
 });

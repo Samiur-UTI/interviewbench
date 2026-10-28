@@ -1,146 +1,212 @@
-// Stage 3 hidden tests (part 1): the merge scales, results are unchanged, parse failures in a
-// thread are supplier errors, and the service shuts down cleanly. The responsiveness tests are in
-// stage3-responsive.test.ts (their own process, so nothing here disturbs their measurements).
+// Stage 3 hidden tests (part 1): structurally efficient persistence and paging, durability kept,
+// the 1 s processing budget, unchanged results, clean shutdown. The responsiveness tests are in
+// stage3-responsive.test.ts.
+//
+// The structural tests run helpers/scenario.ts in a child process under the test-owned SQLite
+// spy (helpers/db-spy.mjs), which counts what the code under test does with node:sqlite in every
+// thread: write statements outside a transaction, commits, statement compiles, rows and bytes
+// read, and the SQL of every read (for EXPLAIN QUERY PLAN). The checks themselves are in
+// helpers/db-checks.ts; tests/helpers/spy-selftest.ts shows each known bypass being caught.
+//
+// Host measurements (Windows 11, 16 cores, Node 24.13.1), 5 runs:
+// - stage-3 reference: 12/12 every run. Per search: 0 autocommit writes, 1 commit, 1 WAL commit,
+//   2 compiles. Page 3 of 50: ~250-350 rows, ~30-50 KB. Budget: R 342-349 ms, best run 360-394 ms
+//   (bound 1000 ms).
+// - stage-2 reference: fails tests 1-4, the budget (killed at 55 s), close and parserThreads.
+// Docker (--cpus=2 / --cpus=1): not yet measured; the Docker daemon was unavailable.
 import assert from "node:assert/strict";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { after, test } from "node:test";
 import { loadApp } from "./helpers/app.ts";
-import { runChild } from "./helpers/child.ts";
-import { neverResolving, resolving } from "./helpers/fakes.ts";
+import { runChild, runScenario, SPY_FLAGS } from "./helpers/child.ts";
+import { resolving } from "./helpers/fakes.ts";
 import type { FakeClient } from "./helpers/fakes.ts";
-import { ANY_REQUEST, aeroLinkRaw, genMarket, skyMeshRaw, toItineraries } from "./helpers/payloads.ts";
-import type { GenOffer } from "./helpers/payloads.ts";
-import { referenceMerge, referenceSearch } from "./helpers/reference.ts";
+import { generateSearch } from "./helpers/payloads.ts";
+import type { ExpectedItinerary, GeneratedSearch } from "./helpers/payloads.ts";
+import { referenceOffers, referenceOrder, referenceRows, SORTS, TABLE_QUERIES } from "./helpers/reference.ts";
+import type { ReferenceRows } from "./helpers/reference.ts";
+
+const SCENARIO = new URL("./helpers/scenario.ts", import.meta.url);
+const CHILD_TIMEOUT = { timeout: 60_000 };
+const CHILD_LIMIT_MS = 55_000;
 
 const services: { close?: () => Promise<void> }[] = [];
 after(async () => {
   for (const s of services) if (typeof s.close === "function") await s.close();
 });
 
-async function service(clients: FakeClient[], options?: object) {
-  const app = await loadApp();
-  const svc = options === undefined ? new app.FlightSearchService(clients) : new app.FlightSearchService(clients, options);
-  services.push(svc);
-  return { app, svc };
+const freshDbPath = (): string => join(mkdtempSync(join(tmpdir(), "ib-s3-")), "search.db");
+
+function scenario<T>(name: string, args: object, spy = true): Promise<T> {
+  return runScenario<T>(SCENARIO, {
+    args: [name, JSON.stringify(args)],
+    execArgv: spy ? SPY_FLAGS : [],
+    limitMs: CHILD_LIMIT_MS,
+  });
 }
 
-const PREFERENCE = ["aerolink", "skymesh", "aerolink-b"];
-const statuses = (r: { suppliers: { supplier: string; status: string }[] }) => r.suppliers.map((s) => `${s.supplier}:${s.status}`);
+interface MeasuredSearch {
+  offers: number;
+  stats: { prepares: number; autocommitWrites: number; commits: number; changes: number };
+  walCommits: number | null;
+  rowsInDb: number;
+  problems: string[];
+}
+interface SearchesResult {
+  searches: Record<string, MeasuredSearch[]>;
+  prepareProblems: string[];
+}
 
-test("s3 merge scales", { timeout: 60_000 }, async (t) => {
-  const app = await loadApp();
-  // Generated outside the timed section: 150k offers over 3 suppliers, 25% repeated trips.
-  const market = genMarket(301, 150_000, 3, { dupRatio: 0.25 });
-  const full = market.map((offers, i) => toItineraries(offers, PREFERENCE[i]));
-  let total = 0;
-  let last: { id: string; totalPrice: number }[] = [];
-  for (const size of [10_000, 20_000, 40_000, 80_000, 150_000]) {
-    const lists = full.map((l) => l.slice(0, Math.round((l.length * size) / 150_000)));
-    const start = performance.now();
-    last = app.mergeItineraries(lists, PREFERENCE);
-    const ms = performance.now() - start;
-    total += ms;
-    t.diagnostic(`merge ${size}: ${ms.toFixed(0)} ms (cumulative ${total.toFixed(0)} ms)`);
-    assert.ok(ms < 2000, `merging ${size} offers took ${ms.toFixed(0)} ms (limit 2000 ms per step)`);
-    assert.ok(total < 3000, `merging up to ${size} offers took ${total.toFixed(0)} ms in total (limit 3000 ms)`);
+// Tests 1 and 2 share one run of the "searches" scenario (two searches at each size).
+let searches: Promise<SearchesResult> | undefined;
+const searchesAt300And3000 = () => (searches ??= scenario<SearchesResult>("searches", { sizes: [300, 3000] }));
+
+const describe = (s: MeasuredSearch) =>
+  `${s.offers} offers: ${s.stats.autocommitWrites} autocommit writes, ${s.stats.commits} commits, ` +
+  `${s.walCommits ?? "?"} WAL commits, ${s.stats.prepares} compiles, ${s.rowsInDb} rows, ${s.stats.changes} changes seen`;
+
+test("s3 writes are batched", CHILD_TIMEOUT, async (t) => {
+  const result = await searchesAt300And3000();
+  const problems: string[] = [];
+  for (const [size, runs] of Object.entries(result.searches)) {
+    runs.forEach((s, i) => {
+      t.diagnostic(`3x${size} search ${i + 1}: ${describe(s)}`);
+      problems.push(...s.problems.filter((p) => !/synchronous|journal_mode|connection to/.test(p)).map((p) => `3x${size}: ${p}`));
+    });
   }
-  const expected = referenceMerge(full, PREFERENCE);
-  assert.equal(last.length, expected.length);
-  assert.deepEqual(
-    last.map((it) => `${it.id}/${it.totalPrice}`),
-    expected.map((it) => `${it.id}/${it.totalPrice}`),
-  );
+  assert.deepEqual(problems, []);
 });
 
-test("s3 merge is unchanged", async () => {
+test("s3 statements are reused", CHILD_TIMEOUT, async () => {
+  const result = await searchesAt300And3000();
+  assert.deepEqual(result.prepareProblems, []);
+});
+
+interface PagesResult {
+  total: number;
+  k: number;
+  calls: { sort: string; pageNo: number; offers: number; rowsRead: number; bytesRead: number; planProblems: string[]; readProblems: string[] }[];
+}
+let pages: Promise<PagesResult> | undefined;
+const pagesOf9k = () => (pages ??= scenario<PagesResult>("pages", { size: 3000, limit: 50 }));
+
+test("s3 every sort is served by an index", CHILD_TIMEOUT, async () => {
+  const result = await pagesOf9k();
+  const problems = result.calls
+    .filter((c) => c.pageNo !== 2)
+    .flatMap((c) => c.planProblems.map((p) => `${c.sort} page ${c.pageNo}: ${p}`));
+  assert.deepEqual(problems, []);
+});
+
+test("s3 pages read only what they show", CHILD_TIMEOUT, async (t) => {
+  const result = await pagesOf9k();
+  t.diagnostic(`${result.total} offers stored, up to ${result.k} rows per offer`);
+  for (const c of result.calls) t.diagnostic(`${c.sort} page ${c.pageNo}: ${c.offers} offers, ${c.rowsRead} rows, ${c.bytesRead} bytes read`);
+  assert.ok(result.calls.every((c) => c.offers === 50), "every page should be full");
+  assert.deepEqual(result.calls.flatMap((c) => c.readProblems.map((p) => `${c.sort} page ${c.pageNo}: ${p}`)), []);
+});
+
+test("s3 durability settings unchanged", CHILD_TIMEOUT, async () => {
+  const result = await scenario<SearchesResult>("searches", { sizes: [300] });
+  const problems = result.searches[300].flatMap((s) => s.problems.filter((p) => /synchronous|journal_mode|connection to|eval/.test(p)));
+  assert.deepEqual(problems, []);
+});
+
+test("s3 first page within 1 s of the last supplier answer", CHILD_TIMEOUT, async (t) => {
+  const r = await scenario<{ R: number; runs: number[]; bound: number }>("budget", { size: 5000 }, false);
+  const best = Math.min(...r.runs);
+  t.diagnostic(`R ${r.R.toFixed(0)} ms, runs ${r.runs.map((x) => x.toFixed(0)).join(" / ")} ms, bound ${r.bound.toFixed(0)} ms`);
+  assert.ok(best <= r.bound, `the first page was ready ${best.toFixed(0)} ms after the last supplier answered (limit ${r.bound.toFixed(0)} ms)`);
+});
+
+// ---- in this process --------------------------------------------------------------------------
+
+async function service(clients: FakeClient[], options: object = {}) {
   const app = await loadApp();
-  const market = genMarket(302, 2000, 3, { dupRatio: 0.4, ties: true });
-  const lists = market.map((offers, i) => toItineraries(offers, PREFERENCE[i]));
-  assert.deepEqual(app.mergeItineraries(lists, PREFERENCE), referenceMerge(lists, PREFERENCE));
+  const dbPath = freshDbPath();
+  const svc = new app.FlightSearchService(clients, { dbPath, ...options });
+  services.push(svc);
+  return { app, svc, dbPath };
+}
+const clientsOf = (g: GeneratedSearch): FakeClient[] => g.suppliers.map((s) => resolving(s.name, s.format, s.raw));
+
+test("s3 results unchanged", async () => {
+  const g = generateSearch({ seed: 307, offersPerSupplier: 500, tieDensity: "dense", carriers: ["XB", "XB", "ZK", "QV", "MR"], preferredCarrier: "XB" });
+  const { svc, dbPath } = await service(clientsOf(g));
+  const result = await svc.searchWithStatus(g.request);
+  const offers = referenceOffers(g.suppliers, g.request.passengers);
+  assert.equal(result.total, offers.length);
+  for (const sort of SORTS) {
+    const ids: string[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await svc.getPage(result.searchId, { sort, limit: 37, ...(cursor === undefined ? {} : { cursor }) });
+      ids.push(...page.offers.map((o: ExpectedItinerary) => o.id));
+      cursor = page.nextCursor ?? undefined;
+    } while (cursor !== undefined);
+    assert.deepEqual(ids, referenceOrder(offers, sort, g.request.preferredCarrier).map((o) => o.id), `${sort} order`);
+  }
+  const { DatabaseSync } = await import("node:sqlite");
+  const db = new DatabaseSync(dbPath, { readOnly: true });
+  try {
+    const outcomes = g.suppliers.map((s) => ({ supplier: s.name, status: "ok" as const, offerCount: s.itineraries.length }));
+    const expected = referenceRows(result.searchId, g.request, outcomes, offers);
+    for (const [table, sql] of Object.entries(TABLE_QUERIES) as [keyof ReferenceRows, string][]) {
+      assert.deepEqual(db.prepare(sql).all(result.searchId).map((r) => ({ ...r })), expected[table], `${table} rows`);
+    }
+  } finally {
+    db.close();
+  }
 });
 
-test("s3 search results are unchanged", async () => {
-  const [a, s, b] = genMarket(303, 9000, 3, { dupRatio: 0.3 });
-  const { svc } = await service([
-    resolving("aerolink", "aerolink", aeroLinkRaw(a, { bulkBytes: 600 })),
-    resolving("skymesh", "skymesh", skyMeshRaw(s)),
-    resolving("aerolink-b", "aerolink", aeroLinkRaw(b, { seed: 3, bulkBytes: 600 })),
-  ]);
-  const result = await svc.searchWithStatus({ ...ANY_REQUEST, passengers: 2 });
+test("s3 close releases everything", CHILD_TIMEOUT, async () => {
+  const r = await runChild(SCENARIO, { args: ["close", JSON.stringify({ size: 1000 })], limitMs: 20_000 });
+  assert.equal(r.killed, false, "the process didn't exit by itself within 20 s of close(): something is still running");
+  assert.equal(r.code, 0, r.stderr.slice(-2000));
+  const line = r.stdout.split("\n").find((l) => l.startsWith("SCENARIO-RESULT "));
+  assert.ok(line, "no result printed");
+  assert.deepEqual(JSON.parse(line.slice("SCENARIO-RESULT ".length)), { searchRejects: true, getPageRejects: true });
+});
+
+test("s3 bad payload is an error, service keeps working", async () => {
+  const g = generateSearch({ seed: 309, offersPerSupplier: 100 });
+  const [caravel, tessera, keystone] = g.suppliers;
+  // Valid JSON, but one leg reference deep inside points at a schedule leg that doesn't exist.
+  const broken = JSON.parse(tessera.raw);
+  const legRefs = broken.shopResponse.groups[0].itineraries[0].legs;
+  legRefs[legRefs.length - 1].ref = 987654;
+  let tesseraRaw = JSON.stringify(broken);
+  const clients = [
+    resolving(caravel.name, caravel.format, caravel.raw),
+    resolving(tessera.name, tessera.format, () => tesseraRaw),
+    resolving(keystone.name, keystone.format, keystone.raw),
+  ];
+  const { svc } = await service(clients, { parserThreads: 1 });
+  const first = await svc.searchWithStatus(g.request);
   assert.deepEqual(
-    result.suppliers.map((x: { supplier: string; status: string; offers: number }) => [x.supplier, x.status, x.offers]),
-    [
-      ["aerolink", "ok", a.length],
-      ["skymesh", "ok", s.length],
-      ["aerolink-b", "ok", b.length],
-    ],
+    first.suppliers.map((s: { supplier: string; status: string }) => `${s.supplier}:${s.status}`),
+    ["caravel:ok", "tessera:error", "keystone:ok"],
   );
-  assert.equal(result.partial, false);
-  const expected = referenceSearch(
-    [
-      { name: "aerolink", itineraries: toItineraries(a, "aerolink") },
-      { name: "skymesh", itineraries: toItineraries(s, "skymesh") },
-      { name: "aerolink-b", itineraries: toItineraries(b, "aerolink-b") },
-    ],
-    2,
-  );
-  assert.deepEqual(result.itineraries, expected);
-});
-
-test("s3 bad payload in a worker is an error, service keeps working", async () => {
-  const [offers, sky] = genMarket(304, 5000, 2, { dupRatio: 0 });
-  const bad: GenOffer[] = offers.map((o, i) =>
-    i === 2000 ? { ...o, amounts: { base: "384.50", taxes: [{ code: "AE", amount: "41.005" }, { code: "YR", amount: "35.00" }] } } : o,
-  );
-  const badRaw = aeroLinkRaw(bad, { bulkBytes: 1000 });
-  const goodRaw = aeroLinkRaw(offers, { bulkBytes: 1000 });
-  let raw = badRaw;
-  const { svc } = await service([resolving("aerolink", "aerolink", () => raw), resolving("skymesh", "skymesh", skyMeshRaw(sky))]);
-  const first = await svc.searchWithStatus(ANY_REQUEST);
-  assert.deepEqual(statuses(first), ["aerolink:error", "skymesh:ok"]);
-  raw = goodRaw;
-  const second = await svc.searchWithStatus(ANY_REQUEST);
-  assert.deepEqual(statuses(second), ["aerolink:ok", "skymesh:ok"]);
-  assert.equal(second.suppliers[0].offers, offers.length);
-});
-
-test("s3 process exits after close()", { timeout: 60_000 }, async () => {
-  await loadApp();
-  const child = await runChild(new URL("./helpers/close-child.ts", import.meta.url), 20_000);
-  assert.equal(child.killed, false, `still running 20 s after close()\n${child.stdout}${child.stderr}`);
-  assert.equal(child.code, 0, child.stderr);
-  assert.match(child.stdout, /done/);
-});
-
-test("s3 search after close rejects", async () => {
-  const [offers] = genMarket(305, 20, 1);
-  const { svc } = await service([resolving("aerolink", "aerolink", aeroLinkRaw(offers))]);
-  await svc.searchWithStatus(ANY_REQUEST);
-  await svc.close();
-  await assert.rejects(async () => svc.searchWithStatus(ANY_REQUEST), Error);
-  await assert.rejects(async () => svc.search(ANY_REQUEST), Error);
-  await svc.close();
+  assert.equal(first.total, referenceOffers([caravel, keystone], g.request.passengers).length);
+  tesseraRaw = tessera.raw;
+  const second = await svc.searchWithStatus(g.request);
+  assert.equal(second.partial, false);
+  assert.equal(second.total, referenceOffers(g.suppliers, g.request.passengers).length);
 });
 
 test("s3 parserThreads validation", async () => {
   const app = await loadApp();
-  const [offers] = genMarket(306, 50, 1);
-  const client = resolving("aerolink", "aerolink", aeroLinkRaw(offers));
+  const g = generateSearch({ seed: 310, offersPerSupplier: 10 });
   for (const parserThreads of [0, -1, 1.5, "2"]) {
-    assert.throws(() => new app.FlightSearchService([client], { parserThreads }), app.ValidationError, String(parserThreads));
+    assert.throws(
+      () => new app.FlightSearchService(clientsOf(g), { dbPath: freshDbPath(), parserThreads }),
+      app.ValidationError,
+      `parserThreads ${String(parserThreads)}`,
+    );
   }
-  const { svc } = await service([client], { parserThreads: 1 });
-  const result = await svc.searchWithStatus(ANY_REQUEST);
-  assert.deepEqual(statuses(result), ["aerolink:ok"]);
-  assert.deepEqual(result.itineraries, referenceSearch([{ name: "aerolink", itineraries: toItineraries(offers, "aerolink") }], 1));
-});
-
-test("s3 stage 2 behaviour holds", async () => {
-  const [offers] = genMarket(307, 30, 1);
-  const hanging = neverResolving("skymesh", "skymesh");
-  const { svc } = await service([resolving("aerolink", "aerolink", aeroLinkRaw(offers)), hanging]);
-  const start = performance.now();
-  const result = await svc.searchWithStatus(ANY_REQUEST, { timeoutMs: 100 });
-  assert.ok(performance.now() - start < 3000);
-  assert.deepEqual(statuses(result), ["aerolink:ok", "skymesh:timeout"]);
-  assert.equal(hanging.calls[0].signal?.aborted, true);
+  const svc = new app.FlightSearchService(clientsOf(g), { dbPath: freshDbPath(), parserThreads: 3 });
+  services.push(svc);
+  assert.equal((await svc.searchWithStatus(g.request)).partial, false);
 });

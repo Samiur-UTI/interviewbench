@@ -1,5 +1,5 @@
 // Runs in a worker thread: parses and normalises one supplier payload at a time, so the
-// JSON.parse of a 100 MB response never blocks the service's event loop.
+// JSON.parse of a 50 MB response never blocks the service's event loop.
 import { parentPort } from "node:worker_threads";
 import { parsePayload } from "../suppliers/index.ts";
 import type { ParseJob, ParseReply } from "./worker-pool.ts";
