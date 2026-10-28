@@ -21,9 +21,9 @@ const int = (r: Rng, min: number, max: number): number => min + Math.floor(r() *
 const pick = <T>(r: Rng, items: readonly T[]): T => items[Math.floor(r() * items.length)];
 
 /** UTC offset of each airport, in minutes. */
-export const UTC_OFFSET: Record<string, number> = { DAC: 360, DXB: 240, SIN: 480, KUL: 480, DOH: 180, CCU: 330 };
-const DESTINATIONS = ["DXB", "SIN", "KUL"];
-const HUBS = ["DOH", "CCU", "DXB"];
+export const UTC_OFFSET: Record<string, number> = { LHR: 0, DXB: 240, SIN: 480, JFK: -300, DOH: 180, FRA: 60 };
+const DESTINATIONS = ["DXB", "SIN", "JFK"];
+const HUBS = ["DOH", "FRA", "DXB"];
 const CARRIERS = ["XB", "ZQ", "QV", "JW"];
 const CLASSES = ["K", "M", "Y", "J", "C"];
 const MINUTE = 60_000;
@@ -48,41 +48,41 @@ export interface GenOffer {
   ref: string;
   journeys: GenSegment[][];
   seats: number;
-  totalMinor: number; // exact total in poisha
+  totalMinor: number; // exact total in cents
   amounts?: Amounts; // AeroLink price strings; derived from totalMinor when absent
 }
 
 // --- exact money helpers (independent of the code under test) ----------------------------------
 
-/** Exact poisha for a decimal string with up to 2 decimals. */
-export function exactPoisha(amount: string): number {
+/** Exact cents for a decimal string with up to 2 decimals. */
+export function exactCents(amount: string): number {
   const m = /^(\d+)(?:\.(\d{1,2}))?$/.exec(amount);
   if (!m) throw new Error(`not an amount: ${amount}`);
   const value = BigInt(m[1]) * 100n + BigInt((m[2] ?? "").padEnd(2, "0"));
   return Number(value);
 }
 
-export function poishaToAmount(poisha: number, r?: Rng): string {
-  const taka = Math.floor(poisha / 100);
-  const rest = poisha % 100;
-  if (r && rest === 0 && r() < 0.3) return String(taka);
-  if (r && rest % 10 === 0 && r() < 0.3) return `${taka}.${rest / 10}`;
-  return `${taka}.${String(rest).padStart(2, "0")}`;
+export function centsToAmount(cents: number, r?: Rng): string {
+  const dollars = Math.floor(cents / 100);
+  const rest = cents % 100;
+  if (r && rest === 0 && r() < 0.3) return String(dollars);
+  if (r && rest % 10 === 0 && r() < 0.3) return `${dollars}.${rest / 10}`;
+  return `${dollars}.${String(rest).padStart(2, "0")}`;
 }
 
-/** Splits a total into AeroLink price strings: converted base + YQ + AE (2 decimals), BD whole taka. */
+/** Splits a total into AeroLink price strings: converted base + YQ + AE (2 decimals), YR whole dollars. */
 export function splitAmounts(r: Rng, totalMinor: number): Amounts {
-  const bd = 310_500;
-  const yq = int(r, 50_000, 300_000);
-  const ae = int(r, 100_000, 500_000);
-  const base = totalMinor - bd - yq - ae;
+  const yr = 3_500;
+  const yq = int(r, 1_000, 6_000);
+  const ae = int(r, 1_000, 5_000);
+  const base = totalMinor - yr - yq - ae;
   if (base <= 0) throw new Error(`total ${totalMinor} too small to split`);
   return {
-    base: poishaToAmount(base, r),
+    base: centsToAmount(base, r),
     taxes: [
-      { code: "YQ", amount: poishaToAmount(yq, r) },
-      { code: "AE", amount: poishaToAmount(ae, r) },
-      { code: "BD", amount: poishaToAmount(bd, r) },
+      { code: "YQ", amount: centsToAmount(yq, r) },
+      { code: "AE", amount: centsToAmount(ae, r) },
+      { code: "YR", amount: centsToAmount(yr, r) },
     ],
   };
 }
@@ -115,22 +115,22 @@ function genJourney(r: Rng, origin: string, destination: string, day: number, cl
   ];
 }
 
-/** A one-way, return or multi-city trip from DAC. */
+/** A one-way, return or multi-city trip from LHR. */
 export function genTrip(r: Rng, directOnly = false): GenSegment[][] {
   const cls = pick(r, CLASSES);
   const dest = pick(r, DESTINATIONS);
   const day = int(r, 0, 59);
   const direct = () => directOnly || r() < 0.6;
   const kind = r();
-  if (kind < 0.3) return [genJourney(r, "DAC", dest, day, cls, direct())];
+  if (kind < 0.3) return [genJourney(r, "LHR", dest, day, cls, direct())];
   if (kind < 0.8) {
-    return [genJourney(r, "DAC", dest, day, cls, direct()), genJourney(r, dest, "DAC", day + int(r, 3, 20), cls, direct())];
+    return [genJourney(r, "LHR", dest, day, cls, direct()), genJourney(r, dest, "LHR", day + int(r, 3, 20), cls, direct())];
   }
   const second = pick(r, DESTINATIONS.filter((d) => d !== dest));
   return [
-    genJourney(r, "DAC", dest, day, cls, direct()),
+    genJourney(r, "LHR", dest, day, cls, direct()),
     genJourney(r, dest, second, day + int(r, 2, 6), cls, direct()),
-    genJourney(r, second, "DAC", day + int(r, 8, 14), cls, direct()),
+    genJourney(r, second, "LHR", day + int(r, 8, 14), cls, direct()),
   ];
 }
 
@@ -160,7 +160,7 @@ export function genMarket(seed: number, n: number, suppliers: number, opts: Mark
       trips.push(genTrip(r, ties));
       t = trips.length - 1;
     }
-    let total = ties ? (40_000 + int(r, 0, 4) * 500) * 100 : int(r, 2_000_000, 15_000_000);
+    let total = ties ? (400 + int(r, 0, 4) * 5) * 100 : int(r, 2_000_000, 150_000);
     while (used.has(`${t}|${s}|${total}`)) total += 100;
     used.add(`${t}|${s}|${total}`);
     lists[s].push({
@@ -199,7 +199,7 @@ function bulkFields(r: Rng, bytes: number): string {
     let item: object;
     switch (i % 4) {
       case 0:
-        item = { fareBasis: `${pick(r, CLASSES)}${int(r, 10, 99)}OWBD`, segment: int(r, 1, 4), filedAmount: `${int(r, 50, 2000)}.${int(r, 10, 99)}`, rule: `R${int(r, 1000, 9999)}` };
+        item = { fareBasis: `${pick(r, CLASSES)}${int(r, 10, 99)}OWGB`, segment: int(r, 1, 4), filedAmount: `${int(r, 50, 2000)}.${int(r, 10, 99)}`, rule: `R${int(r, 1000, 9999)}` };
         fare.push(item);
         break;
       case 1:
@@ -247,21 +247,21 @@ export function aeroLinkRaw(offers: GenOffer[], opts: AeroLinkOptions = {}): str
           rbd: s.bookingClass,
         })),
       })),
-      price: { filedCurrency: pick(r, ["USD", "AED", "SGD", "MYR"]), base: amounts.base, taxes: amounts.taxes },
+      price: { filedCurrency: pick(r, ["EUR", "GBP", "AED", "SGD"]), base: amounts.base, taxes: amounts.taxes },
     };
     const json = JSON.stringify(core);
     return `${json.slice(0, -1)},${blocks[i % blocks.length]}}`;
   });
-  return `{"searchId":"al-${(opts.seed ?? 7).toString(16)}","currency":"BDT","offers":[${parts.join(",")}]}`;
+  return `{"searchId":"al-${(opts.seed ?? 7).toString(16)}","currency":"USD","offers":[${parts.join(",")}]}`;
 }
 
 export function skyMeshRaw(offers: GenOffer[]): string {
   return JSON.stringify({
     status: "OK",
-    cur: "BDT",
+    cur: "USD",
     fares: offers.map((o) => ({
       ref: o.ref,
-      fareBasis: `${o.journeys[0][0].bookingClass}OWBD`,
+      fareBasis: `${o.journeys[0][0].bookingClass}OWGB`,
       avail: o.seats,
       totalMinor: o.totalMinor,
       segs: o.journeys.flatMap((j, k) =>
@@ -295,7 +295,7 @@ export function toItineraries(offers: GenOffer[], supplier: string) {
           bookingClass: s.bookingClass,
         })),
       })),
-      totalPrice: o.amounts ? exactPoisha(o.amounts.base) + o.amounts.taxes.reduce((n, t) => n + exactPoisha(t.amount), 0) : o.totalMinor,
+      totalPrice: o.amounts ? exactCents(o.amounts.base) + o.amounts.taxes.reduce((n, t) => n + exactCents(t.amount), 0) : o.totalMinor,
       seatsAvailable: o.seats,
       durationMinutes: duration,
     };
@@ -308,8 +308,8 @@ export type ExpectedItinerary = ReturnType<typeof toItineraries>[number];
 export const ANY_REQUEST = {
   tripType: "return",
   legs: [
-    { origin: "DAC", destination: "DXB", date: "2026-12-01" },
-    { origin: "DXB", destination: "DAC", date: "2026-12-10" },
+    { origin: "LHR", destination: "DXB", date: "2026-12-01" },
+    { origin: "DXB", destination: "LHR", date: "2026-12-10" },
   ],
   passengers: 1,
 };

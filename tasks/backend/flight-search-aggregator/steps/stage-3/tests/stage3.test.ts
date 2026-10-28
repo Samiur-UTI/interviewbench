@@ -89,7 +89,7 @@ test("s3 search results are unchanged", async () => {
 test("s3 bad payload in a worker is an error, service keeps working", async () => {
   const [offers, sky] = genMarket(304, 5000, 2, { dupRatio: 0 });
   const bad: GenOffer[] = offers.map((o, i) =>
-    i === 2000 ? { ...o, amounts: { base: "38450.00", taxes: [{ code: "AE", amount: "4100.605" }, { code: "BD", amount: "3105.00" }] } } : o,
+    i === 2000 ? { ...o, amounts: { base: "384.50", taxes: [{ code: "AE", amount: "41.005" }, { code: "YR", amount: "35.00" }] } } : o,
   );
   const badRaw = aeroLinkRaw(bad, { bulkBytes: 1000 });
   const goodRaw = aeroLinkRaw(offers, { bulkBytes: 1000 });

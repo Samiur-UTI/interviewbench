@@ -1,16 +1,16 @@
 // AeroLink: nested JSON (offers -> journeys -> segments), local times with UTC offsets, and
-// prices as BDT decimal strings. AeroLink converts fares and carrier taxes filed in USD/AED/SGD/MYR
-// to BDT with up to 2 decimals; Bangladesh taxes are whole taka.
+// prices as USD decimal strings. AeroLink converts fares and carrier taxes filed in EUR/GBP/AED/SGD
+// to USD with up to 2 decimals; carrier service fees (e.g. YR) are whole dollars.
 //
 // {
-//   "searchId": "al-7f3a", "currency": "BDT",
+//   "searchId": "al-7f3a", "currency": "USD",
 //   "offers": [{
 //     "offerId": "AL-000123", "validatingCarrier": "XB", "seatsLeft": 4,
-//     "journeys": [{ "segments": [{ "carrier": "XB", "flightNo": "581", "from": "DAC", "to": "DXB",
-//                                   "dep": "2026-12-01T21:40:00+06:00", "arr": "2026-12-02T01:05:00+04:00",
+//     "journeys": [{ "segments": [{ "carrier": "XB", "flightNo": "581", "from": "LHR", "to": "DXB",
+//                                   "dep": "2026-12-01T15:40:00+00:00", "arr": "2026-12-02T01:05:00+04:00",
 //                                   "cabin": "Y", "rbd": "K" }] }, ...],
-//     "price": { "filedCurrency": "USD", "base": "41111.13",
-//                "taxes": [{ "code": "YQ", "amount": "2162.99" }, ...] },
+//     "price": { "filedCurrency": "GBP", "base": "578.68",
+//                "taxes": [{ "code": "YQ", "amount": "36.41" }, ...] },
 //     "fareComponents": [...], "baggageAllowances": [...], "brandAttributes": [...], "paxBreakdown": [...]
 //   }]
 // }
@@ -64,7 +64,7 @@ function totalPrice(value: unknown, path: string): number {
 
 export function parseAeroLink(raw: string, supplier: string): Itinerary[] {
   const doc = obj(parseJson(raw, supplier), supplier);
-  if (doc.currency !== "BDT") throw new SupplierPayloadError(`${supplier}: currency must be BDT`);
+  if (doc.currency !== "USD") throw new SupplierPayloadError(`${supplier}: currency must be USD`);
   return arr(doc.offers, `${supplier}.offers`).map((value, i) => {
     const path = `${supplier}.offers[${i}]`;
     const offer = obj(value, path);

@@ -13,16 +13,16 @@ focus: |
   order.
 
 business: |
-  Example Travels is an online travel agency. The flight-search service feeds the results page for
+  The client is an online travel agency. The flight-search service feeds the results page for
   B2C customers (web and app) and for B2B travel agents booking for clients, including corporate
   clients who fly business class.
 
   Rules (each stated in README.md or a stage brief):
   - Never show a fare the supplier can't honour. The shown total equals the supplier's to the
-    poisha. Offers with too few seats are hidden, before duplicates are merged. An amount that
+    cent. Offers with too few seats are hidden, before duplicates are merged. An amount that
     can't be read exactly makes that supplier's response an error, never a guess (README,
     stage 1).
-  - Prices are integer poisha in BDT. AeroLink sends converted amounts with up to 2 decimals
+  - Prices are integer US cents. AeroLink sends converted amounts with up to 2 decimals
     (README).
   - Different trips are never merged. Same journeys, flight numbers, departure times and booking
     class, or it's a different product. Fare conditions are determined by booking class
@@ -74,9 +74,9 @@ criteria:
     weight: 10
     description: Fixes both stage 1 root causes where they live (the dedup key, exact decimal parsing) instead of patching results afterwards.
     levels:
-      0: No fix, or the change only hides the symptom (e.g. adding 1 poisha, special-casing business class, Math.ceil).
+      0: No fix, or the change only hides the symptom (e.g. adding 1 cent, special-casing business class, Math.ceil).
       1: Works but in the wrong layer (e.g. fixing prices in the merge or handler) or still parses money through floats.
-      2: Both fixes are in the dedup key and in exact string-to-poisha parsing.
+      2: Both fixes are in the dedup key and in exact string-to-cents parsing.
       3: As 2, and NOTES.md explains why only some amounts were off and why SkyMesh was unaffected.
 
   - id: code-quality

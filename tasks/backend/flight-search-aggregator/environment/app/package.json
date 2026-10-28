@@ -2,7 +2,7 @@
   "name": "flight-search",
   "version": "1.4.0",
   "private": true,
-  "description": "Example Travels flight search: fans out to fare suppliers, normalises, merges and sorts itineraries.",
+  "description": "Online travel agency flight search: fans out to fare suppliers, normalises, merges and sorts itineraries.",
   "type": "module",
   "engines": {
     "node": ">=24.11"

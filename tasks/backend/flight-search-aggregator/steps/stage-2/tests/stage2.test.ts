@@ -92,7 +92,7 @@ test("s2 a rejecting supplier does not sink the search", async () => {
 
 test("s2 an unparsable payload is a supplier error", async () => {
   const bad: GenOffer[] = [
-    { ...MA[0], amounts: { base: "38450.00", taxes: [{ code: "AE", amount: "1.234" }, { code: "BD", amount: "3105.00" }] } },
+    { ...MA[0], amounts: { base: "384.50", taxes: [{ code: "AE", amount: "1.234" }, { code: "YR", amount: "35.00" }] } },
   ];
   const { svc } = await service([
     resolving("aerolink", "aerolink", "{not json"),
