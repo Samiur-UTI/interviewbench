@@ -4,44 +4,45 @@ multi_step_reward_strategy = "mean"
 
 [task]
 name = "interviewbench/flight-search-aggregator"
-version = "1.0.0"
-description = "Multi-supplier flight search: merge, deadlines, off-thread parsing"
+version = "2.0.0"
+description = "Multi-supplier flight search: nested fares, DB-backed paging, 1 s budget"
 authors = [{ name = "interviewbench" }]
-keywords = ["typescript", "nodejs", "concurrency", "worker-threads", "performance"]
+keywords = ["typescript", "nodejs", "sqlite", "pagination", "worker-threads", "performance"]
 
 [metadata]
 category = "backend"                       # must match the folder: tasks/backend/
-tags = ["typescript", "nodejs", "concurrency", "worker-threads", "performance", "parsing", "travel"]
+tags = ["typescript", "nodejs", "sqlite", "pagination", "concurrency", "worker-threads", "performance", "parsing", "travel"]
 difficulty = "hard"                        # Harbor vocabulary: easy | medium | hard
-expert_time_estimate_min = 60
-junior_time_estimate_min = 180
+expert_time_estimate_min = 100
+junior_time_estimate_min = 300
 
 [metadata.interviewbench]
 level = "senior"                           # junior | mid | senior
 language = "typescript"
-time_limit_minutes = 120
+time_limit_minutes = 180
 # How the candidate's own tests are run (from $APP_DIR). Needs Node.js >= 24.11 (built-in type
 # stripping); with the local runner that means on the host.
-candidate_tests = 'node --test --test-force-exit --test-reporter=junit --test-reporter-destination="$LOGS_DIR/junit.xml" --test-reporter=spec --test-reporter-destination=stdout "tests/**/*.test.ts"'
+candidate_tests = 'node --no-warnings=ExperimentalWarning --test --test-force-exit --test-reporter=junit --test-reporter-destination="$LOGS_DIR/junit.xml" --test-reporter=spec --test-reporter-destination=stdout "tests/**/*.test.ts"'
 
 [[steps]]
 name = "stage-1"
 [steps.agent]
-timeout_sec = 1800
+timeout_sec = 2400
 
 [[steps]]
 name = "stage-2"
 [steps.agent]
-timeout_sec = 1800
+timeout_sec = 2400
 
 [[steps]]
 name = "stage-3"
 [steps.agent]
-timeout_sec = 1800
+timeout_sec = 2400
 
 [verifier]
-# Worst case (every test hangs until its per-test timeout) is ~380 s per stage; see tests/test.sh.
-timeout_sec = 420
+# Worst case (every test hangs until its per-test timeout): stage 2, 16 x 20 s = 320 s; stage 3,
+# 7 x 60 s + 3 x 20 s + 2 x 60 s = 600 s. See tests/test.sh.
+timeout_sec = 720
 
 [environment]
 build_timeout_sec = 600
