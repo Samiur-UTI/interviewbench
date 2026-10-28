@@ -10,10 +10,14 @@ export interface HttpResponse {
 
 export async function handleSearch(service: FlightSearchService, body: unknown): Promise<HttpResponse> {
   try {
-    const itineraries = await service.search(body as SearchRequest);
-    return { status: 200, body: { itineraries } };
+    const result = await service.searchWithStatus(body as SearchRequest);
+    if (result.suppliers.every((s) => s.status !== "ok")) {
+      // Couldn't ask anyone: that is not the same as "there are no flights".
+      return { status: 503, body: { error: "no supplier available", suppliers: result.suppliers } };
+    }
+    return { status: 200, body: result };
   } catch (err) {
     if (err instanceof ValidationError) return { status: 400, body: { error: err.message } };
-    return { status: 502, body: { error: "supplier error" } };
+    return { status: 500, body: { error: "internal error" } };
   }
 }
