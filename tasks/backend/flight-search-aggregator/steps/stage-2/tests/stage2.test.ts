@@ -1,232 +1,329 @@
-// Stage 2 hidden tests: concurrent fan-out, one deadline, cancellation through AbortSignal,
-// partial results, 503 when every supplier fails, and nothing left running afterwards.
-// The fakes never use timers; only the service's own deadline does, and tests assert upper bounds.
+// Stage 2 hidden tests: searches are persisted before they are answered, and paged from the
+// database in the order the user picked, with stable keyset cursors.
+//
+// Data is small (at most 3 x 150 offers per search) so a straightforward implementation that
+// commits row by row stays fast at synchronous=FULL. Every test uses a fresh database file and
+// reads it through its own read-only connection.
 import assert from "node:assert/strict";
-import { getEventListeners } from "node:events";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { after, test } from "node:test";
-import { runChild } from "./helpers/child.ts";
 import { loadApp } from "./helpers/app.ts";
-import { deferred, neverResolving, rejecting, resolving, tick } from "./helpers/fakes.ts";
+import type { App } from "./helpers/app.ts";
+import { neverResolving, rejecting, resolving } from "./helpers/fakes.ts";
 import type { FakeClient } from "./helpers/fakes.ts";
-import { ANY_REQUEST, aeroLinkRaw, genMarket, skyMeshRaw, toItineraries } from "./helpers/payloads.ts";
-import type { GenOffer } from "./helpers/payloads.ts";
-import { referenceSearch } from "./helpers/reference.ts";
+import { generateSearch, tripKey } from "./helpers/payloads.ts";
+import type { ExpectedItinerary, GeneratedSearch, SearchOptions, SortPreference } from "./helpers/payloads.ts";
+import { compareKeys, referenceOffers, referenceOrder, referenceRows, SORTS, sortKeys, TABLE_QUERIES } from "./helpers/reference.ts";
+import type { ReferenceRows, SupplierOutcome } from "./helpers/reference.ts";
 
-const services: { close?: () => Promise<void> }[] = [];
-after(async () => {
-  for (const s of services) if (typeof s.close === "function") await s.close();
+type It = ExpectedItinerary;
+
+const dirs: string[] = [];
+const connections: DatabaseSync[] = [];
+after(() => {
+  for (const c of connections) if (c.isOpen) c.close();
+  // Best effort: the services under test may still hold their database open (Windows refuses).
+  for (const d of dirs) {
+    try {
+      rmSync(d, { recursive: true, force: true });
+    } catch {}
+  }
 });
 
-async function service(clients: FakeClient[], options?: object) {
+function freshDbPath(): string {
+  const dir = mkdtempSync(join(tmpdir(), "ib-s2-"));
+  dirs.push(dir);
+  return join(dir, "search.db");
+}
+
+/** The test's own connection: read-only, so it sees exactly what has been committed. */
+function testConnection(dbPath: string): DatabaseSync {
+  const db = new DatabaseSync(dbPath, { readOnly: true });
+  connections.push(db);
+  return db;
+}
+
+// 150 Caravel offers, 150 Tessera quotes, ~150 Keystone offers. "dense" snaps prices and times
+// so every sort order has many ties; XB is weighted so preferred_airline has a real split.
+const DATA: SearchOptions = {
+  seed: 202,
+  offersPerSupplier: 150,
+  tieDensity: "dense",
+  carriers: ["XB", "XB", "ZK", "QV", "MR", "TJ", "WL"],
+  preferredCarrier: "XB",
+};
+const generated = new Map<string, GeneratedSearch>();
+function data(opts: SearchOptions = DATA): GeneratedSearch {
+  const key = JSON.stringify(opts);
+  if (!generated.has(key)) generated.set(key, generateSearch(opts));
+  return generated.get(key)!;
+}
+
+const clientsOf = (g: GeneratedSearch): FakeClient[] => g.suppliers.map((s) => resolving(s.name, s.format, s.raw));
+const okOutcomes = (g: GeneratedSearch): SupplierOutcome[] =>
+  g.suppliers.map((s) => ({ supplier: s.name, status: "ok", offerCount: s.itineraries.length }));
+
+async function service(clients: FakeClient[], dbPath = freshDbPath()): Promise<{ app: App; svc: any; dbPath: string }> {
   const app = await loadApp();
-  const svc = options === undefined ? new app.FlightSearchService(clients) : new app.FlightSearchService(clients, options);
-  services.push(svc);
-  return { app, svc };
+  return { app, svc: new app.FlightSearchService(clients, { dbPath }), dbPath };
 }
 
-const [MA, MS, MB] = genMarket(31, 90, 3);
-const RAW = { aerolink: aeroLinkRaw(MA), skymesh: skyMeshRaw(MS), aerolinkB: aeroLinkRaw(MB, { seed: 9 }) };
-const okAerolink = () => resolving("aerolink", "aerolink", RAW.aerolink);
-const okSkymesh = () => resolving("skymesh", "skymesh", RAW.skymesh);
-const okAerolinkB = () => resolving("aerolink-b", "aerolink", RAW.aerolinkB);
-const expected = (parts: [string, GenOffer[]][], passengers = 1) =>
-  referenceSearch(parts.map(([name, offers]) => ({ name, itineraries: toItineraries(offers, name) })), passengers);
-const request = (passengers = 1) => ({ ...ANY_REQUEST, passengers });
-const statuses = (r: { suppliers: { supplier: string; status: string }[] }) => r.suppliers.map((s) => `${s.supplier}:${s.status}`);
-
-/** Records unhandled rejections while `fn` runs (and a few turns of the event loop after it). */
-async function noUnhandledRejections(fn: () => Promise<void>) {
-  const seen: unknown[] = [];
-  const listener = (reason: unknown) => seen.push(reason);
-  process.on("unhandledRejection", listener);
-  try {
-    await fn();
-    for (let i = 0; i < 5; i++) await tick();
-  } finally {
-    process.off("unhandledRejection", listener);
+function readRows(db: DatabaseSync, searchId: string): ReferenceRows {
+  const rows = {} as ReferenceRows;
+  for (const [table, sql] of Object.entries(TABLE_QUERIES) as [keyof ReferenceRows, string][]) {
+    rows[table] = db.prepare(sql).all(searchId).map((r) => ({ ...r }));
   }
-  assert.deepEqual(seen, [], "unhandled rejection");
+  return rows;
 }
 
-test("s2 all suppliers ok", async () => {
-  const { app, svc } = await service([okAerolink(), okSkymesh(), okAerolinkB()]);
-  const result = await svc.searchWithStatus(request(2));
+/** Every page of a search, following nextCursor. */
+async function walk(svc: any, searchId: string, sort: SortPreference, limit: number): Promise<string[]> {
+  const ids: string[] = [];
+  let cursor: string | undefined;
+  for (let pages = 0; ; pages++) {
+    assert.ok(pages < 10_000, "paging doesn't end");
+    const page = await svc.getPage(searchId, { sort, limit, ...(cursor === undefined ? {} : { cursor }) });
+    assert.ok(page.offers.length <= limit, `a page has ${page.offers.length} offers, limit ${limit}`);
+    ids.push(...page.offers.map((o: It) => o.id));
+    if (page.nextCursor === null) {
+      return ids;
+    }
+    assert.equal(typeof page.nextCursor, "string");
+    assert.ok(page.offers.length > 0, "an empty page with a nextCursor");
+    cursor = page.nextCursor;
+  }
+}
+
+const cursorOf = (json: unknown): string => Buffer.from(JSON.stringify(json)).toString("base64url");
+
+test("s2 everything is committed before the search resolves", async () => {
+  const g = data();
+  const { svc, dbPath } = await service(clientsOf(g));
+  const result = await svc.searchWithStatus(g.request);
+  // Nothing else may run between the answer and this read.
+  const stored = readRows(testConnection(dbPath), result.searchId);
+  const expected = referenceRows(result.searchId, g.request, okOutcomes(g), referenceOffers(g.suppliers, g.request.passengers));
+  assert.deepEqual(stored.searches, expected.searches);
+  assert.deepEqual(stored.supplier_results, expected.supplier_results);
+  assert.equal(stored.offers.length, expected.offers.length, "number of stored offers");
+  assert.deepEqual(stored.offers, expected.offers);
+  assert.deepEqual(stored.offer_segments, expected.offer_segments);
+  assert.deepEqual(stored.offer_prices, expected.offer_prices);
+});
+
+test("s2 first page follows the requested sort", async () => {
+  const g = data();
+  const { svc } = await service(clientsOf(g));
+  const result = await svc.searchWithStatus({ ...g.request, sort: "fastest" }, { limit: 10 });
+  const offers = referenceOffers(g.suppliers, g.request.passengers);
+  assert.equal(result.total, offers.length);
   assert.equal(result.partial, false);
+  assert.match(result.searchId, /\S/);
   assert.deepEqual(
-    result.suppliers.map((s: { supplier: string; status: string; offers: number }) => [s.supplier, s.status, s.offers]),
-    [
-      ["aerolink", "ok", MA.length],
-      ["skymesh", "ok", MS.length],
-      ["aerolink-b", "ok", MB.length],
-    ],
+    result.page.offers.map((o: It) => o.id),
+    referenceOrder(offers, "fastest").slice(0, 10).map((o) => o.id),
   );
-  assert.deepEqual(result.itineraries, expected([["aerolink", MA], ["skymesh", MS], ["aerolink-b", MB]], 2));
-  const http = await app.handleSearch(svc, request(2));
-  assert.equal(http.status, 200);
-  assert.deepEqual(Object.keys(http.body).sort(), ["itineraries", "partial", "suppliers"]);
+  assert.equal(typeof result.page.nextCursor, "string");
 });
 
-test("s2 suppliers are called concurrently", async () => {
-  const fakes = [deferred("aerolink", "aerolink"), deferred("skymesh", "skymesh"), deferred("aerolink-b", "aerolink")];
-  const { svc } = await service(fakes.map((f) => f.client));
-  const pending = svc.searchWithStatus(request(), { timeoutMs: 30_000 });
-  await tick();
-  assert.deepEqual(fakes.map((f) => f.client.calls.length), [1, 1, 1], "every supplier is asked before any answers");
-  fakes[0].resolve(RAW.aerolink);
-  fakes[1].resolve(RAW.skymesh);
-  fakes[2].resolve(RAW.aerolinkB);
-  const result = await pending;
-  assert.equal(result.partial, false);
-});
-
-test("s2 a rejecting supplier does not sink the search", async () => {
-  const { svc } = await service([okAerolink(), rejecting("skymesh", "skymesh", new Error("HTTP 500 from supplier")), okAerolinkB()]);
-  const result = await svc.searchWithStatus(request());
-  assert.equal(result.partial, true);
-  assert.deepEqual(statuses(result), ["aerolink:ok", "skymesh:error", "aerolink-b:ok"]);
-  assert.equal(typeof result.suppliers[1].error, "string");
-  assert.ok(result.suppliers[1].error.length > 0);
-  assert.equal(result.suppliers[1].offers, 0);
-  assert.deepEqual(result.itineraries, expected([["aerolink", MA], ["aerolink-b", MB]]));
-});
-
-test("s2 an unparsable payload is a supplier error", async () => {
-  const bad: GenOffer[] = [
-    { ...MA[0], amounts: { base: "384.50", taxes: [{ code: "AE", amount: "1.234" }, { code: "YR", amount: "35.00" }] } },
-  ];
-  const { svc } = await service([
-    resolving("aerolink", "aerolink", "{not json"),
-    resolving("aerolink-b", "aerolink", aeroLinkRaw(bad)),
-    okSkymesh(),
-  ]);
-  const result = await svc.searchWithStatus(request());
-  assert.deepEqual(statuses(result), ["aerolink:error", "aerolink-b:error", "skymesh:ok"]);
-  assert.deepEqual(result.itineraries, expected([["skymesh", MS]]));
-});
-
-test("s2 a hanging supplier times out", async () => {
-  const hanging = neverResolving("skymesh", "skymesh");
-  const { svc } = await service([okAerolink(), hanging]);
-  const start = performance.now();
-  const result = await svc.searchWithStatus(request(), { timeoutMs: 100 });
-  assert.ok(performance.now() - start < 3000, "resolved soon after the deadline");
-  assert.deepEqual(statuses(result), ["aerolink:ok", "skymesh:timeout"]);
-  assert.equal(result.partial, true);
-  assert.equal(hanging.calls[0].signal?.aborted, true, "the timed-out call was aborted");
-  assert.deepEqual(result.itineraries, expected([["aerolink", MA]]));
-});
-
-test("s2 late responses are ignored", async () => {
-  await noUnhandledRejections(async () => {
-    const late = deferred("skymesh", "skymesh");
-    const { svc } = await service([okAerolink(), late.client]);
-    const result = await svc.searchWithStatus(request(), { timeoutMs: 50 });
-    assert.deepEqual(statuses(result), ["aerolink:ok", "skymesh:timeout"]);
-    const snapshot = structuredClone(result);
-    late.resolve(RAW.skymesh);
-    await tick();
-    assert.deepEqual(result, snapshot);
+for (const sort of SORTS) {
+  test(`s2 ${sort} pages walk all offers in order`, async () => {
+    const g = data();
+    const { svc } = await service(clientsOf(g));
+    const { searchId } = await svc.searchWithStatus(g.request);
+    const ids = await walk(svc, searchId, sort, 7);
+    assert.equal(new Set(ids).size, ids.length, "an offer was shown twice");
+    const expected = referenceOrder(referenceOffers(g.suppliers, g.request.passengers), sort, g.request.preferredCarrier);
+    assert.deepEqual(ids, expected.map((o) => o.id));
   });
+}
+
+test("s2 offers read back match what was parsed", async () => {
+  const g = data();
+  const { svc } = await service(clientsOf(g));
+  const { searchId } = await svc.searchWithStatus(g.request);
+  const byId = new Map(referenceOffers(g.suppliers, g.request.passengers).map((it) => [it.id, it]));
+  const page = await svc.getPage(searchId, { sort: "cheapest", limit: 50 });
+  assert.equal(page.offers.length, 50);
+  for (const offer of page.offers) assert.deepEqual(offer, byId.get(offer.id));
 });
 
-test("s2 late rejections are ignored", async () => {
-  await noUnhandledRejections(async () => {
-    const late = deferred("skymesh", "skymesh");
-    const { svc } = await service([okAerolink(), late.client]);
-    const result = await svc.searchWithStatus(request(), { timeoutMs: 50 });
-    const snapshot = structuredClone(result);
-    late.reject(new Error("connection reset"));
-    await tick();
-    assert.deepEqual(result, snapshot);
-  });
-});
-
-test("s2 defaultTimeoutMs from the constructor applies", async () => {
-  const { svc } = await service([okAerolink(), neverResolving("skymesh", "skymesh")], { defaultTimeoutMs: 50 });
-  const start = performance.now();
-  const result = await svc.searchWithStatus(request());
-  assert.ok(performance.now() - start < 3000);
-  assert.deepEqual(statuses(result), ["aerolink:ok", "skymesh:timeout"]);
-});
-
-test("s2 every supplier failing", async () => {
-  const clients = () => [rejecting("aerolink", "aerolink", new Error("HTTP 502")), neverResolving("skymesh", "skymesh")];
-  const { app, svc } = await service(clients(), { defaultTimeoutMs: 50 });
-  const result = await svc.searchWithStatus(request());
-  assert.deepEqual(result.itineraries, []);
-  assert.equal(result.partial, true);
-  assert.deepEqual(statuses(result), ["aerolink:error", "skymesh:timeout"]);
-  await assert.rejects(async () => svc.search(request()), app.NoSuppliersAvailableError);
-  const http = await app.handleSearch(svc, request());
-  assert.equal(http.status, 503);
-  assert.equal(http.body.suppliers.length, 2);
-});
-
-test("s2 search() returns partial results", async () => {
-  const { svc } = await service([rejecting("aerolink", "aerolink", new Error("HTTP 500")), okSkymesh()]);
-  const itineraries = await svc.search(request());
-  assert.ok(Array.isArray(itineraries));
-  assert.deepEqual(itineraries, expected([["skymesh", MS]]));
-});
-
-test("s2 caller abort cancels everything", async () => {
-  const a = neverResolving("aerolink", "aerolink");
-  const b = neverResolving("skymesh", "skymesh");
-  const { svc } = await service([a, b]);
-  const controller = new AbortController();
-  const pending = svc.searchWithStatus(request(), { timeoutMs: 30_000, signal: controller.signal });
-  await tick();
-  const reason = new Error("user left");
-  controller.abort(reason);
-  await assert.rejects(async () => pending, (err) => err === reason);
-  assert.equal(a.calls[0]?.signal?.aborted, true);
-  assert.equal(b.calls[0]?.signal?.aborted, true);
-});
-
-test("s2 already-aborted caller signal", async () => {
-  const a = okAerolink();
-  const { svc } = await service([a]);
-  const reason = new Error("user left");
-  await assert.rejects(async () => svc.searchWithStatus(request(), { signal: AbortSignal.abort(reason) }), (err) => err === reason);
-  assert.equal(a.calls.length, 0);
-});
-
-test("s2 invalid timeoutMs", async () => {
-  const a = okAerolink();
-  const { app, svc } = await service([a]);
-  for (const timeoutMs of [0, -1, 1.5, 30001, Number.NaN, "100"]) {
-    await assert.rejects(async () => svc.searchWithStatus(request(), { timeoutMs }), app.ValidationError, String(timeoutMs));
+test("s2 pages are stable while other searches are written", async () => {
+  const g = data();
+  const { svc } = await service(clientsOf(g));
+  const { searchId } = await svc.searchWithStatus(g.request);
+  const ids: string[] = [];
+  let cursor: string | undefined;
+  for (;;) {
+    const page = await svc.getPage(searchId, { sort: "cheapest", limit: 5, ...(cursor === undefined ? {} : { cursor }) });
+    ids.push(...page.offers.map((o: It) => o.id));
+    if (page.nextCursor === null) break;
+    cursor = page.nextCursor;
+    if (ids.length % 25 === 0) await svc.searchWithStatus(g.request); // the same trips, a new search
   }
-  assert.equal(a.calls.length, 0);
+  const expected = referenceOrder(referenceOffers(g.suppliers, g.request.passengers), "cheapest");
+  assert.deepEqual(ids, expected.map((o) => o.id));
 });
 
-test("s2 invalid request rejected before fan-out", async () => {
-  const a = okAerolink();
-  const { app, svc } = await service([a]);
-  const bad = { ...request(), legs: [{ origin: "DA1", destination: "DXB", date: "2026-12-01" }, ANY_REQUEST.legs[1]] };
-  await assert.rejects(async () => svc.searchWithStatus(bad), app.ValidationError);
-  const http = await app.handleSearch(svc, bad);
-  assert.equal(http.status, 400);
-  assert.equal(a.calls.length, 0);
+test("s2 pages come from the database", async () => {
+  const g = data();
+  const { app, svc, dbPath } = await service(clientsOf(g));
+  const { searchId } = await svc.searchWithStatus(g.request);
+  const first = await walk(svc, searchId, "fewest_stops", 20);
+  const other = new app.FlightSearchService(clientsOf(g), { dbPath });
+  assert.deepEqual(await walk(other, searchId, "fewest_stops", 20), first);
+  const page = await other.getPage(searchId, { sort: "cheapest", limit: 3 });
+  const expected = referenceOrder(referenceOffers(g.suppliers, g.request.passengers), "cheapest").slice(0, 3);
+  assert.deepEqual(page.offers, expected);
 });
 
-test("s2 no listeners left on the caller signal", async () => {
-  const signal = new AbortController().signal;
-  const ok = await service([okAerolink(), okSkymesh()]);
-  await ok.svc.searchWithStatus(request(), { signal });
-  assert.equal(getEventListeners(signal, "abort").length, 0, "after a successful search");
-  const slow = await service([okAerolink(), neverResolving("skymesh", "skymesh")]);
-  await slow.svc.searchWithStatus(request(), { signal, timeoutMs: 50 });
-  assert.equal(getEventListeners(signal, "abort").length, 0, "after a timeout");
-  const failing = await service([rejecting("aerolink", "aerolink", new Error("down"))]);
-  await failing.svc.searchWithStatus(request(), { signal });
-  assert.equal(getEventListeners(signal, "abort").length, 0, "after every supplier failed");
+test("s2 cursor format", async () => {
+  const g = data();
+  const { svc } = await service(clientsOf(g));
+  const { searchId } = await svc.searchWithStatus(g.request);
+  for (const sort of SORTS) {
+    const page = await svc.getPage(searchId, { sort, limit: 9 });
+    const last = page.offers[page.offers.length - 1] as It;
+    assert.match(page.nextCursor, /^[A-Za-z0-9_-]+$/, "base64url without padding");
+    assert.deepEqual(JSON.parse(Buffer.from(page.nextCursor, "base64url").toString("utf8")), {
+      v: 1,
+      s: searchId,
+      o: sort,
+      k: sortKeys(last, sort, g.request.preferredCarrier),
+    });
+  }
 });
 
-test("s2 nothing keeps the process alive after a search", { timeout: 60_000 }, async () => {
-  await loadApp();
-  const child = await runChild(new URL("./helpers/settle-child.ts", import.meta.url), 15_000);
-  assert.equal(child.killed, false, `still running after 15 s\n${child.stdout}${child.stderr}`);
-  assert.equal(child.code, 0, child.stderr);
-  assert.match(child.stdout, /done/);
+test("s2 a well-formed cursor is a position", async () => {
+  const g = data();
+  const { svc } = await service(clientsOf(g));
+  const { searchId } = await svc.searchWithStatus(g.request);
+  const offers = referenceOrder(referenceOffers(g.suppliers, g.request.passengers), "fastest");
+  const k = 37;
+  const [d, t, id] = sortKeys(offers[k], "fastest");
+  const positions: [number, number, string][] = [
+    [d, t, id], // an offer that exists
+    [d, t, ""], // before every offer with these keys
+    [d, t + 1, "~"], // between offers, naming no offer
+  ];
+  for (const k3 of positions) {
+    const page = await svc.getPage(searchId, { sort: "fastest", limit: 6, cursor: cursorOf({ v: 1, s: searchId, o: "fastest", k: k3 }) });
+    const expected = offers.filter((o) => compareKeys(sortKeys(o, "fastest"), k3) > 0).slice(0, 6);
+    assert.deepEqual(page.offers.map((o: It) => o.id), expected.map((o) => o.id), `after ${JSON.stringify(k3)}`);
+  }
+});
+
+test("s2 invalid cursors and limits", async () => {
+  const g = data();
+  const { app, svc } = await service(clientsOf(g));
+  const { searchId } = await svc.searchWithStatus(g.request);
+  const other = (await svc.searchWithStatus(g.request)).searchId;
+  const good = (await svc.getPage(searchId, { sort: "cheapest", limit: 5 })).nextCursor as string;
+  const keys = JSON.parse(Buffer.from(good, "base64url").toString("utf8")).k;
+  const badCursors: unknown[] = [
+    "not a cursor!",
+    "eyJ2IjoxfQ", // {"v":1}
+    cursorOf({ hello: "world" }),
+    cursorOf({ v: 2, s: searchId, o: "cheapest", k: keys }),
+    cursorOf({ v: 1, s: searchId, o: "cheapest", k: [keys[0], keys[1]] }),
+    cursorOf({ v: 1, s: searchId, o: "cheapest", k: [String(keys[0]), keys[1], keys[2]] }),
+    cursorOf({ v: 1, s: other, o: "cheapest", k: keys }), // another search
+    cursorOf({ v: 1, s: searchId, o: "fastest", k: keys }), // another sort
+    good + "=",
+    42,
+  ];
+  for (const cursor of badCursors) {
+    await assert.rejects(async () => svc.getPage(searchId, { sort: "cheapest", cursor }), app.ValidationError, `cursor ${String(cursor)}`);
+  }
+  for (const limit of [0, 201, 1.5, "5", -1]) {
+    await assert.rejects(async () => svc.getPage(searchId, { limit }), app.ValidationError, `getPage limit ${String(limit)}`);
+    await assert.rejects(async () => svc.searchWithStatus(g.request, { limit }), app.ValidationError, `search limit ${String(limit)}`);
+  }
+  await assert.rejects(async () => svc.getPage(searchId, { sort: "random" }), app.ValidationError);
+  await assert.rejects(async () => svc.getPage("no-such-search", {}), app.SearchNotFoundError);
+
+  const { preferredCarrier: _, ...noCarrier } = g.request;
+  const plain = await svc.searchWithStatus(noCarrier);
+  await assert.rejects(async () => svc.getPage(plain.searchId, { sort: "preferred_airline" }), app.ValidationError);
+  await assert.rejects(async () => svc.searchWithStatus({ ...noCarrier, sort: "preferred_airline" }), app.ValidationError);
+});
+
+test("s2 duplicates stored once", async () => {
+  const g = data();
+  const { svc, dbPath } = await service(clientsOf(g));
+  const { searchId, total } = await svc.searchWithStatus(g.request);
+  const offers = referenceOffers(g.suppliers, g.request.passengers);
+  // The data must really overlap, or this test proves nothing.
+  const seats = g.request.passengers.adults + g.request.passengers.children;
+  const copies = new Map<string, number>();
+  for (const s of g.suppliers) for (const it of s.itineraries) if (it.seatsAvailable >= seats) copies.set(tripKey(it), (copies.get(tripKey(it)) ?? 0) + 1);
+  assert.ok([...copies.values()].filter((n) => n > 1).length >= 20, "the dataset has fewer than 20 shared trips");
+
+  const db = testConnection(dbPath);
+  const rows = db.prepare("SELECT trip_key, offer_id FROM offers WHERE search_id = ?").all(searchId) as { trip_key: string; offer_id: string }[];
+  assert.equal(total, offers.length);
+  assert.equal(rows.length, offers.length);
+  const winner = new Map(offers.map((it) => [tripKey(it), it.id]));
+  for (const r of rows) assert.equal(r.offer_id, winner.get(r.trip_key), `trip ${r.trip_key}`);
+});
+
+test("s2 partial results are persisted", async () => {
+  const g = data();
+  const [caravel, tessera, keystone] = g.suppliers;
+  const clients = [resolving(caravel.name, caravel.format, caravel.raw), resolving(tessera.name, tessera.format, tessera.raw), neverResolving(keystone.name, keystone.format)];
+  const { svc, dbPath } = await service(clients);
+  const result = await svc.searchWithStatus(g.request, { timeoutMs: 100 });
+  assert.equal(result.partial, true);
+  const stored = readRows(testConnection(dbPath), result.searchId);
+  const outcomes: SupplierOutcome[] = [
+    { supplier: caravel.name, status: "ok", offerCount: caravel.itineraries.length },
+    { supplier: tessera.name, status: "ok", offerCount: tessera.itineraries.length },
+    { supplier: keystone.name, status: "timeout", offerCount: 0 },
+  ];
+  const expected = referenceRows(result.searchId, g.request, outcomes, referenceOffers([caravel, tessera], g.request.passengers));
+  assert.deepEqual(stored.supplier_results, expected.supplier_results);
+  assert.deepEqual(stored.offers, expected.offers);
+  assert.equal(result.total, expected.offers.length);
+});
+
+test("s2 all suppliers failing", async () => {
+  const g = data();
+  const failing = () => g.suppliers.map((s) => rejecting(s.name, s.format, new Error("HTTP 502")));
+  const { app, svc, dbPath } = await service(failing());
+  const result = await svc.searchWithStatus(g.request);
+  assert.equal(result.total, 0);
+  assert.deepEqual(result.page, { offers: [], nextCursor: null });
+  const db = testConnection(dbPath);
+  assert.deepEqual({ ...db.prepare("SELECT status FROM searches WHERE search_id = ?").get(result.searchId) }, { status: "failed" });
+  assert.deepEqual({ ...db.prepare("SELECT count(*) AS n FROM offers WHERE search_id = ?").get(result.searchId) }, { n: 0 });
+  assert.deepEqual(
+    db.prepare("SELECT supplier, status FROM supplier_results WHERE search_id = ? ORDER BY supplier").all(result.searchId).map((r) => ({ ...r })),
+    g.suppliers.map((s) => ({ supplier: s.name, status: "error" })).sort((a, b) => (a.supplier < b.supplier ? -1 : 1)),
+  );
+  assert.deepEqual(await svc.getPage(result.searchId, {}), { offers: [], nextCursor: null });
+  const response = await app.handleSearch(svc, g.request);
+  assert.equal(response.status, 503);
+});
+
+test("s2 HTTP page handler", async () => {
+  const g = data();
+  const { app, svc } = await service(clientsOf(g));
+  const { searchId } = await svc.searchWithStatus(g.request);
+  const ok = await app.handleGetPage(svc, { searchId, sort: "fastest", limit: 4 });
+  assert.equal(ok.status, 200);
+  const expected = referenceOrder(referenceOffers(g.suppliers, g.request.passengers), "fastest").slice(0, 4);
+  assert.deepEqual(ok.body.offers.map((o: It) => o.id), expected.map((o) => o.id));
+  assert.equal(typeof ok.body.nextCursor, "string");
+  const next = await app.handleGetPage(svc, { searchId, sort: "fastest", limit: 4, cursor: ok.body.nextCursor });
+  assert.equal(next.status, 200);
+  assert.equal(next.body.offers[0].id, referenceOrder(referenceOffers(g.suppliers, g.request.passengers), "fastest")[4].id);
+  assert.equal((await app.handleGetPage(svc, { searchId, limit: 0 })).status, 400);
+  assert.equal((await app.handleGetPage(svc, { searchId, cursor: "garbage" })).status, 400);
+  assert.equal((await app.handleGetPage(svc, { searchId: "no-such-search" })).status, 404);
+  const search = await app.handleSearch(svc, g.request);
+  assert.equal(search.status, 200);
+  assert.deepEqual(Object.keys(search.body).sort(), ["page", "partial", "searchId", "suppliers", "total"]);
 });
