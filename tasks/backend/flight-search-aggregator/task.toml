@@ -1,0 +1,49 @@
+schema_version = "1.4"
+# Harbor's trial reward is the mean of the three stage rewards (each = fraction of hidden tests passed).
+multi_step_reward_strategy = "mean"
+
+[task]
+name = "interviewbench/flight-search-aggregator"
+version = "1.0.0"
+description = "Multi-supplier flight search: merge, deadlines, off-thread parsing"
+authors = [{ name = "interviewbench" }]
+keywords = ["typescript", "nodejs", "concurrency", "worker-threads", "performance"]
+
+[metadata]
+category = "backend"                       # must match the folder: tasks/backend/
+tags = ["typescript", "nodejs", "concurrency", "worker-threads", "performance", "parsing", "travel"]
+difficulty = "hard"                        # Harbor vocabulary: easy | medium | hard
+expert_time_estimate_min = 60
+junior_time_estimate_min = 180
+
+[metadata.interviewbench]
+level = "senior"                           # junior | mid | senior
+language = "typescript"
+time_limit_minutes = 120
+# How the candidate's own tests are run (from $APP_DIR). Needs Node.js >= 24.11 (built-in type
+# stripping); with the local runner that means on the host.
+candidate_tests = 'node --test --test-force-exit --test-reporter=junit --test-reporter-destination="$LOGS_DIR/junit.xml" --test-reporter=spec --test-reporter-destination=stdout "tests/**/*.test.ts"'
+
+[[steps]]
+name = "stage-1"
+[steps.agent]
+timeout_sec = 1800
+
+[[steps]]
+name = "stage-2"
+[steps.agent]
+timeout_sec = 1800
+
+[[steps]]
+name = "stage-3"
+[steps.agent]
+timeout_sec = 1800
+
+[verifier]
+# Worst case (every test hangs until its per-test timeout) is ~380 s per stage; see tests/test.sh.
+timeout_sec = 420
+
+[environment]
+build_timeout_sec = 600
+cpus = 2                                   # stage 3 measures event-loop responsiveness with 1 parser thread
+memory_mb = 4096

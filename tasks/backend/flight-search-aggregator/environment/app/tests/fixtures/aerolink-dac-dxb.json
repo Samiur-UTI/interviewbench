@@ -1,0 +1,62 @@
+{
+  "searchId": "al-7f3a",
+  "currency": "BDT",
+  "offers": [
+    {
+      "offerId": "AL-000123",
+      "validatingCarrier": "XB",
+      "seatsLeft": 4,
+      "journeys": [
+        { "segments": [
+          { "carrier": "XB", "flightNo": "581", "from": "DAC", "to": "DXB",
+            "dep": "2026-12-01T21:40:00+06:00", "arr": "2026-12-02T01:05:00+04:00", "cabin": "Y", "rbd": "K" }
+        ] },
+        { "segments": [
+          { "carrier": "XB", "flightNo": "582", "from": "DXB", "to": "DAC",
+            "dep": "2026-12-10T03:15:00+04:00", "arr": "2026-12-10T10:20:00+06:00", "cabin": "Y", "rbd": "K" }
+        ] }
+      ],
+      "price": {
+        "filedCurrency": "USD",
+        "base": "38450.00",
+        "taxes": [
+          { "code": "YQ", "amount": "1980.50" },
+          { "code": "AE", "amount": "3820.25" },
+          { "code": "BD", "amount": "3105.00" }
+        ]
+      },
+      "fareComponents": [{ "fareBasis": "KOWBD", "segments": [1], "filedAmount": "315.00" }],
+      "baggageAllowances": [{ "pieces": 1, "weightKg": 30 }],
+      "brandAttributes": [{ "code": "SAVER", "refundable": false }],
+      "paxBreakdown": [{ "type": "ADT", "count": 1 }]
+    },
+    {
+      "offerId": "AL-000124",
+      "validatingCarrier": "ZQ",
+      "seatsLeft": 1,
+      "journeys": [
+        { "segments": [
+          { "carrier": "ZQ", "flightNo": "311", "from": "DAC", "to": "DXB",
+            "dep": "2026-12-01T09:10:00+06:00", "arr": "2026-12-01T12:45:00+04:00", "cabin": "Y", "rbd": "M" }
+        ] },
+        { "segments": [
+          { "carrier": "ZQ", "flightNo": "312", "from": "DXB", "to": "DAC",
+            "dep": "2026-12-10T14:00:00+04:00", "arr": "2026-12-10T20:50:00+06:00", "cabin": "Y", "rbd": "M" }
+        ] }
+      ],
+      "price": {
+        "filedCurrency": "AED",
+        "base": "39875.40",
+        "taxes": [
+          { "code": "YQ", "amount": "2050.10" },
+          { "code": "AE", "amount": "4100.60" },
+          { "code": "BD", "amount": "3105.00" }
+        ]
+      },
+      "fareComponents": [{ "fareBasis": "MRTAE", "segments": [1, 2], "filedAmount": "1195.00" }],
+      "baggageAllowances": [{ "pieces": 2, "weightKg": 23 }],
+      "brandAttributes": [{ "code": "FLEX", "refundable": true }],
+      "paxBreakdown": [{ "type": "ADT", "count": 1 }]
+    }
+  ]
+}
