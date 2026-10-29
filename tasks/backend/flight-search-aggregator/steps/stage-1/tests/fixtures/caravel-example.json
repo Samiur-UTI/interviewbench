@@ -1,0 +1,263 @@
+{
+  "meta": { "resultCount": 3, "currency": "USD", "searchId": "cv-91c2e0" },
+  "offers": [
+    {
+      "type": "fare-offer",
+      "offerId": "1",
+      "channel": "GDS",
+      "oneWayCombinable": false,
+      "lastTicketingDate": "2026-11-24",
+      "seatsBookable": 4,
+      "journeys": [
+        {
+          "elapsed": "PT11H55M",
+          "segments": [
+            {
+              "segRef": "1",
+              "board": { "airport": "DXB", "terminal": "3", "localTime": "2026-12-01T22:30:00" },
+              "alight": { "airport": "DEL", "terminal": "3", "localTime": "2026-12-02T03:00:00" },
+              "airline": "XB", "flightNo": "581",
+              "equipment": { "type": "738" },
+              "operatedBy": { "airline": "XB" },
+              "blockTime": "PT3H0M", "stopCount": 0
+            },
+            {
+              "segRef": "2",
+              "board": { "airport": "DEL", "terminal": "3", "localTime": "2026-12-02T06:15:00" },
+              "alight": { "airport": "SIN", "terminal": "2", "localTime": "2026-12-02T14:25:00" },
+              "airline": "XB", "flightNo": "4417",
+              "equipment": { "type": "320" },
+              "operatedBy": { "airline": "ZK" },
+              "blockTime": "PT5H40M", "stopCount": 0
+            }
+          ]
+        },
+        {
+          "elapsed": "PT7H25M",
+          "segments": [
+            {
+              "segRef": "3",
+              "board": { "airport": "SIN", "terminal": "3", "localTime": "2026-12-08T01:35:00" },
+              "alight": { "airport": "DXB", "terminal": "1", "localTime": "2026-12-08T05:00:00" },
+              "airline": "ZK", "flightNo": "9",
+              "equipment": { "type": "359" },
+              "operatedBy": { "airline": "ZK" },
+              "blockTime": "PT7H25M", "stopCount": 0
+            }
+          ]
+        }
+      ],
+      "fare": {
+        "currency": "USD", "total": "1406.80", "base": "1133.00",
+        "fees": [ { "amount": "0.00", "kind": "SUPPLIER" }, { "amount": "0.00", "kind": "TICKETING" } ],
+        "grandTotal": "1406.80"
+      },
+      "pricingFlags": { "fareType": ["PUBLISHED"], "includedBagsOnly": false },
+      "validatingAirlines": ["XB"],
+      "travellerPricing": [
+        {
+          "travellerId": "1", "fareOption": "STANDARD", "paxType": "ADULT",
+          "price": { "currency": "USD", "total": "508.35", "base": "412.00" },
+          "segmentFares": [
+            { "segRef": "1", "cabin": "ECONOMY", "fareBasis": "KLOWXW", "brand": "SAVER", "rbd": "K", "checkedBags": { "pieces": 1 } },
+            { "segRef": "2", "cabin": "ECONOMY", "fareBasis": "KLOWXW", "brand": "SAVER", "rbd": "K", "checkedBags": { "pieces": 1 } },
+            { "segRef": "3", "cabin": "ECONOMY", "fareBasis": "QSAV1", "brand": "SAVER", "rbd": "Q", "checkedBags": { "weight": 20, "unit": "KG" } }
+          ]
+        },
+        {
+          "travellerId": "2", "fareOption": "STANDARD", "paxType": "ADULT",
+          "price": { "currency": "USD", "total": "508.35", "base": "412.00" },
+          "segmentFares": [
+            { "segRef": "1", "cabin": "ECONOMY", "fareBasis": "KLOWXW", "brand": "SAVER", "rbd": "K", "checkedBags": { "pieces": 1 } },
+            { "segRef": "2", "cabin": "ECONOMY", "fareBasis": "KLOWXW", "brand": "SAVER", "rbd": "K", "checkedBags": { "pieces": 1 } },
+            { "segRef": "3", "cabin": "ECONOMY", "fareBasis": "QSAV1", "brand": "SAVER", "rbd": "Q", "checkedBags": { "weight": 20, "unit": "KG" } }
+          ]
+        },
+        {
+          "travellerId": "3", "fareOption": "STANDARD", "paxType": "CHILD",
+          "price": { "currency": "USD", "total": "390.10", "base": "309.00" },
+          "segmentFares": [
+            { "segRef": "1", "cabin": "ECONOMY", "fareBasis": "KLOWXWCH", "brand": "SAVER", "rbd": "K", "checkedBags": { "pieces": 1 } },
+            { "segRef": "2", "cabin": "ECONOMY", "fareBasis": "KLOWXWCH", "brand": "SAVER", "rbd": "K", "checkedBags": { "pieces": 1 } },
+            { "segRef": "3", "cabin": "ECONOMY", "fareBasis": "QSAV1CH", "brand": "SAVER", "rbd": "Q", "checkedBags": { "weight": 20, "unit": "KG" } }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "fare-offer",
+      "offerId": "2",
+      "channel": "GDS",
+      "oneWayCombinable": false,
+      "lastTicketingDate": "2026-11-24",
+      "seatsBookable": 2,
+      "journeys": [
+        {
+          "elapsed": "PT11H55M",
+          "segments": [
+            {
+              "segRef": "1",
+              "board": { "airport": "DXB", "terminal": "3", "localTime": "2026-12-01T22:30:00" },
+              "alight": { "airport": "DEL", "terminal": "3", "localTime": "2026-12-02T03:00:00" },
+              "airline": "XB", "flightNo": "581",
+              "equipment": { "type": "738" },
+              "operatedBy": { "airline": "XB" },
+              "blockTime": "PT3H0M", "stopCount": 0
+            },
+            {
+              "segRef": "2",
+              "board": { "airport": "DEL", "terminal": "3", "localTime": "2026-12-02T06:15:00" },
+              "alight": { "airport": "SIN", "terminal": "2", "localTime": "2026-12-02T14:25:00" },
+              "airline": "XB", "flightNo": "4417",
+              "equipment": { "type": "320" },
+              "operatedBy": { "airline": "ZK" },
+              "blockTime": "PT5H40M", "stopCount": 0
+            }
+          ]
+        },
+        {
+          "elapsed": "PT7H25M",
+          "segments": [
+            {
+              "segRef": "3",
+              "board": { "airport": "SIN", "terminal": "3", "localTime": "2026-12-08T01:35:00" },
+              "alight": { "airport": "DXB", "terminal": "1", "localTime": "2026-12-08T05:00:00" },
+              "airline": "ZK", "flightNo": "9",
+              "equipment": { "type": "359" },
+              "operatedBy": { "airline": "ZK" },
+              "blockTime": "PT7H25M", "stopCount": 0
+            }
+          ]
+        }
+      ],
+      "fare": {
+        "currency": "USD", "total": "3883.60", "base": "3547.50",
+        "fees": [ { "amount": "0.00", "kind": "SUPPLIER" }, { "amount": "0.00", "kind": "TICKETING" } ],
+        "grandTotal": "3883.60"
+      },
+      "pricingFlags": { "fareType": ["PUBLISHED"], "includedBagsOnly": false },
+      "validatingAirlines": ["XB"],
+      "travellerPricing": [
+        {
+          "travellerId": "1", "fareOption": "STANDARD", "paxType": "ADULT",
+          "price": { "currency": "USD", "total": "1408.45", "base": "1290.00" },
+          "segmentFares": [
+            { "segRef": "3", "cabin": "ECONOMY", "fareBasis": "QSAV1", "brand": "FLEX", "rbd": "Q", "checkedBags": { "weight": 20, "unit": "KG" } },
+            { "segRef": "1", "cabin": "BUSINESS", "fareBasis": "JFLXXW", "brand": "FLEX", "rbd": "J", "checkedBags": { "pieces": 2 } },
+            { "segRef": "2", "cabin": "BUSINESS", "fareBasis": "JFLXXW", "brand": "FLEX", "rbd": "J", "checkedBags": { "pieces": 2 } }
+          ]
+        },
+        {
+          "travellerId": "2", "fareOption": "STANDARD", "paxType": "ADULT",
+          "price": { "currency": "USD", "total": "1408.45", "base": "1290.00" },
+          "segmentFares": [
+            { "segRef": "3", "cabin": "ECONOMY", "fareBasis": "QSAV1", "brand": "FLEX", "rbd": "Q", "checkedBags": { "weight": 20, "unit": "KG" } },
+            { "segRef": "1", "cabin": "BUSINESS", "fareBasis": "JFLXXW", "brand": "FLEX", "rbd": "J", "checkedBags": { "pieces": 2 } },
+            { "segRef": "2", "cabin": "BUSINESS", "fareBasis": "JFLXXW", "brand": "FLEX", "rbd": "J", "checkedBags": { "pieces": 2 } }
+          ]
+        },
+        {
+          "travellerId": "3", "fareOption": "STANDARD", "paxType": "CHILD",
+          "price": { "currency": "USD", "total": "1066.70", "base": "967.50" },
+          "segmentFares": [
+            { "segRef": "3", "cabin": "ECONOMY", "fareBasis": "QSAV1CH", "brand": "FLEX", "rbd": "Q", "checkedBags": { "weight": 20, "unit": "KG" } },
+            { "segRef": "1", "cabin": "BUSINESS", "fareBasis": "JFLXXWCH", "brand": "FLEX", "rbd": "J", "checkedBags": { "pieces": 2 } },
+            { "segRef": "2", "cabin": "BUSINESS", "fareBasis": "JFLXXWCH", "brand": "FLEX", "rbd": "J", "checkedBags": { "pieces": 2 } }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "fare-offer",
+      "offerId": "3",
+      "channel": "GDS",
+      "oneWayCombinable": false,
+      "lastTicketingDate": "2026-11-24",
+      "seatsBookable": 7,
+      "journeys": [
+        {
+          "elapsed": "PT10H55M",
+          "segments": [
+            {
+              "segRef": "4",
+              "board": { "airport": "DXB", "terminal": "3", "localTime": "2026-12-01T08:05:00" },
+              "alight": { "airport": "DEL", "terminal": "3", "localTime": "2026-12-01T12:35:00" },
+              "airline": "XB", "flightNo": "583",
+              "equipment": { "type": "738" },
+              "operatedBy": { "airline": "XB" },
+              "blockTime": "PT3H0M", "stopCount": 0
+            },
+            {
+              "segRef": "5",
+              "board": { "airport": "DEL", "terminal": "3", "localTime": "2026-12-01T14:50:00" },
+              "alight": { "airport": "SIN", "terminal": "2", "localTime": "2026-12-01T23:00:00" },
+              "airline": "XB", "flightNo": "4419",
+              "equipment": { "type": "320" },
+              "operatedBy": { "airline": "ZK" },
+              "blockTime": "PT5H40M", "stopCount": 0
+            }
+          ]
+        },
+        {
+          "elapsed": "PT7H25M",
+          "segments": [
+            {
+              "segRef": "6",
+              "board": { "airport": "SIN", "terminal": "3", "localTime": "2026-12-08T01:35:00" },
+              "alight": { "airport": "DXB", "terminal": "1", "localTime": "2026-12-08T05:00:00" },
+              "airline": "ZK", "flightNo": "9",
+              "equipment": { "type": "359" },
+              "operatedBy": { "airline": "ZK" },
+              "blockTime": "PT7H25M", "stopCount": 0
+            }
+          ]
+        }
+      ],
+      "fare": {
+        "currency": "USD", "total": "1368.30", "base": "1094.50",
+        "fees": [ { "amount": "0.00", "kind": "SUPPLIER" }, { "amount": "3.50", "kind": "TICKETING" } ],
+        "grandTotal": "1371.80"
+      },
+      "pricingFlags": { "fareType": ["PUBLISHED"], "includedBagsOnly": false },
+      "validatingAirlines": ["XB"],
+      "travellerPricing": [
+        {
+          "travellerId": "1", "fareOption": "STANDARD", "paxType": "ADULT",
+          "price": { "currency": "USD", "total": "494.35", "base": "398.00" },
+          "segmentFares": [
+            { "segRef": "4", "cabin": "ECONOMY", "fareBasis": "LSTPXW", "brand": "SAVER", "rbd": "L", "checkedBags": { "pieces": 1 } },
+            { "segRef": "5", "cabin": "ECONOMY", "fareBasis": "LSTPXW", "brand": "SAVER", "rbd": "L", "checkedBags": { "pieces": 1 } },
+            { "segRef": "6", "cabin": "ECONOMY", "fareBasis": "LSTPXW", "brand": "SAVER", "rbd": "Q", "checkedBags": { "pieces": 1 } }
+          ]
+        },
+        {
+          "travellerId": "2", "fareOption": "STANDARD", "paxType": "ADULT",
+          "price": { "currency": "USD", "total": "494.35", "base": "398.00" },
+          "segmentFares": [
+            { "segRef": "4", "cabin": "ECONOMY", "fareBasis": "LSTPXW", "brand": "SAVER", "rbd": "L", "checkedBags": { "pieces": 1 } },
+            { "segRef": "5", "cabin": "ECONOMY", "fareBasis": "LSTPXW", "brand": "SAVER", "rbd": "L", "checkedBags": { "pieces": 1 } },
+            { "segRef": "6", "cabin": "ECONOMY", "fareBasis": "LSTPXW", "brand": "SAVER", "rbd": "Q", "checkedBags": { "pieces": 1 } }
+          ]
+        },
+        {
+          "travellerId": "3", "fareOption": "STANDARD", "paxType": "CHILD",
+          "price": { "currency": "USD", "total": "379.60", "base": "298.50" },
+          "segmentFares": [
+            { "segRef": "4", "cabin": "ECONOMY", "fareBasis": "LSTPXWCH", "brand": "SAVER", "rbd": "L", "checkedBags": { "pieces": 1 } },
+            { "segRef": "5", "cabin": "ECONOMY", "fareBasis": "LSTPXWCH", "brand": "SAVER", "rbd": "L", "checkedBags": { "pieces": 1 } },
+            { "segRef": "6", "cabin": "ECONOMY", "fareBasis": "LSTPXWCH", "brand": "SAVER", "rbd": "Q", "checkedBags": { "pieces": 1 } }
+          ]
+        }
+      ]
+    }
+  ],
+  "lookups": {
+    "airports": {
+      "DEL": { "city": "DEL", "country": "IN", "utcOffset": "+05:30" },
+      "SIN": { "city": "SIN", "country": "SG", "utcOffset": "+08:00" },
+      "DXB": { "city": "DXB", "country": "AE", "utcOffset": "+04:00" }
+    },
+    "airlines": { "XB": "XEBEC AIR", "ZK": "ZEPHYR KAPPA AIRWAYS" },
+    "equipment": { "738": "BOEING 737-800", "320": "AIRBUS A320", "359": "AIRBUS A350-900" }
+  }
+}
