@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import shutil
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -54,6 +54,8 @@ class RevealedStage:
 class JudgeSettings:
     backend: str | None = None
     model: str | None = None
+    base_url: str | None = None
+    api_key: str | None = field(default=None, repr=False)
 
 
 @dataclass
@@ -147,7 +149,8 @@ def grade_round(
         if judge == "api":
             run_judge(
                 result, workspace, runner=runner, model=settings.model, timeout=timeout,
-                backend=settings.backend, progress=progress,
+                backend=settings.backend, api_key=settings.api_key, base_url=settings.base_url,
+                progress=progress,
             )
         elif judge != "none":
             request = prepare_judge(result, workspace, runner=runner, timeout=timeout, progress=progress)
@@ -155,6 +158,8 @@ def grade_round(
                 apply_judgment(result, request, parse_reply(reply or ""), reply_label)
     except (JudgeError, RunnerError) as exc:
         judge_error = str(exc)
+        if settings.api_key:  # a provider's error can quote the key it was given
+            judge_error = judge_error.replace(settings.api_key, "[API key]")
     (report_path or workspace / REPORT).write_text(to_markdown(result), encoding="utf-8")
     return GradeOutcome(result, request, judge_error)
 

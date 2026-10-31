@@ -109,12 +109,16 @@ def run_judge(
     model: str | None = None,
     timeout: int | None = None,
     backend: str | None = None,
+    api_key: str | None = None,
+    base_url: str | None = None,
     progress: Progress = no_progress,
 ) -> None:
     """Fill in the judge criteria of `result` and attach the review. Raises JudgeError.
 
     backend: "claude" (Anthropic API) or "openai" (any OpenAI-compatible chat API: OpenRouter, Gemini,
     Groq, Ollama, LM Studio, vLLM...). Defaults to $IB_JUDGE_BACKEND, else "claude".
+    api_key, base_url: override the backend's environment variables. They stay arguments: LocalRunner
+    hands its environment to candidate code, so a key must never go into os.environ.
     """
     backend = backend or os.environ.get("IB_JUDGE_BACKEND") or "claude"
     if backend not in BACKENDS:
@@ -123,11 +127,16 @@ def run_judge(
     if not model:
         raise JudgeError("The openai backend needs a model: pass --judge-model or set IB_JUDGE_MODEL")
     # Check the backend's settings before spending time on tests.
-    label = model if backend == "claude" else f"{model} via {_openai_base_url()}"
+    label = model if backend == "claude" else f"{model} via {_openai_base_url(base_url)}"
     request = prepare_judge(result, workspace, runner=runner, timeout=timeout, progress=progress)
     progress(f"Waiting for the AI judge ({model})")
-    call = _call_claude if backend == "claude" else _call_openai_compatible
-    output = call(model, system=request.system, user=request.user, schema=request.schema)
+    prompt = {"system": request.system, "user": request.user, "schema": request.schema}
+    if api_key:
+        prompt["api_key"] = api_key
+    if backend == "claude":
+        output = _call_claude(model, **prompt)
+    else:
+        output = _call_openai_compatible(model, base_url=base_url, **prompt)
     apply_judgment(result, request, output, label)
 
 
@@ -371,13 +380,13 @@ def _output_schema(criteria: list[Criterion]) -> dict:
 # --- API call -------------------------------------------------------------------------------
 
 
-def _call_claude(model: str, *, system: str, user: str, schema: dict) -> dict:
+def _call_claude(model: str, *, system: str, user: str, schema: dict, api_key: str | None = None) -> dict:
     try:
         import anthropic
     except ImportError as exc:
         raise JudgeError('The AI judge needs the Anthropic SDK: pip install "interviewbench[judge]"') from exc
 
-    client = anthropic.Anthropic()
+    client = anthropic.Anthropic(api_key=api_key) if api_key else anthropic.Anthropic()
     try:
         with client.beta.messages.stream(
             model=model,
@@ -392,7 +401,8 @@ def _call_claude(model: str, *, system: str, user: str, schema: dict) -> dict:
         ) as stream:
             message = stream.get_final_message()
     except anthropic.AuthenticationError as exc:
-        raise JudgeError("Claude API authentication failed: set ANTHROPIC_API_KEY or run `ant auth login`") from exc
+        hint = "check the API key" if api_key else "set ANTHROPIC_API_KEY or run `ant auth login`"
+        raise JudgeError(f"Claude API authentication failed: {hint}") from exc
     except anthropic.APIError as exc:
         raise JudgeError(f"Claude API error: {exc}") from exc
 
@@ -406,8 +416,8 @@ def _call_claude(model: str, *, system: str, user: str, schema: dict) -> dict:
     return json.loads(texts[-1])
 
 
-def _openai_base_url() -> str:
-    base = os.environ.get("IB_JUDGE_BASE_URL", "").strip()
+def _openai_base_url(base_url: str | None = None) -> str:
+    base = (base_url or os.environ.get("IB_JUDGE_BASE_URL", "")).strip()
     if not base:
         raise JudgeError(
             "The openai backend needs IB_JUDGE_BASE_URL, the provider's OpenAI-compatible endpoint, "
@@ -416,14 +426,16 @@ def _openai_base_url() -> str:
     return base.rstrip("/")
 
 
-def _call_openai_compatible(model: str, *, system: str, user: str, schema: dict) -> dict:
+def _call_openai_compatible(
+    model: str, *, system: str, user: str, schema: dict, api_key: str | None = None, base_url: str | None = None
+) -> dict:
     """Any OpenAI-compatible chat completions API, with the standard library only (no SDK needed).
 
     Not every provider enforces JSON schemas, so the schema goes in the prompt and the reply is
     parsed leniently, then normalized before scoring.
     """
-    url = f"{_openai_base_url()}/chat/completions"
-    key = os.environ.get("IB_JUDGE_API_KEY") or os.environ.get("OPENAI_API_KEY")
+    url = f"{_openai_base_url(base_url)}/chat/completions"
+    key = api_key or os.environ.get("IB_JUDGE_API_KEY") or os.environ.get("OPENAI_API_KEY")
     body = {
         "model": model,
         "messages": [
@@ -441,7 +453,7 @@ def _call_openai_compatible(model: str, *, system: str, user: str, schema: dict)
             data = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", "replace")[:500]
-        hint = " (check IB_JUDGE_API_KEY)" if exc.code in (401, 403) else ""
+        hint = f" (check {'the API key' if api_key else 'IB_JUDGE_API_KEY'})" if exc.code in (401, 403) else ""
         raise JudgeError(f"{url} returned HTTP {exc.code}{hint}: {detail}") from exc
     except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
         raise JudgeError(f"Could not get an answer from {url}: {exc}") from exc
