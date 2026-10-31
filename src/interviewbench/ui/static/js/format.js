@@ -93,3 +93,9 @@ export function formatPercent(fraction) {
 export function formatTokens(count) {
   return `about ${Number(count ?? 0).toLocaleString("en-US")} tokens`;
 }
+
+// A brief opens with its stage title, which the page already shows as a heading.
+export function withoutTitle(markdown, title) {
+  const [first, ...rest] = String(markdown ?? "").trimStart().split("\n");
+  return first.replace(/^#+\s*/, "").trim() === title ? rest.join("\n").trimStart() : String(markdown ?? "");
+}
