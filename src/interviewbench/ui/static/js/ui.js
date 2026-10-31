@@ -147,7 +147,3 @@ export function notice(kind, content, action) {
 export function badge(kind, label, name) {
   return h("span", { class: `badge ${kind}` }, name && icon(name), label);
 }
-
-export function statusRow(...items) {
-  return h("p", { class: "meta" }, items.filter(Boolean).map((item, n) => [n > 0 && " · ", item]));
-}

@@ -263,8 +263,8 @@ export function show(main, params, signal) {
         renderStrip();
       }, signal);
       if (!signal.aborted) await jobEnded(finished);
-    } catch {
-      // a 401: the app has already moved to its sign-in screen
+    } catch (err) {
+      if (err.status !== 401) throw err;  // on a 401 the app has moved to its sign-in screen
     }
   }
 

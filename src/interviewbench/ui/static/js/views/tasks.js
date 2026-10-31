@@ -116,7 +116,7 @@ export function show(main, _params, signal) {
   main.append(root);
 
   function render(tasks, rounds) {
-    const list = h("div", { "aria-live": "off" });
+    const list = h("div");
     const count = h("p", { class: "meta filter-count", role: "status" });
     const { options, element: optionsField } = startOptions();
 
