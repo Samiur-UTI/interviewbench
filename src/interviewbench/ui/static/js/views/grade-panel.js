@@ -137,6 +137,13 @@ function connectedRoute(ctx, grade) {
       h("a", { href: "#/settings" }, "Open Settings")));
 }
 
+const prepareButton = (ctx, label) => button(label, {
+  icon: "play",
+  "data-fk": "judge-prepare",
+  blocked: ctx.blocked,
+  onClick: () => ctx.runJob(() => api.grade(ctx.round.id, "prepare")),
+});
+
 function promptSteps(ctx, grade) {
   const slot = h("div", { class: "stack" }, loadingBlock("Loading the prompt…"));
   const ready = (data) => {
@@ -149,9 +156,11 @@ function promptSteps(ctx, grade) {
     ready(ctx.memo.judgePrompt);
   } else {
     api.judgePrompt(ctx.round.id).then(ready).catch((err) => {
-      slot.replaceChildren(err.status === 404
-        ? notice("warn", "The prompt is gone: it's only kept in memory, and the server has restarted. Prepare it again.")
-        : notice("fail", `Couldn't load the prompt. ${err.message}`));
+      slot.replaceChildren(
+        err.status === 404
+          ? notice("warn", "The prompt is gone: it's only kept in memory, and the server has restarted.")
+          : notice("fail", `Couldn't load the prompt. ${err.message}`),
+        prepareButton(ctx, "Prepare it again"));
     });
   }
   return slot;
@@ -187,12 +196,7 @@ function chatbotRoute(ctx, grade) {
     h("ol", { class: "steps" },
       h("li", null,
         h("p", { class: "step-title-text" }, "Get the prompt"),
-        grade?.judge_prepared ? promptSteps(ctx, grade) : button("Prepare the prompt", {
-          icon: "play",
-          "data-fk": "judge-prepare",
-          blocked: ctx.blocked,
-          onClick: () => ctx.runJob(() => api.grade(ctx.round.id, "prepare")),
-        })),
+        grade?.judge_prepared ? promptSteps(ctx, grade) : prepareButton(ctx, "Prepare the prompt")),
       h("li", null,
         h("p", { class: "step-title-text" }, "Paste it into a chatbot"),
         h("p", { class: "muted" }, "Ask in a new chat, and paste all of it.")),

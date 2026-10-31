@@ -46,7 +46,7 @@ function newTaskForm(categories, templates) {
 
 function validation(tasks, signal) {
   const results = h("div", { class: "stack" });
-  const progress = h("div", { class: "validate-progress", role: "status" });
+  const progress = h("div", { role: "status" });
   const run = h("input", { type: "checkbox" });
   const chosen = new Set();
   let job = null;
@@ -87,8 +87,9 @@ function validation(tasks, signal) {
         job = update;
         showProgress();
       }, signal);
-    } catch {
-      return;  // a 401: the app has moved to its sign-in screen
+    } catch (err) {
+      if (err.status === 401) return;  // the app has moved to its sign-in screen
+      throw err;
     }
     if (signal.aborted) return;
     job = null;
