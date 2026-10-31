@@ -5,7 +5,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 from .runner import Completed, Runner, RunnerError, Sandbox, get_runner
 from .tasks import WORKSPACE_FILES, Criterion, Stage, Task
@@ -13,11 +13,16 @@ from .tasks import WORKSPACE_FILES, Criterion, Stage, Task
 if TYPE_CHECKING:
     from .judge import Review
 
+Progress = Callable[[str], None]  # called with a sentence for the candidate before each long step
 CANDIDATE_TESTS = 0  # StageResult.stage for the candidate's own test suite
 _IGNORE = shutil.ignore_patterns(
     ".git", ".venv", ".vscode", "node_modules", "__pycache__", ".pytest_cache", "*.pyc",
     *WORKSPACE_FILES,
 )
+
+
+def no_progress(phase: str) -> None:
+    pass
 
 
 @dataclass
@@ -155,10 +160,17 @@ def _tail(text: str, lines: int = 15) -> str:
 
 
 def grade(
-    task: Task, workspace: Path, runner: Runner | None = None, timeout: int | None = None
+    task: Task,
+    workspace: Path,
+    runner: Runner | None = None,
+    timeout: int | None = None,
+    progress: Progress = no_progress,
 ) -> GradeResult:
     runner = runner or get_runner()
-    stages = [run_stage_tests(task, workspace, s.number, runner, timeout) for s in task.stages]
+    stages = []
+    for s in task.stages:
+        progress(f"Running hidden tests for stage {s.number} of {len(task.stages)}")
+        stages.append(run_stage_tests(task, workspace, s.number, runner, timeout))
     by_stage = {r.stage: r for r in stages}
     scores: list[CriterionScore] = []
     for c in task.criteria:

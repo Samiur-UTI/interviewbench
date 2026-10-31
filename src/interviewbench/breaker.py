@@ -14,7 +14,7 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 
-from .grader import _copy_app, _tail, build_reference
+from .grader import Progress, _copy_app, _tail, build_reference, no_progress
 from .judge import _files_block, _read_tree
 from .runner import Runner, RunnerError, Sandbox
 from .tasks import Task
@@ -30,7 +30,14 @@ class Attack:
     detail: str = ""
 
 
-def run_break(task: Task, workspace: Path, attack: Path, runner: Runner, timeout: int | None = None) -> list[Attack]:
+def run_break(
+    task: Task,
+    workspace: Path,
+    attack: Path,
+    runner: Runner,
+    timeout: int | None = None,
+    progress: Progress = no_progress,
+) -> list[Attack]:
     """Run `attack` against the candidate's code and the reference solution. Raises RunnerError."""
     if not task.candidate_tests:
         raise RunnerError(f"Task '{task.id}' defines no candidate_tests command, so attack tests can't run")
@@ -39,10 +46,13 @@ def run_break(task: Task, workspace: Path, attack: Path, runner: Runner, timeout
     destination = Path(task.attack_dir) / attack.name
     with tempfile.TemporaryDirectory(prefix="ib-break-", ignore_cleanup_errors=True) as tmp:
         tmp_path = Path(tmp)
+        progress("Building the reference solution")
         reference = build_reference(task, tmp_path / "reference", runner)
         baseline = _cases(task, runner, reference, tmp_path / "logs-baseline", timeout)
+        progress("Running the attack tests on the reference solution")
         _place(attack, reference / destination)
         on_reference = _cases(task, runner, reference, tmp_path / "logs-reference", timeout)
+        progress("Running the attack tests on your code")
         yours = _copy_app(workspace, tmp_path / "yours")
         _place(attack, yours / destination)
         on_yours = _cases(task, runner, yours, tmp_path / "logs-yours", timeout)
