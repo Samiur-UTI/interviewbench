@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import shutil
 import tempfile
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import NoReturn, Optional
 
@@ -11,7 +11,7 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.table import Table
 
-from . import __version__
+from . import __version__, rounds
 from . import workspace as ws
 from .breaker import BAD_TEST, REAL_BREAK, attack_prompt, run_break
 from .grader import build_reference, grade as grade_workspace, run_candidate_tests
@@ -104,24 +104,11 @@ def start(
     """Start a round: starter code in its own folder, TASK.md, git, editor tasks, and your editor opened on it."""
     task = _task_or_exit(task_id)
     dest = (dir or ws.default_workspace(task.id)).expanduser()
-    if ws.is_inside(dest, bench_root()):
-        _fail(
-            f"{dest} is inside {bench_root()}, which holds the hidden tests and reference solutions, "
-            f"so an AI assistant working there could read them. Pick a folder outside it, or leave out "
-            f"--dir to use {ws.default_workspace(task.id)}."
-        )
-    if dest.exists():
-        if not force:
-            _fail(f"{dest} already exists. Use --force to overwrite it (your changes there will be lost).")
-        ws.remove_tree(dest)
-    shutil.copytree(task.starter_dir, dest)
-    wrote_tasks = ws.write_editor_tasks(dest)
-    git_ok = git and ws.git_init(dest, ignored=[ws.EDITOR_TASKS.as_posix()] if wrote_tasks else [])
-    started = datetime.now(timezone.utc)
-    ws.write_marker(dest, {"task": task.id, "started_at": started.isoformat(), "stage": 1, "git": git_ok})
-    (dest / BRIEF).write_text(ws.brief(task, started, git_ok), encoding="utf-8")
-
-    editor = ws.open_in_editor(dest) if open_editor else None
+    try:
+        started = rounds.start_round(task, dest, force=force, git=git, open_editor=open_editor)
+    except rounds.RoundError as exc:
+        _fail(str(exc))
+    editor = started.editor
     console.print(f"[bold]{task.title}[/bold] — {task.time_limit_minutes} min, {len(task.stages)} stages")
     console.print(f"Workspace: [green]{dest}[/green]" + (f" (opened in {editor})" if editor else ""))
     if not editor:
@@ -129,10 +116,9 @@ def start(
             "Open [bold]only this folder[/bold] in your editor, so your AI assistant can't see the "
             f"hidden tests:  [bold]cd \"{dest}\"[/bold] then e.g. [bold]code .[/bold]"
         )
-    if git and not git_ok:
+    if git and not started.git:
         console.print("[dim]git isn't available, so the workspace is not a git repo.[/dim]")
-    ends = started.astimezone() + timedelta(minutes=task.time_limit_minutes)
-    console.print(f"The brief is in {BRIEF}. Your {task.time_limit_minutes} minutes started now; time is up at {ends:%H:%M}.")
+    console.print(f"The brief is in {BRIEF}. Your {task.time_limit_minutes} minutes started now; time is up at {started.ends:%H:%M}.")
     _print_stage(task, 1)
     console.print(
         "In the workspace: [bold]ib test[/bold] runs your tests, [bold]ib next[/bold] reveals the next "
@@ -153,16 +139,13 @@ def next_stage(
 ) -> None:
     """Reveal the next stage: commit and tag your work so far, then add the next brief to TASK.md."""
     task, marker = _workspace_or_exit(dir)
-    current = int(marker.get("stage", 1))
-    if current >= len(task.stages):
-        _fail(f"All {len(task.stages)} stages are already revealed. Run `ib grade` when you're done.")
-    if marker.get("git") and ws.checkpoint(dir, f"Stage {current} done", tag=f"stage-{current}"):
-        console.print(f"Committed your work and tagged it [bold]stage-{current}[/bold].")
-    number = current + 1
-    marker["stage"] = number
-    ws.write_marker(dir, marker)
-    ws.append_stage(dir, task, number)
-    _print_stage(task, number)
+    try:
+        revealed = rounds.next_stage(task, dir, marker)
+    except rounds.RoundError as exc:
+        _fail(str(exc))
+    if revealed.tagged:
+        console.print(f"Committed your work and tagged it [bold]{revealed.tagged}[/bold].")
+    _print_stage(task, revealed.number)
     console.print(f"Added to {BRIEF}.")
 
 
