@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import {
   countdown, describeTimeLeft, formatClock, formatElapsed, formatPercent, formatPoints, formatTimeOfDay,
-  formatTokens, parseTime, plural, timeMilestone, withoutTitle,
+  formatTokens, judgeProblem, parseTime, plural, timeMilestone, withoutTitle,
 } from "../../src/interviewbench/ui/static/js/format.js";
 
 const MIN = 60000;
@@ -75,6 +75,19 @@ test("counts and points", () => {
   assert.equal(formatPoints(null), "0");
   assert.equal(formatPercent(0.666), "67%");
   assert.equal(formatTokens(12345), "about 12,345 tokens");
+});
+
+test("judgeProblem says what's missing, and a local model needs no key", () => {
+  const openai = { backend: "openai", base_url: "https://openrouter.ai/api/v1", model: "m", has_api_key: true };
+  assert.equal(judgeProblem(openai), null);
+  assert.match(judgeProblem({ ...openai, has_api_key: false }), /API key/);
+  assert.match(judgeProblem({ ...openai, base_url: "" }), /API address/);
+  assert.match(judgeProblem({ ...openai, model: "" }), /model/);
+  assert.equal(judgeProblem({ ...openai, base_url: "http://localhost:11434/v1", has_api_key: false }), null);
+  const claude = { backend: "claude", claude_sdk_installed: true, has_api_key: true };
+  assert.equal(judgeProblem(claude), null);
+  assert.match(judgeProblem({ ...claude, has_api_key: false }), /API key/);
+  assert.match(judgeProblem({ ...claude, claude_sdk_installed: false }), /package/);
 });
 
 test("withoutTitle drops only a leading heading that repeats the stage title", () => {
