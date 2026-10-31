@@ -9,6 +9,7 @@ The CLI grades a candidate's (or an LLM's) solution against the rubric.
 
 ## Layout
 - `src/interviewbench/` — CLI (`cli.py`), task/rubric loading + validation (`tasks.py`), candidate workspaces: TASK.md, git, editor tasks (`workspace.py`), running task scripts in Docker or local bash (`runner.py`), grading (`grader.py`), AI judge with claude/openai-compatible/pasted backends (`judge.py`), `ib break` (`breaker.py`), reports (`report.py`)
+- `src/interviewbench/rounds.py` holds the workflows shared by the CLI and `ui/` (the local GUI); keep logic there, not in either front end
 - `tasks/<category>/<task-id>/` — a Harbor multi-step task: `task.toml`, `environment/` (Dockerfile + `app/` starter), `tests/test.sh` (shared verifier), `steps/stage-N/` (instruction.md, hidden tests, solution/solve.sh), plus ib-only `rubric.yaml`
 - `rubrics/` — `base.yaml` + one file per category (a category exists iff its rubric file does)
 - `templates/` — task skeletons for `ib new`
@@ -27,5 +28,5 @@ The CLI grades a candidate's (or an LLM's) solution against the rubric.
 - Every task: starter `environment/app/` must FAIL stage 1 hidden tests; after solutions 1..N, stage N must PASS. `tests/test_tasks.py` enforces this.
 - Follow `docs/TASK_FORMAT.md`. Scripts use `$APP_DIR`/`$TESTS_DIR`/`$SOLUTION_DIR`/`$LOGS_DIR`, never hard-coded paths, and keep LF line endings.
 - Never add language-specific logic to the grader; it belongs in the task's `test.sh` and Dockerfile.
-- Keep dependencies minimal; no web UI in v1.
+- Keep dependencies minimal. The local GUI (`ib ui`, see `docs/GUI.md`) uses only the standard library and hand-written static files: no npm, no build step.
 - Coordinate via git: one agent per branch/file area at a time; commit small.
