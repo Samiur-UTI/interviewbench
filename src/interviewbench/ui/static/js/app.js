@@ -5,6 +5,7 @@ import { icon } from "./icons.js";
 import { app, recall, remember, setStatus } from "./state.js";
 import { announce, button, emptyBlock, h } from "./ui.js";
 import { showHowTo } from "./views/howto.js";
+import * as round from "./views/round.js";
 import * as rounds from "./views/rounds.js";
 import * as tasks from "./views/tasks.js";
 
@@ -27,7 +28,7 @@ function parseRoute(hash) {
   const [name, id, panel] = hash.replace(/^#\/?/, "").split("/").map(decodeURIComponent);
   if (name === "tasks" && !id) return { nav: "tasks", title: "Tasks", view: tasks };
   if (name === "rounds" && !id) return { nav: "rounds", title: "Rounds", view: rounds };
-  if (name === "rounds") return { nav: "rounds", title: id, view: notBuilt("Round"), key: id, params: { id, panel } };
+  if (name === "rounds") return { nav: "rounds", title: id, view: round, key: id, params: { id, panel } };
   if (name === "author" && !id) return { nav: "author", title: "Author", view: notBuilt("Author") };
   if (name === "settings" && !id) return { nav: "settings", title: "Settings", view: notBuilt("Settings") };
   return null;
