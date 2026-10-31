@@ -22,7 +22,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .grader import (
-    _IGNORE, CriterionScore, GradeResult, StageResult, build_reference, run_candidate_tests,
+    _IGNORE, CriterionScore, GradeResult, Progress, StageResult, build_reference, no_progress,
+    run_candidate_tests,
 )
 from .runner import Runner, RunnerError, get_runner
 from .tasks import Criterion, Task
@@ -108,6 +109,7 @@ def run_judge(
     model: str | None = None,
     timeout: int | None = None,
     backend: str | None = None,
+    progress: Progress = no_progress,
 ) -> None:
     """Fill in the judge criteria of `result` and attach the review. Raises JudgeError.
 
@@ -122,20 +124,28 @@ def run_judge(
         raise JudgeError("The openai backend needs a model: pass --judge-model or set IB_JUDGE_MODEL")
     # Check the backend's settings before spending time on tests.
     label = model if backend == "claude" else f"{model} via {_openai_base_url()}"
-    request = prepare_judge(result, workspace, runner=runner, timeout=timeout)
+    request = prepare_judge(result, workspace, runner=runner, timeout=timeout, progress=progress)
+    progress(f"Waiting for the AI judge ({model})")
     call = _call_claude if backend == "claude" else _call_openai_compatible
     output = call(model, system=request.system, user=request.user, schema=request.schema)
     apply_judgment(result, request, output, label)
 
 
 def prepare_judge(
-    result: GradeResult, workspace: Path, *, runner: Runner | None = None, timeout: int | None = None
+    result: GradeResult,
+    workspace: Path,
+    *,
+    runner: Runner | None = None,
+    timeout: int | None = None,
+    progress: Progress = no_progress,
 ) -> JudgeRequest:
     """Run the candidate's own tests and build the judge prompt. Raises JudgeError."""
     task = result.task
     criteria = [c for c in task.criteria if c.type == "judge"]
     runner = runner or get_runner()
+    progress("Running your own tests")
     candidate_tests = run_candidate_tests(task, workspace, runner, timeout)
+    progress("Building the reference solution")
     with tempfile.TemporaryDirectory(prefix="ib-", ignore_cleanup_errors=True) as tmp:
         try:
             solution, _ = _read_tree(build_reference(task, Path(tmp) / "solution", runner))

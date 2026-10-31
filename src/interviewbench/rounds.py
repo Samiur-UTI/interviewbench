@@ -11,11 +11,10 @@ import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Callable
 
 from . import workspace as ws
 from .breaker import BAD_TEST, REAL_BREAK, SURVIVED, Attack, attack_prompt, run_break
-from .grader import GradeResult, build_reference, grade
+from .grader import GradeResult, Progress, build_reference, grade, no_progress
 from .judge import JudgeError, JudgeRequest, apply_judgment, parse_reply, prepare_judge, run_judge
 from .report import to_markdown
 from .runner import Runner, RunnerError
@@ -29,10 +28,6 @@ class RoundError(Exception):
 
 
 class AllRevealed(RoundError):
-    pass
-
-
-def _quiet(phase: str) -> None:
     pass
 
 
@@ -138,7 +133,7 @@ def grade_round(
     reply_label: str = "pasted reply",
     timeout: int | None = None,
     report_path: Path | None = None,
-    progress: Callable[[str], None] = _quiet,
+    progress: Progress = no_progress,
 ) -> GradeOutcome:
     """Run the hidden tests, optionally the judge, and write the report. Raises RunnerError.
 
@@ -146,15 +141,16 @@ def grade_round(
     (score a chatbot's `reply`). A judge failure keeps the hidden-test scores and sets `judge_error`.
     """
     settings = settings or JudgeSettings()
-    result = grade(task, workspace, runner, timeout=timeout)
+    result = grade(task, workspace, runner, timeout=timeout, progress=progress)
     request, judge_error = None, None
     try:
         if judge == "api":
-            progress("Running the AI judge")
-            run_judge(result, workspace, runner=runner, model=settings.model, timeout=timeout, backend=settings.backend)
+            run_judge(
+                result, workspace, runner=runner, model=settings.model, timeout=timeout,
+                backend=settings.backend, progress=progress,
+            )
         elif judge != "none":
-            progress("Preparing the judge prompt")
-            request = prepare_judge(result, workspace, runner=runner, timeout=timeout)
+            request = prepare_judge(result, workspace, runner=runner, timeout=timeout, progress=progress)
             if judge == "reply":
                 apply_judgment(result, request, parse_reply(reply or ""), reply_label)
     except (JudgeError, RunnerError) as exc:
@@ -182,16 +178,22 @@ def write_attack_prompt(task: Task, workspace: Path, marker: dict) -> Path:
 
 
 def break_round(
-    task: Task, workspace: Path, attack: Path, runner: Runner, timeout: int | None = None
+    task: Task,
+    workspace: Path,
+    attack: Path,
+    runner: Runner,
+    timeout: int | None = None,
+    progress: Progress = no_progress,
 ) -> BreakOutcome:
     """Run an attack test file. Raises RunnerError."""
-    return BreakOutcome(run_break(task, workspace, attack, runner, timeout))
+    return BreakOutcome(run_break(task, workspace, attack, runner, timeout, progress))
 
 
-def check_task(task: Task, runner: Runner) -> list[str]:
+def check_task(task: Task, runner: Runner, progress: Progress = no_progress) -> list[str]:
     """The starter fails stage 1, and after applying solutions 1..N, stage N's tests all pass."""
     errors = []
     try:
+        progress(f"Checking that the {task.id} starter fails stage 1")
         first = grade(task, task.starter_dir, runner).stages[0]
         if first.error:
             errors.append(f"stage 1 tests could not run on the starter: {first.error}")
@@ -199,6 +201,7 @@ def check_task(task: Task, runner: Runner) -> list[str]:
             errors.append("the starter code already passes stage 1")
         with tempfile.TemporaryDirectory(prefix="ib-", ignore_cleanup_errors=True) as tmp:
             for stage in task.stages:
+                progress(f"Checking {task.id} stage {stage.number} of {len(task.stages)} against its solution")
                 ref = build_reference(task, Path(tmp) / f"ref-{stage.number}", runner, upto=stage.number)
                 result = grade(task, ref, runner).stages[stage.number - 1]
                 if result.error or result.total == 0 or result.passed != result.total:

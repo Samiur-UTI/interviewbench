@@ -83,6 +83,28 @@ def test_grade_round_scores_a_pasted_reply(tmp_path, task, runner, solution_dir)
     assert "no JSON object" in bad.judge_error
 
 
+def test_grade_round_reports_each_phase(tmp_path, task, runner, solution_dir):
+    dest = shutil.copytree(solution_dir, tmp_path / "ws")
+    phases = []
+    rounds.grade_round(task, dest, runner, judge="prepare", progress=phases.append)
+    assert phases == [
+        "Running hidden tests for stage 1 of 3",
+        "Running hidden tests for stage 2 of 3",
+        "Running hidden tests for stage 3 of 3",
+        "Running your own tests",
+        "Building the reference solution",
+    ]
+
+
+def test_break_round_reports_each_phase(tmp_path, task, runner, solution_dir):
+    attack = tmp_path / "test_attack.py"
+    attack.write_text("def test_nothing():\n    assert True\n", encoding="utf-8")
+    phases = []
+    outcome = rounds.break_round(task, solution_dir, attack, runner, progress=phases.append)
+    assert outcome.counts["survived"] == 1
+    assert phases[-1] == "Running the attack tests on your code" and len(phases) == 3
+
+
 def test_break_outcome_counts_each_verdict():
     attacks = [Attack("a", "real break"), Attack("b", "survived"), Attack("c", "survived"), Attack("d", "bad test")]
     assert rounds.BreakOutcome(attacks).counts == {"real_break": 1, "survived": 2, "bad_test": 1}
