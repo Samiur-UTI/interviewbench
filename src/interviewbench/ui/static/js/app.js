@@ -3,10 +3,12 @@
 import { api, connection } from "./api.js";
 import { icon } from "./icons.js";
 import { app, recall, remember, setStatus } from "./state.js";
-import { announce, button, emptyBlock, h } from "./ui.js";
+import { announce, button, h } from "./ui.js";
+import * as author from "./views/author.js";
 import { showHowTo } from "./views/howto.js";
 import * as round from "./views/round.js";
 import * as rounds from "./views/rounds.js";
+import * as settings from "./views/settings.js";
 import * as tasks from "./views/tasks.js";
 
 const STATUS_POLL_MS = 15000;
@@ -17,20 +19,13 @@ const banner = document.getElementById("banner");
 const statusbar = document.getElementById("statusbar");
 const themeToggle = document.getElementById("theme-toggle");
 
-// Screens the next branches fill in. Kept here so every route already resolves.
-const notBuilt = (title) => ({
-  show(root) {
-    root.append(h("div", { class: "page" }, emptyBlock(title, "This screen isn't built yet.")));
-  },
-});
-
 function parseRoute(hash) {
   const [name, id, panel] = hash.replace(/^#\/?/, "").split("/").map(decodeURIComponent);
   if (name === "tasks" && !id) return { nav: "tasks", title: "Tasks", view: tasks };
   if (name === "rounds" && !id) return { nav: "rounds", title: "Rounds", view: rounds };
   if (name === "rounds") return { nav: "rounds", title: id, view: round, key: id, params: { id, panel } };
-  if (name === "author" && !id) return { nav: "author", title: "Author", view: notBuilt("Author") };
-  if (name === "settings" && !id) return { nav: "settings", title: "Settings", view: notBuilt("Settings") };
+  if (name === "author" && !id) return { nav: "author", title: "Author", view: author };
+  if (name === "settings" && !id) return { nav: "settings", title: "Settings", view: settings };
   return null;
 }
 

@@ -11,17 +11,17 @@ import { now } from "../state.js";
 import {
   announce, button, copyablePath, emptyBlock, errorBlock, h, loadingBlock, notice, openDialog, withBusy,
 } from "../ui.js";
+import * as breakPanel from "./break-panel.js";
 import * as changesPanel from "./changes-panel.js";
+import * as gradePanel from "./grade-panel.js";
 import { activeJobId } from "./rounds.js";
 import * as testsPanel from "./tests-panel.js";
-
-const notBuilt = (title) => ({ render: () => emptyBlock(title, "This panel isn't built yet.") });
 
 const PANELS = [
   { id: "tests", label: "Tests", icon: "flask", module: testsPanel },
   { id: "changes", label: "Changes", icon: "diff", module: changesPanel },
-  { id: "grade", label: "Grade", icon: "gauge", module: notBuilt("Grade") },
-  { id: "break", label: "Break it", icon: "crack", module: notBuilt("Break it") },
+  { id: "grade", label: "Grade", icon: "gauge", module: gradePanel },
+  { id: "break", label: "Break it", icon: "crack", module: breakPanel },
 ];
 const JOBS = {
   test: { panel: "tests", result: "test", name: "Tests" },
