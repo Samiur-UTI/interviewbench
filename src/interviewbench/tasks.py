@@ -42,7 +42,8 @@ REPORT = "ib-report.md"
 JUDGE_PROMPT = "ib-judge-prompt.md"
 JUDGE_REPLY = "ib-judge-reply.txt"
 ATTACK_PROMPT = "ib-attack-prompt.md"
-WORKSPACE_FILES = (MARKER, BRIEF, REPORT, JUDGE_PROMPT, JUDGE_REPLY, ATTACK_PROMPT)
+UI_STATE = "ib-ui.json"
+WORKSPACE_FILES = (MARKER, BRIEF, REPORT, JUDGE_PROMPT, JUDGE_REPLY, ATTACK_PROMPT, UI_STATE)
 
 
 class TaskError(Exception):

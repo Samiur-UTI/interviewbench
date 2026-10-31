@@ -154,8 +154,8 @@ Rules:
 - `harbor run -p tasks/<category> -a oracle` scores 1.0.
 - Shell scripts, Dockerfiles and `task.toml` use LF line endings (`.gitattributes` enforces it).
 - `environment/app/` doesn't contain the files `ib` writes into a workspace: `TASK.md`,
-  `.interviewbench.json`, `ib-report.md`, `ib-judge-prompt.md`, `ib-judge-reply.txt` and
-  `ib-attack-prompt.md`. The grader and judge ignore them, and `.vscode/`.
+  `.interviewbench.json`, `ib-report.md`, `ib-judge-prompt.md`, `ib-judge-reply.txt`,
+  `ib-attack-prompt.md` and `ib-ui.json`. The grader and judge ignore them, and `.vscode/`.
 
 ## Adding a task
 
