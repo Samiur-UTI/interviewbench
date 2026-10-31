@@ -11,6 +11,7 @@ import json
 import os
 import shlex
 import shutil
+import stat
 import subprocess
 import sys
 from datetime import datetime, timedelta
@@ -37,6 +38,16 @@ def default_workspace(task_id: str) -> Path:
 
 def is_inside(path: Path, root: Path) -> bool:
     return path.resolve().is_relative_to(root.resolve())
+
+
+def remove_tree(path: Path) -> None:
+    """shutil.rmtree that clears read-only bits first: git's objects have them, and Windows won't delete those."""
+    for dirpath, dirnames, filenames in os.walk(path):
+        for name in dirnames + filenames:
+            target = Path(dirpath) / name
+            if not target.is_symlink():
+                target.chmod(target.stat().st_mode | stat.S_IWRITE)
+    shutil.rmtree(path)
 
 
 def read_marker(workspace: Path) -> dict | None:
