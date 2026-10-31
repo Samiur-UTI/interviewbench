@@ -30,10 +30,14 @@ _GIT_IDENTITY = (
 )
 
 
-def default_workspace(task_id: str) -> Path:
-    """$IB_WORKSPACES/<task>, else ~/ib-workspaces/<task>: away from the repo's hidden tests."""
+def workspaces_root() -> Path:
+    """$IB_WORKSPACES, else ~/ib-workspaces: away from the repo's hidden tests."""
     base = os.environ.get("IB_WORKSPACES")
-    return (Path(base).expanduser() if base else Path.home() / "ib-workspaces") / task_id
+    return Path(base).expanduser() if base else Path.home() / "ib-workspaces"
+
+
+def default_workspace(task_id: str) -> Path:
+    return workspaces_root() / task_id
 
 
 def is_inside(path: Path, root: Path) -> bool:
