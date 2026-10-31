@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import shutil
-import tempfile
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import NoReturn, Optional
 
@@ -13,14 +10,13 @@ from rich.table import Table
 
 from . import __version__, rounds
 from . import workspace as ws
-from .breaker import BAD_TEST, REAL_BREAK, attack_prompt, run_break
-from .grader import build_reference, grade as grade_workspace, run_candidate_tests
-from .judge import JudgeError, apply_judgment, parse_reply, prepare_judge, run_judge
-from .report import render, to_markdown
-from .runner import RUNNERS, Runner, RunnerError, get_runner
+from .breaker import BAD_TEST, REAL_BREAK
+from .grader import run_candidate_tests
+from .report import render
+from .rounds import check_task
+from .runner import Runner, RunnerError, get_runner
 from .tasks import (
-    ATTACK_PROMPT, BRIEF, JUDGE_PROMPT, JUDGE_REPLY, MARKER, REPORT, Task, TaskError, bench_root,
-    categories, get_task, load_all, tasks_root, templates_root,
+    ATTACK_PROMPT, BRIEF, JUDGE_PROMPT, JUDGE_REPLY, MARKER, REPORT, Task, TaskError, get_task, load_all,
 )
 
 app = typer.Typer(
@@ -205,39 +201,29 @@ def grade(
         _fail(f"{judge_reply} doesn't exist. Save the chatbot's reply there first.")
     task = _task_from_workspace(dir, task_id)
     backend = _runner_or_exit(runner)
-    with console.status(f"Running hidden tests ({backend.name} runner)..."):
+    mode = "api" if judge else "prepare" if judge_export else "reply" if judge_reply is not None else "none"
+    with console.status(f"Running hidden tests ({backend.name} runner)...") as status:
         try:
-            result = grade_workspace(task, dir, backend, timeout=timeout)
+            outcome = rounds.grade_round(
+                task, dir, backend, judge=mode, settings=rounds.JudgeSettings(judge_backend, judge_model),
+                reply=judge_reply.read_text(encoding="utf-8") if judge_reply is not None else None,
+                reply_label=f"pasted reply ({judge_reply.name})" if judge_reply is not None else "",
+                timeout=timeout, report_path=output, progress=lambda phase: status.update(f"{phase}..."),
+            )
         except RunnerError as exc:
             _fail(str(exc))
-    judge_error = None
-    if judge or judge_export or judge_reply is not None:
-        with console.status("Running the AI judge..." if judge else "Preparing the judge prompt..."):
-            try:
-                if judge:
-                    run_judge(result, dir, runner=backend, model=judge_model, timeout=timeout, backend=judge_backend)
-                else:
-                    request = prepare_judge(result, dir, runner=backend, timeout=timeout)
-                    if judge_export:
-                        (dir / JUDGE_PROMPT).write_text(request.as_paste(), encoding="utf-8")
-                    else:
-                        reply = parse_reply(judge_reply.read_text(encoding="utf-8"))
-                        apply_judgment(result, request, reply, f"pasted reply ({judge_reply.name})")
-            except (JudgeError, RunnerError) as exc:
-                judge_error = str(exc)
-    render(result, console)
-    marker = ws.read_marker(dir)
-    if marker and "started_at" in marker:
-        used = datetime.now(timezone.utc) - datetime.fromisoformat(marker["started_at"])
-        console.print(f"Time used: {int(used.total_seconds() // 60)} min of {task.time_limit_minutes}\n")
-    report_path = output or dir / REPORT
-    report_path.write_text(to_markdown(result), encoding="utf-8")
-    console.print(f"Report written to [green]{report_path}[/green]")
-    if judge_error:
-        _fail(f"AI judge failed, so only auto criteria were scored: {judge_error}")
+    if judge_export and outcome.request:
+        (dir / JUDGE_PROMPT).write_text(outcome.request.as_paste(), encoding="utf-8")
+    render(outcome.result, console)
+    used = rounds.time_used_minutes(ws.read_marker(dir))
+    if used is not None:
+        console.print(f"Time used: {used} min of {task.time_limit_minutes}\n")
+    console.print(f"Report written to [green]{output or dir / REPORT}[/green]")
+    if outcome.judge_error:
+        _fail(f"AI judge failed, so only auto criteria were scored: {outcome.judge_error}")
     if judge_export:
         prompt_path = dir / JUDGE_PROMPT
-        size = len(prompt_path.read_text(encoding="utf-8")) // 4
+        size = rounds.tokens_estimate(prompt_path.read_text(encoding="utf-8"))
         console.print(
             f"\nJudge prompt written to [green]{prompt_path}[/green] (~{size:,} tokens). Paste all of it into any "
             f"chatbot (ChatGPT, Gemini, Claude.ai, DeepSeek...), save its reply as [bold]{JUDGE_REPLY}[/bold] in "
@@ -257,9 +243,7 @@ def break_code(
     """Try to break your code: run attack tests on it and on the reference; only real breaks count."""
     task, marker = _workspace_or_exit(dir)
     if write_prompt:
-        revealed = min(int(marker.get("stage", len(task.stages))), len(task.stages))
-        path = dir / ATTACK_PROMPT
-        path.write_text(attack_prompt(task, dir, revealed), encoding="utf-8")
+        path = rounds.write_attack_prompt(task, dir, marker)
         console.print(
             f"Wrote [green]{path}[/green]. Give it to any chatbot or coding agent, save the test file it writes "
             f"[bold]outside[/bold] this folder (e.g. ../attack_test.py), then run [bold]ib break ../attack_test.py[/bold]."
@@ -270,22 +254,21 @@ def break_code(
     backend = _runner_or_exit(runner)
     with console.status(f"Running the attack tests on your code and on the reference ({backend.name} runner)..."):
         try:
-            attacks = run_break(task, dir, attack, backend, timeout)
+            outcome = rounds.break_round(task, dir, attack, backend, timeout)
         except RunnerError as exc:
             _fail(str(exc))
     table = Table()
     for col in ("Verdict", "Attack test", "Detail"):
         table.add_column(col)
     style = {REAL_BREAK: "red", BAD_TEST: "dim"}
-    for a in attacks:
+    for a in outcome.attacks:
         color = style.get(a.verdict, "green")
         table.add_row(f"[{color}]{a.verdict}[/{color}]", a.name, a.detail)
     console.print(table)
-    counts = {v: sum(a.verdict == v for a in attacks) for v in (REAL_BREAK, BAD_TEST)}
-    survived = len(attacks) - sum(counts.values())
+    counts = outcome.counts
     console.print(
-        f"[bold]{counts[REAL_BREAK]} real break(s)[/bold], {survived} survived, "
-        f"{counts[BAD_TEST]} bad test(s) ignored (they fail on the reference solution too)."
+        f"[bold]{counts['real_break']} real break(s)[/bold], {counts['survived']} survived, "
+        f"{counts['bad_test']} bad test(s) ignored (they fail on the reference solution too)."
     )
 
 
@@ -296,24 +279,11 @@ def new(
     template: Optional[str] = typer.Option(None, "--template", help="Folder under templates/ (default: the first <category>-* one)"),
 ) -> None:
     """Create a task skeleton from a template (run inside a clone of the repo)."""
-    known = categories()
-    if category not in known:
-        _fail(f"Unknown category '{category}'. Known: {', '.join(known)}. Add rubrics/{category}.yaml to create one.")
-    root = templates_root()
-    available = sorted(p.name for p in root.iterdir() if p.is_dir()) if root.is_dir() else []
-    template = template or next((t for t in available if t.startswith(f"{category}-")), None)
-    if template not in available:
-        _fail(f"No template for '{category}'. Available: {', '.join(available) or 'none'}. Pass --template.")
-    if any(d.name == task_id for d in tasks_root().glob("*/*")):
-        _fail(f"A task named '{task_id}' already exists")
-    dest = tasks_root() / category / task_id
-    shutil.copytree(root / template, dest)
-    for path in dest.rglob("*"):
-        if path.is_file() and path.suffix in (".toml", ".md", ".yaml"):
-            text = path.read_text(encoding="utf-8")
-            text = text.replace("{{task_id}}", task_id).replace("{{category}}", category)
-            path.write_text(text, encoding="utf-8", newline="\n")
-    console.print(f"Created [green]{dest}[/green] from templates/{template}.")
+    try:
+        created = rounds.new_task(task_id, category, template)
+    except rounds.RoundError as exc:
+        _fail(str(exc))
+    console.print(f"Created [green]{created.path}[/green] from templates/{created.template}.")
     console.print(f"Fill in every TODO, then run [bold]ib validate {task_id} --run[/bold]. See docs/TASK_FORMAT.md.")
 
 
@@ -338,27 +308,6 @@ def validate(
         failed = failed or bool(errors)
     if failed:
         raise typer.Exit(1)
-
-
-def check_task(task: Task, runner: Runner) -> list[str]:
-    """The starter fails stage 1, and after applying solutions 1..N, stage N's tests all pass."""
-    errors = []
-    try:
-        first = grade_workspace(task, task.starter_dir, runner).stages[0]
-        if first.error:
-            errors.append(f"stage 1 tests could not run on the starter: {first.error}")
-        elif first.ratio >= 1:
-            errors.append("the starter code already passes stage 1")
-        with tempfile.TemporaryDirectory(prefix="ib-", ignore_cleanup_errors=True) as tmp:
-            for stage in task.stages:
-                ref = build_reference(task, Path(tmp) / f"ref-{stage.number}", runner, upto=stage.number)
-                result = grade_workspace(task, ref, runner).stages[stage.number - 1]
-                if result.error or result.total == 0 or result.passed != result.total:
-                    detail = result.error or ", ".join(f.name for f in result.failures) or "no tests ran"
-                    errors.append(f"after solutions 1..{stage.number}, stage {stage.number} fails: {detail}")
-    except RunnerError as exc:
-        errors.append(str(exc))
-    return errors
 
 
 @app.command()
