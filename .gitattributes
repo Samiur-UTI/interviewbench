@@ -5,5 +5,6 @@ Dockerfile  text eol=lf
 # TypeScript/JavaScript task files are read by Node in Linux containers: LF everywhere.
 *.ts        text eol=lf
 *.mjs       text eol=lf
+src/interviewbench/ui/static/** text eol=lf
 tasks/backend/flight-search-aggregator/**/*.json  text eol=lf
 tasks/backend/flight-search-aggregator/**/*.md    text eol=lf
