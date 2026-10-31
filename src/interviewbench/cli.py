@@ -113,7 +113,7 @@ def start(
     if dest.exists():
         if not force:
             _fail(f"{dest} already exists. Use --force to overwrite it (your changes there will be lost).")
-        shutil.rmtree(dest)
+        ws.remove_tree(dest)
     shutil.copytree(task.starter_dir, dest)
     wrote_tasks = ws.write_editor_tasks(dest)
     git_ok = git and ws.git_init(dest, ignored=[ws.EDITOR_TASKS.as_posix()] if wrote_tasks else [])
