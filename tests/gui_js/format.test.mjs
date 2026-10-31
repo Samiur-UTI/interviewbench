@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import {
   countdown, describeTimeLeft, formatClock, formatElapsed, formatPercent, formatPoints, formatTimeOfDay,
-  formatTokens, parseTime, plural, timeMilestone,
+  formatTokens, parseTime, plural, timeMilestone, withoutTitle,
 } from "../../src/interviewbench/ui/static/js/format.js";
 
 const MIN = 60000;
@@ -75,4 +75,11 @@ test("counts and points", () => {
   assert.equal(formatPoints(null), "0");
   assert.equal(formatPercent(0.666), "67%");
   assert.equal(formatTokens(12345), "about 12,345 tokens");
+});
+
+test("withoutTitle drops only a leading heading that repeats the stage title", () => {
+  assert.equal(withoutTitle("# Fix the bug\n\nBody", "Fix the bug"), "Body");
+  assert.equal(withoutTitle("Fix the bug\n\nBody", "Fix the bug"), "Body");
+  assert.equal(withoutTitle("# Other\n\nBody", "Fix the bug"), "# Other\n\nBody");
+  assert.equal(withoutTitle(null, "Fix the bug"), "");
 });
