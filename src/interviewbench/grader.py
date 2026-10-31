@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import os
 import shutil
 import tempfile
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Callable, Iterator
 
 from .runner import Completed, Runner, RunnerError, Sandbox, get_runner
 from .tasks import WORKSPACE_FILES, Criterion, Stage, Task
@@ -75,6 +76,15 @@ class GradeResult:
 def _copy_app(source: Path, dest: Path) -> Path:
     shutil.copytree(source, dest, ignore=_IGNORE)
     return dest
+
+
+def graded_files(root: Path) -> Iterator[Path]:
+    """The files under `root` that `_copy_app` copies, in a stable order."""
+    for dirpath, dirnames, filenames in os.walk(root):
+        ignored = _IGNORE(dirpath, dirnames + filenames)
+        dirnames[:] = sorted(d for d in dirnames if d not in ignored)
+        for name in sorted(n for n in filenames if n not in ignored):
+            yield Path(dirpath) / name
 
 
 def _stage_tests(task: Task, stage: Stage, dest: Path) -> Path:
@@ -171,6 +181,11 @@ def grade(
     for s in task.stages:
         progress(f"Running hidden tests for stage {s.number} of {len(task.stages)}")
         stages.append(run_stage_tests(task, workspace, s.number, runner, timeout))
+    return score(task, stages, runner.name)
+
+
+def score(task: Task, stages: list[StageResult], runner_name: str) -> GradeResult:
+    """Turn stage results into rubric scores. The judge criteria stay ungraded."""
     by_stage = {r.stage: r for r in stages}
     scores: list[CriterionScore] = []
     for c in task.criteria:
@@ -179,4 +194,4 @@ def grade(
             scores.append(CriterionScore(c, r.ratio, r.error or f"{r.passed}/{r.total} hidden tests passed"))
         else:
             scores.append(CriterionScore(c, None, "Needs the AI judge (not run)"))
-    return GradeResult(task, stages, scores, runner=runner.name)
+    return GradeResult(task, stages, scores, runner=runner_name)

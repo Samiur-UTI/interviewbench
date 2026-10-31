@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .grader import (
-    _IGNORE, CriterionScore, GradeResult, Progress, StageResult, build_reference, no_progress,
+    CriterionScore, GradeResult, Progress, StageResult, build_reference, graded_files, no_progress,
     run_candidate_tests,
 )
 from .runner import Runner, RunnerError, get_runner
@@ -332,19 +332,15 @@ def _read_tree(root: Path) -> tuple[dict[str, str], list[str]]:
     """Text files under `root` (same ignore rules as the grader), plus paths that were skipped."""
     files: dict[str, str] = {}
     omitted: list[str] = []
-    for dirpath, dirnames, filenames in os.walk(root):
-        ignored = _IGNORE(dirpath, dirnames + filenames)
-        dirnames[:] = sorted(d for d in dirnames if d not in ignored)
-        for name in sorted(n for n in filenames if n not in ignored):
-            path = Path(dirpath) / name
-            rel = path.relative_to(root).as_posix()
+    for path in graded_files(root):
+        rel = path.relative_to(root).as_posix()
+        try:
             if path.stat().st_size > MAX_FILE_BYTES:
                 omitted.append(rel)
                 continue
-            try:
-                files[rel] = path.read_text(encoding="utf-8")
-            except UnicodeDecodeError:
-                omitted.append(rel)
+            files[rel] = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            omitted.append(rel)
     return files, omitted
 
 
