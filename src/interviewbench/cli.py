@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+import webbrowser
 from pathlib import Path
 from typing import NoReturn, Optional
 
@@ -18,6 +20,7 @@ from .runner import Runner, RunnerError, get_runner
 from .tasks import (
     ATTACK_PROMPT, BRIEF, JUDGE_PROMPT, JUDGE_REPLY, MARKER, REPORT, Task, TaskError, get_task, load_all,
 )
+from .ui.server import serve
 
 app = typer.Typer(
     help="Realistic AI-era coding interview tasks with rubrics and a grader.",
@@ -308,6 +311,30 @@ def validate(
         failed = failed or bool(errors)
     if failed:
         raise typer.Exit(1)
+
+
+@app.command()
+def ui(
+    port: int = typer.Option(7473, help="Port on 127.0.0.1 (the next free one if it's taken)"),
+    open_browser: bool = typer.Option(True, "--open/--no-open", help="Open the GUI in your browser"),
+) -> None:
+    """Start the local web GUI: everything `ib` does, in your browser."""
+    try:
+        server = serve(port)
+    except OSError as exc:
+        _fail(str(exc))
+    console.print("[bold]interviewbench[/bold] is running. This link is your private way in:")
+    console.print(server.url, markup=False, highlight=False, soft_wrap=True)
+    console.print("[dim]Press Ctrl+C to stop.[/dim]")
+    if open_browser:
+        webbrowser.open(server.url)
+    try:
+        while True:
+            time.sleep(1)  # a plain wait: Ctrl+C on Windows can't interrupt a blocked lock
+    except KeyboardInterrupt:
+        console.print("Stopped.")
+    finally:
+        server.stop()
 
 
 @app.command()

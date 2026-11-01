@@ -21,6 +21,7 @@ The CLI grades a candidate's (or an LLM's) solution against the rubric.
 - Package tests: `.venv/Scripts/python -m pytest`
 - Package tests in containers: `IB_TEST_RUNNER=docker .venv/Scripts/python -m pytest`
 - Try a task: `ib start rate-limiter` (workspace goes to ~/ib-workspaces/, never inside the repo), then `ib test` / `ib next` / `ib grade [--judge]` / `ib break` in that folder
+- The same in a browser: `ib ui`
 - Check tasks: `ib validate --run`; Harbor's own check: `harbor run -p tasks/backend -a oracle`
 
 ## Rules
