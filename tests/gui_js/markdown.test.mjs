@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { escapeHtml, renderMarkdown as md } from "../../src/interviewbench/ui/static/js/markdown.js";
+import { escapeHtml, renderMarkdown as md } from "../../src/interviewbench/ui/static/js/core/markdown.js";
 
 const ALLOWED_TAG = new RegExp(
   "^</?(?:h[1-6]|p|ul|ol|li|pre|code|em|strong|blockquote|hr|br|table|thead|tbody|tr|th|td)>$"

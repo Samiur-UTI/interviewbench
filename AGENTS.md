@@ -29,5 +29,5 @@ The CLI grades a candidate's (or an LLM's) solution against the rubric.
 - Every task: starter `environment/app/` must FAIL stage 1 hidden tests; after solutions 1..N, stage N must PASS. `tests/test_tasks.py` enforces this.
 - Follow `docs/TASK_FORMAT.md`. Scripts use `$APP_DIR`/`$TESTS_DIR`/`$SOLUTION_DIR`/`$LOGS_DIR`, never hard-coded paths, and keep LF line endings.
 - Never add language-specific logic to the grader; it belongs in the task's `test.sh` and Dockerfile.
-- Keep dependencies minimal. The local GUI (`ib ui`, see `docs/GUI.md`) uses only the standard library and hand-written static files: no npm, no build step.
+- Keep dependencies minimal. The local GUI (`ib ui`, see `docs/GUI.md`) uses the standard library on the server, and Preact and htm vendored in `ui/static/vendor/` in the browser: no npm, no build step, and no new vendored library without a reason.
 - Coordinate via git: one agent per branch/file area at a time; commit small.

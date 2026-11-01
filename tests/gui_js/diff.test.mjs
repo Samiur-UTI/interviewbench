@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { parseDiff } from "../../src/interviewbench/ui/static/js/diff.js";
+import { parseDiff } from "../../src/interviewbench/ui/static/js/core/diff.js";
 
 const GIT = `diff --git a/src/a.py b/src/a.py
 index 83db48f..bf2a1c3 100644

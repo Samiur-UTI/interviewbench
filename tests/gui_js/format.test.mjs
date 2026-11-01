@@ -4,7 +4,7 @@ import { test } from "node:test";
 import {
   countdown, describeTimeLeft, formatClock, formatElapsed, formatPercent, formatPoints, formatTimeOfDay,
   formatTokens, judgeProblem, parseTime, plural, timeMilestone, withoutTitle,
-} from "../../src/interviewbench/ui/static/js/format.js";
+} from "../../src/interviewbench/ui/static/js/core/format.js";
 
 const MIN = 60000;
 
