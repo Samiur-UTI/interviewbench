@@ -116,6 +116,11 @@ def editor_command() -> list[str] | None:
     return None
 
 
+def editor_name() -> str | None:
+    command = editor_command()
+    return Path(command[0]).stem if command else None
+
+
 def open_in_editor(folder: Path) -> str | None:
     """Open `folder` in the candidate's editor without waiting. Returns the editor's name, or None."""
     command = editor_command()
@@ -125,7 +130,7 @@ def open_in_editor(folder: Path) -> str | None:
         _launch([*command, str(folder)])
     except OSError:
         return None
-    return Path(command[0]).stem
+    return editor_name()
 
 
 def _launch(command: list[str]) -> None:

@@ -354,6 +354,11 @@ def suggested_attack_file(task: Task) -> str:
     return "attack_test.txt"
 
 
+def check_attack_name(task: Task, filename: str) -> None:
+    if not SAFE_NAME.fullmatch(filename) or set(filename) == {"."}:
+        raise RoundError(f"'{filename}' isn't a plain file name. Use something like {suggested_attack_file(task)}.")
+
+
 def break_content(
     task: Task,
     workspace: Path,
@@ -364,8 +369,7 @@ def break_content(
     progress: Progress = no_progress,
 ) -> BreakOutcome:
     """`ib break` on a file held in memory. It goes to a temp folder, never to the workspace."""
-    if not SAFE_NAME.fullmatch(filename) or set(filename) == {"."}:
-        raise RoundError(f"'{filename}' isn't a plain file name. Use something like {suggested_attack_file(task)}.")
+    check_attack_name(task, filename)
     with tempfile.TemporaryDirectory(prefix="ib-attack-", ignore_cleanup_errors=True) as tmp:
         attack = Path(tmp) / filename
         attack.write_text(content, encoding="utf-8", newline="")

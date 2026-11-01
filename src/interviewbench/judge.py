@@ -30,6 +30,7 @@ from .tasks import Criterion, Task
 
 DEFAULT_MODEL = "claude-opus-5-5"
 BACKENDS = ("claude", "openai")
+BACKEND_KEYS = {"claude": ("ANTHROPIC_API_KEY",), "openai": ("IB_JUDGE_API_KEY", "OPENAI_API_KEY")}
 OPENAI_TIMEOUT = 600
 MAX_FILE_BYTES = 100_000
 SEVERITIES = ("high", "medium", "low")
@@ -233,6 +234,10 @@ def _normalize(output: dict) -> dict:
     }
 
 
+def env_api_key(backend: str) -> str | None:
+    return next(filter(None, map(os.environ.get, BACKEND_KEYS[backend])), None)
+
+
 def json_instructions(schema: dict) -> str:
     return (
         "Reply with ONLY a JSON object (no prose) that matches this JSON Schema:\n"
@@ -431,7 +436,7 @@ def _call_openai_compatible(
     parsed leniently, then normalized before scoring.
     """
     url = f"{_openai_base_url(base_url)}/chat/completions"
-    key = api_key or os.environ.get("IB_JUDGE_API_KEY") or os.environ.get("OPENAI_API_KEY")
+    key = api_key or env_api_key("openai")
     body = {
         "model": model,
         "messages": [
