@@ -89,7 +89,7 @@ def test_styles_are_only_set_through_cssom():
 
 def test_modules_import_only_local_files_that_exist():
     for path in JS:
-        for target in re.findall(r"""(?:from|import)\s+["']([^"']+)["']""", read(path)):
+        for target in re.findall(r"""^(?:import\b|export\s*[{*])[^"']*["']([^"']+)["']""", read(path), re.M):
             assert target.startswith("."), f"{path.name}: {target}"
             assert (path.parent / target).is_file(), f"{path.name}: {target}"
 
