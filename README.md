@@ -40,6 +40,9 @@ ib grade --judge          # ...and have an AI model review what tests can't meas
 ib break attack_test.py   # check tests an LLM wrote to break your code (see below)
 ```
 
+Prefer a browser? `ib ui` does all of this in a local web app: pick a task, read the brief, run the
+tests, grade, and try to break your code. It runs on your computer only, and needs no extra install.
+
 ## How a task works
 
 Each task mirrors the new AI-enabled interview format: a small multi-file codebase and three stages.

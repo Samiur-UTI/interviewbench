@@ -69,13 +69,15 @@ overwrites work. Only an explicit delete removes a round.
 
 `ib-ui.json` in the workspace (a new entry in `WORKSPACE_FILES`) stores the latest `test`, `grade` and
 `break` results as the JSON below, so they survive a restart. It holds nothing `ib-report.md` doesn't
-already expose.
+already expose. A stored grade keeps every stage's failures, plus the workspace fingerprint; the
+spoiler rules are applied each time it is sent, so failures appear once their stage is revealed.
 
 ## API
 
 JSON in and out. Errors are `{"error": {"code": "<code>", "message": "<for the candidate>"}}` with
-status 400, 401, 403, 404, 409 (`busy`, `all_revealed`, `no_editor`) or 500. A round with a running
-job answers `409 busy` to anything that changes it.
+status 400 (`bad_request`), 401 (`unauthorized`), 403 (`forbidden`), 404 (`not_found`), 409 (`busy`,
+`all_revealed`, `no_editor`), 413 (`too_large`) or 500 (`internal`). A round with a running job
+answers `409 busy` to anything that changes it.
 
 ### App
 
@@ -87,7 +89,10 @@ job answers `409 busy` to anything that changes it.
 
 `Settings` is `{judge: {backend: "claude"|"openai", model, base_url, has_api_key, key_source:
 "session"|"env"|null, default_model, claude_sdk_installed}}`. Defaults come from the `IB_JUDGE_*`
-environment variables. The key itself is never returned.
+environment variables; `model` and `base_url` are `""` when unset. The key itself is never returned.
+
+`runner.docker` and `runner.bash` are booleans. `runner.default` is `"docker"`, `"local"`, or `null`
+when neither can run tests.
 
 ### Tasks
 
@@ -98,7 +103,9 @@ environment variables. The key itself is never returned.
 | `POST /api/validate` | Body `{task_ids?, run, runner?}`: `ib validate`. Job; result `{tasks: [{id, category, ok, errors}]}`. |
 
 `Task` is `{id, title, category, tags, level, difficulty, language, time_limit_minutes, stage_count,
-rubric: [{id, type, weight, description}]}`. It never includes stage prompts or titles.
+rubric: [{id, type, weight, description}]}`. It never includes stage prompts or titles. An `auto`
+criterion's description says what its stage is about, so for an unrevealed stage it reads "Hidden
+tests for stage N." That is every stage in `GET /api/tasks`, where nothing is revealed yet.
 
 ### Rounds
 
@@ -121,8 +128,11 @@ rubric: [{id, type, weight, description}]}`. It never includes stage prompts or 
 `RoundSummary` is `{id, task_id, title, path, started_at, ends_at, time_limit_minutes, stage,
 stage_count, score_percent|null, active_job|null}`.
 
-`Round` adds `task: Task`, `git`, `stages: [{number, title, markdown}]` (revealed only),
-`all_revealed`, and `last: {test, grade, break}` (each a stored result or null).
+`active_job` is the id of the round's running job, for `GET /api/jobs/{id}`.
+
+`Round` adds `task: Task`, `git`, `stages: [{number, title, markdown}]` (revealed only; `markdown` is
+the brief without its title line), `all_revealed`, and `last: {test, grade, break}` (each a stored
+result or null).
 
 `TestResult` is `{passed, total, failures: [{name, message}], error, runner, finished_at}`.
 
@@ -138,13 +148,20 @@ stage_count, score_percent|null, active_job|null}`.
   judge_prepared }
 ```
 
+For an unrevealed stage, `title` is null, `failures` is `[]`, `withheld_failures` is how many there
+are, and `error`, if the stage couldn't run, is a fixed sentence rather than test output. The stage's
+`auto` criterion follows suit: its `description` as in `Task`, and its `evidence` if that quoted an
+error.
+
 `judge: "api"` needs a working setting, and when it fails the hidden-test scores still come back with
 `judge_error` set, as in the CLI. `judge-reply` and repeat judge runs reuse the stored grade when the
-workspace is unchanged (a fingerprint of the graded files), so they don't rerun the hidden tests.
+workspace is unchanged (a fingerprint of the graded files) and the runner is the same, so they don't
+rerun the hidden tests. A plain `judge: "none"` always runs them. The prompt doesn't survive a
+restart: `judge-prompt` answers `404` again, and `judge-reply` rebuilds the prompt it needs.
 
 `BreakResult` is `{attacks: [{name, verdict: "real break"|"survived"|"bad test", detail}], counts:
-{real_break, survived, bad_test}, runner, finished_at}`. `filename` is a bare file name; the attack
-file is written to a temp folder, never to the workspace.
+{real_break, survived, bad_test}, runner, finished_at}`. `filename` is a bare file name (letters,
+digits, `.`, `_` and `-`); the attack file is written to a temp folder, never to the workspace.
 
 ### Jobs
 
