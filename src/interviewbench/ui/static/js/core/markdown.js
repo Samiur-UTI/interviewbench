@@ -3,6 +3,8 @@
 
 const ESCAPES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
 
+const MAX_SOURCE = 30000;  // far more than any brief
+
 export function escapeHtml(text) {
   return String(text).replace(/[&<>"']/g, (c) => ESCAPES[c]);
 }
@@ -246,7 +248,18 @@ export function renderMarkdown(source, options = {}) {
   return blocks(lines, options).join("\n");
 }
 
-// The one place Markdown reaches the page: everything above escapes before it builds a tag.
+// The one place Markdown reaches the page: everything above escapes before it builds a tag. A review
+// summary is model text, and the model reads the candidate's code, so it may be built to hurt: very
+// deep nesting overflows the stack, and very long lines take quadratic time. Either way it's plain text.
 export function setMarkdown(element, source, options) {
-  element.innerHTML = renderMarkdown(source, options);
+  const text = String(source ?? "");
+  try {
+    if (text.length <= MAX_SOURCE) {
+      element.innerHTML = renderMarkdown(source, options);
+      return;
+    }
+  } catch {
+    // below
+  }
+  element.textContent = text;
 }

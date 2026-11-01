@@ -1,6 +1,6 @@
 // One changed file as a readable diff.
 
-import { html } from "../../../preact.js";
+import { html, useState } from "../../../preact.js";
 
 const OPEN_LINES = 300;  // larger files start collapsed
 const STATUS = { added: ["ok", "Added"], deleted: ["fail", "Deleted"], modified: ["accent", "Modified"] };
@@ -31,8 +31,13 @@ function Hunks({ path, hunks }) {
 export function FileDiff({ summary, parsed }) {
   const [kind, label] = STATUS[summary.status] ?? STATUS.modified;
   const lines = parsed?.hunks.reduce((sum, hunk) => sum + hunk.lines.length, 0) ?? 0;
+  const startsOpen = lines <= OPEN_LINES;
+  const [opened, setOpened] = useState(startsOpen);  // a collapsed file costs nothing until it's opened
+  const toggled = (event) => {
+    if (event.target.open) setOpened(true);
+  };
   return html`
-    <details class="diff-file" open=${lines <= OPEN_LINES}>
+    <details class="diff-file" open=${startsOpen} onToggle=${toggled}>
       <summary>
         <span class=${`badge ${kind}`}>${label}</span>
         <code class="diff-path">${summary.path}</code>
@@ -42,7 +47,7 @@ export function FileDiff({ summary, parsed }) {
         </span>
       </summary>
       ${lines
-        ? html`<${Hunks} path=${summary.path} hunks=${parsed.hunks} />`
+        ? opened && html`<${Hunks} path=${summary.path} hunks=${parsed.hunks} />`
         : html`<p class="meta diff-none">${parsed?.binary ? "Binary file: no preview." : "No preview for this file."}</p>`}
     </details>`;
 }

@@ -1,7 +1,7 @@
 // Light or dark: the candidate's choice if they made one, else the system's.
 
 import { recall, remember } from "../core/storage.js";
-import { useCallback, useEffect, useState } from "../preact.js";
+import { useCallback, useEffect, useLayoutEffect, useState } from "../preact.js";
 
 const DARK = "(prefers-color-scheme: dark)";
 
@@ -16,7 +16,7 @@ export function useTheme() {
     return () => media.removeEventListener("change", update);
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (chosen) document.documentElement.dataset.theme = chosen;
   }, [chosen]);
 

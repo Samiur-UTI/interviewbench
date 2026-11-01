@@ -4,21 +4,16 @@ import { Button, CopyablePath } from "../../components/button.js";
 import { Dialog } from "../../components/dialog.js";
 import { Notice } from "../../components/feedback.js";
 import { api } from "../../core/api.js";
-import { useBusy } from "../../hooks/use-busy.js";
+import { useAction } from "../../hooks/use-action.js";
 import { html, useState } from "../../preact.js";
 
 export function DeleteDialog({ round, onClose, onDeleted }) {
   const [typed, setTyped] = useState("");
-  const [error, setError] = useState(null);
-  const [busy, run] = useBusy();
+  const [busy, error, act] = useAction();
 
-  const remove = () => run(async () => {
-    try {
-      await api.deleteRound(round.id);
-      onDeleted();
-    } catch (err) {
-      setError(err.message);
-    }
+  const remove = () => act(async () => {
+    await api.deleteRound(round.id);
+    onDeleted();
   });
 
   const actions = html`

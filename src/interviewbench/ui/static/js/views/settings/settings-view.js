@@ -1,8 +1,8 @@
 // Settings: the model behind the connected AI review. Keys stay in the server's memory.
 
-import { useApp } from "../../app/app-context.js";
 import { Async, Notice } from "../../components/feedback.js";
 import { api } from "../../core/api.js";
+import { useApp } from "../../hooks/use-app.js";
 import { useAsync } from "../../hooks/use-async.js";
 import { html, useState } from "../../preact.js";
 import { SettingsForm } from "./settings-form.js";

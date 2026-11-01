@@ -1,10 +1,10 @@
 // "How a round works": shown once per browser on the Tasks screen, and on demand from the status bar.
 
-import { Button } from "../components/button.js";
-import { Dialog } from "../components/dialog.js";
-import { Icon } from "../components/icon.js";
 import { recall, remember } from "../core/storage.js";
 import { html, useState } from "../preact.js";
+import { Button } from "./button.js";
+import { Dialog } from "./dialog.js";
+import { Icon } from "./icon.js";
 
 function Steps() {
   return html`

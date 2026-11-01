@@ -1,13 +1,14 @@
 // The two ways to get the AI review: a model connected in Settings, or any chatbot by paste.
 
-import { useApp } from "../../../app/app-context.js";
 import { Button, CopyButton } from "../../../components/button.js";
 import { Loading, Notice } from "../../../components/feedback.js";
 import { api } from "../../../core/api.js";
-import { formatTokens, judgeProblem } from "../../../core/format.js";
+import { formatTokens, metaLine } from "../../../core/format.js";
+import { useApp } from "../../../hooks/use-app.js";
 import { useAsync } from "../../../hooks/use-async.js";
 import { html } from "../../../preact.js";
 import { useDraft, useRoundContext } from "../round-context.js";
+import { judgeProblem } from "./judge-problem.js";
 
 const BACKEND_LABEL = { claude: "Claude", openai: "OpenAI-compatible" };
 
@@ -20,7 +21,7 @@ function ConnectedRoute({ grade }) {
     <section class="route">
       <h4>Connected model</h4>
       <p>Uses the model in Settings. It sends the hidden tests, the reference solution and your diff to that provider, then fills in the judged criteria. Your provider charges for the call, and it can take a few minutes.</p>
-      ${judge && html`<p class="meta">${[BACKEND_LABEL[judge.backend] ?? judge.backend, model].filter(Boolean).join(" · ")}</p>`}
+      ${judge && html`<p class="meta">${metaLine(BACKEND_LABEL[judge.backend] ?? judge.backend, model)}</p>`}
       ${problem && html`<${Notice} kind="info">${problem}<//>`}
       <div class="route-actions">
         <${Button} icon="play" kind="primary" blocked=${blocked ?? problem} onClick=${() => runJob(() => api.grade(round.id, "api"))}>
@@ -50,7 +51,7 @@ function PromptSteps({ grade }) {
   const query = useAsync(async () => {
     if (memo.judgePrompt?.key !== key) memo.judgePrompt = { key, ...await api.judgePrompt(round.id) };
     return memo.judgePrompt;
-  }, [round.id, key]);
+  }, [round.id, key], memo.judgePrompt?.key === key ? memo.judgePrompt : null);
 
   let body;
   if (query.error) {

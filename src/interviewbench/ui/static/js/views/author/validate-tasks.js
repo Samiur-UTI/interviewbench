@@ -7,6 +7,7 @@ import { announce } from "../../core/announce.js";
 import { api, followJob } from "../../core/api.js";
 import { plural } from "../../core/format.js";
 import { recall, remember } from "../../core/storage.js";
+import { useAction } from "../../hooks/use-action.js";
 import { useAbortSignal } from "../../hooks/use-dom.js";
 import { html, useEffect, useState } from "../../preact.js";
 
@@ -22,6 +23,8 @@ function Row({ task }) {
     </li>`;
 }
 
+const countFailed = (tasks) => tasks.filter((task) => !task.ok).length;
+
 // `finished` is the ended job, or null if the server no longer knows it.
 function Results({ finished }) {
   if (!finished) {
@@ -31,7 +34,7 @@ function Results({ finished }) {
     return html`<${Notice} kind="fail">Validation failed. ${finished.error ?? ""}<//>`;
   }
   const checked = finished.result?.tasks ?? [];
-  const failed = checked.filter((task) => !task.ok).length;
+  const failed = countFailed(checked);
   return html`
     <${Notice} kind=${failed ? "fail" : "ok"}>
       ${failed ? `${plural(failed, "task")} of ${checked.length} failed.` : `All ${plural(checked.length, "task")} passed.`}
@@ -41,7 +44,7 @@ function Results({ finished }) {
 
 function announceResult(finished) {
   if (finished?.state !== "succeeded") return;
-  const failed = (finished.result?.tasks ?? []).filter((task) => !task.ok).length;
+  const failed = countFailed(finished.result?.tasks ?? []);
   announce(failed ? `${plural(failed, "task")} failed.` : "All tasks passed.");
 }
 
@@ -50,7 +53,7 @@ export function ValidateTasks({ tasks }) {
   const [runTests, setRunTests] = useState(false);
   const [job, setJob] = useState(null);
   const [outcome, setOutcome] = useState(null);  // { finished }, once a check has ended
-  const [startError, setStartError] = useState(null);
+  const [starting, startError, act] = useAction();
   const signal = useAbortSignal();
 
   async function follow(id) {
@@ -82,17 +85,12 @@ export function ValidateTasks({ tasks }) {
     setChosen(next);
   };
 
-  const check = async () => {
+  const check = () => act(async () => {
     setOutcome(null);
-    setStartError(null);
-    try {
-      const body = { run: runTests };
-      if (chosen.size) body.task_ids = [...chosen];
-      follow((await api.validate(body)).id);
-    } catch (err) {
-      setStartError(err.message);
-    }
-  };
+    const body = { run: runTests };
+    if (chosen.size) body.task_ids = [...chosen];
+    follow((await api.validate(body)).id);
+  });
 
   return html`
     <div class="stack">
@@ -117,7 +115,7 @@ export function ValidateTasks({ tasks }) {
       </label>
       <p class="field-help">The starter must fail stage 1, and each stage's solution must pass it. This can take a few minutes per task.</p>
       <div class="route-actions">
-        <${Button} icon="check" kind="primary" blocked=${job ? "Wait for this check to finish" : null} onClick=${check}>Validate<//>
+        <${Button} icon="check" kind="primary" blocked=${job || starting ? "Wait for this check to finish" : null} onClick=${check}>Validate<//>
       </div>
       <div role="status">
         ${job && html`

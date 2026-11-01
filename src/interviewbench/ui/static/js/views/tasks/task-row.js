@@ -1,13 +1,13 @@
 // One task in the catalogue: what it is, what's scored, and starting or resuming a round.
 
-import { useApp } from "../../app/app-context.js";
 import { Button } from "../../components/button.js";
 import { Notice } from "../../components/feedback.js";
 import { api } from "../../core/api.js";
-import { formatPoints, plural } from "../../core/format.js";
+import { formatPoints, metaLine, plural } from "../../core/format.js";
 import { roundHref } from "../../core/routes.js";
-import { useBusy } from "../../hooks/use-busy.js";
-import { html, useState } from "../../preact.js";
+import { useAction } from "../../hooks/use-action.js";
+import { useApp } from "../../hooks/use-app.js";
+import { html } from "../../preact.js";
 
 // Auto criteria describe what each stage's hidden tests check, which would give away later stages,
 // so they appear only as a total. Judged criteria are about how the work is done.
@@ -35,27 +35,21 @@ function RubricPeek({ task }) {
 
 export function TaskRow({ task, openRound, options }) {
   const { status } = useApp();
-  const [busy, run] = useBusy();
-  const [error, setError] = useState(null);
+  const [busy, error, act] = useAction();
 
-  const start = () => run(async () => {
-    setError(null);
-    try {
-      const round = await api.startRound({
-        task_id: task.id,
-        git: options.git,
-        open_editor: options.editor && Boolean(status?.editor),
-      });
-      location.hash = roundHref(round.id);
-    } catch (err) {
-      setError(err.message);
-    }
+  const start = () => act(async () => {
+    const round = await api.startRound({
+      task_id: task.id,
+      git: options.git,
+      open_editor: options.editor && Boolean(status?.editor),
+    });
+    location.hash = roundHref(round.id);
   });
 
-  const meta = [
+  const meta = metaLine(
     task.category, task.level, task.difficulty, task.language, `${task.time_limit_minutes} min`,
     plural(task.stage_count, "stage"),
-  ].filter(Boolean).join(" · ");
+  );
 
   return html`
     <li class="task">

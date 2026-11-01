@@ -1,10 +1,10 @@
 // The app frame: picks the screen for the route, and owns the connection banner and the 401 screen.
 
 import { Button } from "../components/button.js";
+import { HowToDialog } from "../components/howto.js";
 import { Icon } from "../components/icon.js";
-import { Fragment, html, useEffect, useMemo, useRef, useState } from "../preact.js";
-import { AppContext } from "./app-context.js";
-import { HowToDialog } from "./howto.js";
+import { AppContext } from "../hooks/use-app.js";
+import { html, useEffect, useMemo, useRef, useState } from "../preact.js";
 import { StatusBar } from "./status-bar.js";
 import { TopBar } from "./top-bar.js";
 import { useRoute } from "./use-route.js";
@@ -62,16 +62,14 @@ export function App() {
 
   return html`
     <${AppContext.Provider} value=${context}>
-      <${Fragment}>
-        <${TopBar} current=${route?.nav} />
-        <${ConnectionBanner} hidden=${online || needsAuth} retry=${refresh} />
-        <main id="main" ref=${main} tabindex="-1">
-          ${needsAuth
-            ? html`<${AuthRequired} />`
-            : ready && View && html`<${View} key=${route.key} params=${route.params} />`}
-        </main>
-        <${StatusBar} status=${status} onHowTo=${context.showHowTo} />
-        ${howTo && html`<${HowToDialog} onClose=${() => setHowTo(false)} />`}
-      <//>
+      <${TopBar} current=${route?.nav} />
+      <${ConnectionBanner} hidden=${online || needsAuth} retry=${refresh} />
+      <main id="main" ref=${main} tabindex="-1">
+        ${needsAuth
+          ? html`<${AuthRequired} />`
+          : ready && View && html`<${View} key=${route.key} params=${route.params} />`}
+      </main>
+      <${StatusBar} status=${status} onHowTo=${context.showHowTo} />
+      ${howTo && html`<${HowToDialog} onClose=${() => setHowTo(false)} />`}
     <//>`;
 }

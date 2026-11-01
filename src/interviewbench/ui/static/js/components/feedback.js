@@ -33,20 +33,24 @@ export function Failed({ error, retry, title = "That didn't work" }) {
     </div>`;
 }
 
-// One useAsync result on screen. `render` gets the data once there is some.
-export function Async({ query, loading, failed, render }) {
-  if (query.error) return html`<${Failed} error=${query.error} retry=${query.reload} title=${failed} />`;
-  if (query.data === null) return html`<${Loading} text=${loading} />`;
-  return render(query.data);
-}
-
-export function Notice({ kind, children, action }) {
+export function Notice({ kind, children }) {
   return html`
     <div class=${`notice ${kind}`}>
       <${Icon} name=${NOTICE_ICONS[kind]} />
       <div class="notice-text">${children}</div>
-      ${action}
     </div>`;
+}
+
+// One useAsync result on screen. `render` gets the data once there is some. A refresh that fails
+// keeps what's already showing, so a blip doesn't throw away open files and the scroll position.
+export function Async({ query, loading, failed, render }) {
+  if (query.data === null) {
+    if (query.error) return html`<${Failed} error=${query.error} retry=${query.reload} title=${failed} />`;
+    return html`<${Loading} text=${loading} />`;
+  }
+  return html`
+    ${query.error && html`<${Notice} kind="fail">${failed}. ${query.error.message}<//>`}
+    ${render(query.data)}`;
 }
 
 // Status is never colour alone: every badge carries its label and an icon.

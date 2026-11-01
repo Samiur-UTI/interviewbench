@@ -1,13 +1,13 @@
 // Rounds: every round in the workspaces folder, to resume or delete.
 
-import { useApp } from "../../app/app-context.js";
 import { Button, CopyablePath } from "../../components/button.js";
 import { Async, Badge, Empty } from "../../components/feedback.js";
 import { Icon } from "../../components/icon.js";
 import { announce } from "../../core/announce.js";
-import { activeJobId, api, followJob } from "../../core/api.js";
+import { api, followJob } from "../../core/api.js";
 import { describeTimeLeft, formatDate, parseTime } from "../../core/format.js";
 import { roundHref } from "../../core/routes.js";
+import { useApp } from "../../hooks/use-app.js";
 import { useAsync } from "../../hooks/use-async.js";
 import { useNow } from "../../hooks/use-now.js";
 import { html, useEffect, useState } from "../../preact.js";
@@ -23,7 +23,7 @@ function timeLeft(round, time) {
 function RoundRow({ round, time, onDelete }) {
   const href = roundHref(round.id);
   const started = parseTime(round.started_at);
-  const running = activeJobId(round) !== null;
+  const running = Boolean(round.active_job);
   const graded = round.score_percent !== null && round.score_percent !== undefined;
   return html`
     <tr>
@@ -35,7 +35,7 @@ function RoundRow({ round, time, onDelete }) {
         <span class="mono">${round.stage} of ${round.stage_count}</span>
         ${running && " "}${running && html`<${Badge} kind="accent">Job running<//>`}
       </td>
-      <td data-label="Time" class="mono" data-time=${round.id}>${timeLeft(round, time)}</td>
+      <td data-label="Time" class="mono">${timeLeft(round, time)}</td>
       <td data-label="Score" class="mono">
         ${graded ? `${Math.round(round.score_percent)}%` : html`<span class="muted">Not graded</span>`}
       </td>
@@ -58,7 +58,7 @@ function RoundTable({ rounds, reload }) {
   const [deleting, setDeleting] = useState(null);
 
   // A running job blocks Delete: refresh when it ends so the row doesn't stay stale.
-  const active = rounds.map(activeJobId).find((id) => id !== null);
+  const active = rounds.find((round) => round.active_job)?.active_job;
   useEffect(() => {
     if (!active) return undefined;
     const controller = new AbortController();

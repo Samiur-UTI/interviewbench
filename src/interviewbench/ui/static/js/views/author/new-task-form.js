@@ -4,7 +4,7 @@ import { Button, CopyablePath } from "../../components/button.js";
 import { Notice } from "../../components/feedback.js";
 import { announce } from "../../core/announce.js";
 import { api } from "../../core/api.js";
-import { useBusy } from "../../hooks/use-busy.js";
+import { useAction } from "../../hooks/use-action.js";
 import { html, useState } from "../../preact.js";
 
 function Options({ names }) {
@@ -16,22 +16,16 @@ export function NewTaskForm({ categories, templates }) {
   const [category, setCategory] = useState(categories[0] ?? "");
   const [template, setTemplate] = useState("");
   const [created, setCreated] = useState(null);
-  const [error, setError] = useState(null);
-  const [busy, run] = useBusy();
+  const [busy, error, act] = useAction();
 
   const submit = (event) => {
     event.preventDefault();
-    run(async () => {
+    act(async () => {
       setCreated(null);
-      setError(null);
-      try {
-        const body = { task_id: taskId.trim(), category };
-        if (template) body.template = template;
-        setCreated(await api.newTask(body));
-        announce("Task created.");
-      } catch (err) {
-        setError(err.message);
-      }
+      const body = { task_id: taskId.trim(), category };
+      if (template) body.template = template;
+      setCreated(await api.newTask(body));
+      announce("Task created.");
     });
   };
 

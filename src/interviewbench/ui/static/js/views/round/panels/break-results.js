@@ -1,7 +1,7 @@
 // What an attack run found, and what each verdict means.
 
 import { Badge } from "../../../components/feedback.js";
-import { formatDate, parseTime } from "../../../core/format.js";
+import { formatDate, metaLine, parseTime } from "../../../core/format.js";
 import { html } from "../../../preact.js";
 
 const VERDICTS = {
@@ -45,7 +45,6 @@ export function Results({ last, running }) {
   const finished = parseTime(last.finished_at);
   const { real_break: real, survived, bad_test: bad } = last.counts;
   const attacks = [...last.attacks].sort((a, b) => ORDER.indexOf(a.verdict) - ORDER.indexOf(b.verdict));
-  const meta = [last.runner && `${last.runner} runner`, finished && `finished ${formatDate(finished)}`];
   return html`
     <section class="stack">
       <h3>Results</h3>
@@ -55,7 +54,7 @@ export function Results({ last, running }) {
         <${Count} number=${survived} label="survived" />
         <${Count} number=${bad} label=${bad === 1 ? "bad test ignored" : "bad tests ignored"} />
       </ul>
-      <p class="meta">${meta.filter(Boolean).join(" · ")}</p>
+      <p class="meta">${metaLine(last.runner && `${last.runner} runner`, finished && `finished ${formatDate(finished)}`)}</p>
       <ul class="attacks">${attacks.map((attack) => html`<${Attack} attack=${attack} />`)}</ul>
     </section>`;
 }

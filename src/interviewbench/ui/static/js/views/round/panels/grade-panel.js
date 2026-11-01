@@ -5,7 +5,7 @@ import { Empty, Notice } from "../../../components/feedback.js";
 import { api } from "../../../core/api.js";
 import { html } from "../../../preact.js";
 import { JobLog } from "../job-log.js";
-import { useRoundContext } from "../round-context.js";
+import { useRoundContext, useRunningHere } from "../round-context.js";
 import { ReviewSection } from "./grade-review.js";
 import { CriterionRow, ScoreSection, StageRow } from "./grade-score.js";
 import { Routes } from "./judge-routes.js";
@@ -42,9 +42,9 @@ function Graded({ grade, revealed }) {
 }
 
 export function GradePanel() {
-  const { round, job, blocked, runJob, failure } = useRoundContext();
+  const { round, blocked, runJob, failure } = useRoundContext();
   const grade = round.last?.grade;
-  const running = job?.kind === "grade" || job?.kind === "judge-reply";
+  const running = useRunningHere("grade");
   const failed = failure("grade");
   return html`
     <div class="stack sections">
