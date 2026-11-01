@@ -22,13 +22,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .grader import (
-    _IGNORE, CriterionScore, GradeResult, StageResult, build_reference, run_candidate_tests,
+    CriterionScore, GradeResult, Progress, StageResult, build_reference, graded_files, no_progress,
+    run_candidate_tests,
 )
 from .runner import Runner, RunnerError, get_runner
 from .tasks import Criterion, Task
 
 DEFAULT_MODEL = "claude-opus-5-5"
 BACKENDS = ("claude", "openai")
+BACKEND_KEYS = {"claude": ("ANTHROPIC_API_KEY",), "openai": ("IB_JUDGE_API_KEY", "OPENAI_API_KEY")}
 OPENAI_TIMEOUT = 600
 MAX_FILE_BYTES = 100_000
 SEVERITIES = ("high", "medium", "low")
@@ -108,11 +110,16 @@ def run_judge(
     model: str | None = None,
     timeout: int | None = None,
     backend: str | None = None,
+    api_key: str | None = None,
+    base_url: str | None = None,
+    progress: Progress = no_progress,
 ) -> None:
     """Fill in the judge criteria of `result` and attach the review. Raises JudgeError.
 
     backend: "claude" (Anthropic API) or "openai" (any OpenAI-compatible chat API: OpenRouter, Gemini,
     Groq, Ollama, LM Studio, vLLM...). Defaults to $IB_JUDGE_BACKEND, else "claude".
+    api_key, base_url: override the backend's environment variables. They stay arguments: LocalRunner
+    hands its environment to candidate code, so a key must never go into os.environ.
     """
     backend = backend or os.environ.get("IB_JUDGE_BACKEND") or "claude"
     if backend not in BACKENDS:
@@ -121,21 +128,34 @@ def run_judge(
     if not model:
         raise JudgeError("The openai backend needs a model: pass --judge-model or set IB_JUDGE_MODEL")
     # Check the backend's settings before spending time on tests.
-    label = model if backend == "claude" else f"{model} via {_openai_base_url()}"
-    request = prepare_judge(result, workspace, runner=runner, timeout=timeout)
-    call = _call_claude if backend == "claude" else _call_openai_compatible
-    output = call(model, system=request.system, user=request.user, schema=request.schema)
+    label = model if backend == "claude" else f"{model} via {_openai_base_url(base_url)}"
+    request = prepare_judge(result, workspace, runner=runner, timeout=timeout, progress=progress)
+    progress(f"Waiting for the AI judge ({model})")
+    prompt = {"system": request.system, "user": request.user, "schema": request.schema}
+    if api_key:
+        prompt["api_key"] = api_key
+    if backend == "claude":
+        output = _call_claude(model, **prompt)
+    else:
+        output = _call_openai_compatible(model, base_url=base_url, **prompt)
     apply_judgment(result, request, output, label)
 
 
 def prepare_judge(
-    result: GradeResult, workspace: Path, *, runner: Runner | None = None, timeout: int | None = None
+    result: GradeResult,
+    workspace: Path,
+    *,
+    runner: Runner | None = None,
+    timeout: int | None = None,
+    progress: Progress = no_progress,
 ) -> JudgeRequest:
     """Run the candidate's own tests and build the judge prompt. Raises JudgeError."""
     task = result.task
     criteria = [c for c in task.criteria if c.type == "judge"]
     runner = runner or get_runner()
+    progress("Running your own tests")
     candidate_tests = run_candidate_tests(task, workspace, runner, timeout)
+    progress("Building the reference solution")
     with tempfile.TemporaryDirectory(prefix="ib-", ignore_cleanup_errors=True) as tmp:
         try:
             solution, _ = _read_tree(build_reference(task, Path(tmp) / "solution", runner))
@@ -212,6 +232,10 @@ def _normalize(output: dict) -> dict:
         "issues": issues,
         "summary": str(output.get("summary", "")),
     }
+
+
+def env_api_key(backend: str) -> str | None:
+    return next(filter(None, map(os.environ.get, BACKEND_KEYS[backend])), None)
 
 
 def json_instructions(schema: dict) -> str:
@@ -313,19 +337,15 @@ def _read_tree(root: Path) -> tuple[dict[str, str], list[str]]:
     """Text files under `root` (same ignore rules as the grader), plus paths that were skipped."""
     files: dict[str, str] = {}
     omitted: list[str] = []
-    for dirpath, dirnames, filenames in os.walk(root):
-        ignored = _IGNORE(dirpath, dirnames + filenames)
-        dirnames[:] = sorted(d for d in dirnames if d not in ignored)
-        for name in sorted(n for n in filenames if n not in ignored):
-            path = Path(dirpath) / name
-            rel = path.relative_to(root).as_posix()
+    for path in graded_files(root):
+        rel = path.relative_to(root).as_posix()
+        try:
             if path.stat().st_size > MAX_FILE_BYTES:
                 omitted.append(rel)
                 continue
-            try:
-                files[rel] = path.read_text(encoding="utf-8")
-            except UnicodeDecodeError:
-                omitted.append(rel)
+            files[rel] = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            omitted.append(rel)
     return files, omitted
 
 
@@ -361,13 +381,13 @@ def _output_schema(criteria: list[Criterion]) -> dict:
 # --- API call -------------------------------------------------------------------------------
 
 
-def _call_claude(model: str, *, system: str, user: str, schema: dict) -> dict:
+def _call_claude(model: str, *, system: str, user: str, schema: dict, api_key: str | None = None) -> dict:
     try:
         import anthropic
     except ImportError as exc:
         raise JudgeError('The AI judge needs the Anthropic SDK: pip install "interviewbench[judge]"') from exc
 
-    client = anthropic.Anthropic()
+    client = anthropic.Anthropic(api_key=api_key) if api_key else anthropic.Anthropic()
     try:
         with client.beta.messages.stream(
             model=model,
@@ -382,7 +402,8 @@ def _call_claude(model: str, *, system: str, user: str, schema: dict) -> dict:
         ) as stream:
             message = stream.get_final_message()
     except anthropic.AuthenticationError as exc:
-        raise JudgeError("Claude API authentication failed: set ANTHROPIC_API_KEY or run `ant auth login`") from exc
+        hint = "check the API key" if api_key else "set ANTHROPIC_API_KEY or run `ant auth login`"
+        raise JudgeError(f"Claude API authentication failed: {hint}") from exc
     except anthropic.APIError as exc:
         raise JudgeError(f"Claude API error: {exc}") from exc
 
@@ -396,8 +417,8 @@ def _call_claude(model: str, *, system: str, user: str, schema: dict) -> dict:
     return json.loads(texts[-1])
 
 
-def _openai_base_url() -> str:
-    base = os.environ.get("IB_JUDGE_BASE_URL", "").strip()
+def _openai_base_url(base_url: str | None = None) -> str:
+    base = (base_url or os.environ.get("IB_JUDGE_BASE_URL", "")).strip()
     if not base:
         raise JudgeError(
             "The openai backend needs IB_JUDGE_BASE_URL, the provider's OpenAI-compatible endpoint, "
@@ -406,14 +427,16 @@ def _openai_base_url() -> str:
     return base.rstrip("/")
 
 
-def _call_openai_compatible(model: str, *, system: str, user: str, schema: dict) -> dict:
+def _call_openai_compatible(
+    model: str, *, system: str, user: str, schema: dict, api_key: str | None = None, base_url: str | None = None
+) -> dict:
     """Any OpenAI-compatible chat completions API, with the standard library only (no SDK needed).
 
     Not every provider enforces JSON schemas, so the schema goes in the prompt and the reply is
     parsed leniently, then normalized before scoring.
     """
-    url = f"{_openai_base_url()}/chat/completions"
-    key = os.environ.get("IB_JUDGE_API_KEY") or os.environ.get("OPENAI_API_KEY")
+    url = f"{_openai_base_url(base_url)}/chat/completions"
+    key = api_key or env_api_key("openai")
     body = {
         "model": model,
         "messages": [
@@ -431,7 +454,7 @@ def _call_openai_compatible(model: str, *, system: str, user: str, schema: dict)
             data = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", "replace")[:500]
-        hint = " (check IB_JUDGE_API_KEY)" if exc.code in (401, 403) else ""
+        hint = f" (check {'the API key' if api_key else 'IB_JUDGE_API_KEY'})" if exc.code in (401, 403) else ""
         raise JudgeError(f"{url} returned HTTP {exc.code}{hint}: {detail}") from exc
     except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
         raise JudgeError(f"Could not get an answer from {url}: {exc}") from exc

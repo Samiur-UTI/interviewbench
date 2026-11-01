@@ -2,9 +2,11 @@
 
 import json
 import shutil
+import stat
 import subprocess
 import sys
 
+import pytest
 from typer.testing import CliRunner
 
 from conftest import RUNNER_KIND
@@ -39,6 +41,31 @@ def test_start_makes_a_git_repo_with_the_starter_commit(tmp_path):
     assert not {BRIEF, MARKER, ".vscode/tasks.json"} & set(tracked)
     assert json.loads((dest / MARKER).read_text())["git"] is True
     assert "git repo" in (dest / BRIEF).read_text(encoding="utf-8")
+
+
+def test_remove_tree_deletes_read_only_files(tmp_path):
+    dest = tmp_path / "ws"
+    start(dest)
+    objects = [p for p in (dest / ".git" / "objects").rglob("*") if p.is_file()]
+    assert objects
+    objects[0].chmod(stat.S_IREAD)  # git does this itself; Windows then refuses to delete them
+    ws.remove_tree(dest)
+    assert not dest.exists()
+
+
+def test_remove_tree_leaves_the_target_of_a_link_alone(tmp_path):
+    outside = tmp_path / "outside.txt"
+    outside.write_text("keep me", encoding="utf-8")
+    outside.chmod(stat.S_IREAD)
+    dest = tmp_path / "ws"
+    dest.mkdir()
+    try:
+        (dest / "link").symlink_to(outside)
+    except OSError:
+        pytest.skip("this machine can't create symlinks")
+    ws.remove_tree(dest)
+    assert not dest.exists()
+    assert not outside.stat().st_mode & stat.S_IWRITE
 
 
 def test_start_without_git(tmp_path):

@@ -1,0 +1,457 @@
+"""The workflows behind `ib` and `ib ui`: start a round, next stage, grade, judge, break, validate, new.
+
+Both front ends only translate input and output. Nothing here prints; a failure is an exception whose
+message is written for the candidate.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import itertools
+import re
+import shutil
+import tempfile
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+from . import workspace as ws
+from .breaker import BAD_TEST, REAL_BREAK, SURVIVED, Attack, attack_prompt, run_break
+from .grader import GradeResult, Progress, build_reference, grade, graded_files, no_progress
+from .judge import (
+    JudgeError, JudgeRequest, _diff, _read_tree, apply_judgment, parse_reply, prepare_judge, run_judge,
+)
+from .report import to_markdown
+from .runner import Runner, RunnerError
+from .tasks import (
+    ATTACK_PROMPT, BRIEF, REPORT, Task, TaskError, _task_dirs, bench_root, categories, get_task, load_task,
+    tasks_root, templates_root,
+)
+
+SAFE_NAME = re.compile(r"[A-Za-z0-9._-]+")  # a round id or attack file name: one plain path segment
+MAX_DIFF_CHARS = 1_000_000
+
+
+class RoundError(Exception):
+    pass
+
+
+class AllRevealed(RoundError):
+    pass
+
+
+class UnknownRound(RoundError):
+    pass
+
+
+@dataclass
+class StartedRound:
+    task: Task
+    path: Path
+    started: datetime
+    git: bool
+    editor: str | None
+
+    @property
+    def ends(self) -> datetime:
+        return self.started.astimezone() + timedelta(minutes=self.task.time_limit_minutes)
+
+
+@dataclass
+class RevealedStage:
+    number: int
+    tagged: str | None
+
+
+@dataclass
+class JudgeSettings:
+    backend: str | None = None
+    model: str | None = None
+    base_url: str | None = None
+    api_key: str | None = field(default=None, repr=False)
+
+
+@dataclass
+class GradeOutcome:
+    result: GradeResult
+    request: JudgeRequest | None = None  # the prompt, when the judge is a chatbot
+    judge_error: str | None = None
+
+
+@dataclass
+class BreakOutcome:
+    attacks: list[Attack]
+
+    @property
+    def counts(self) -> dict[str, int]:
+        verdicts = [a.verdict for a in self.attacks]
+        return {
+            "real_break": verdicts.count(REAL_BREAK),
+            "survived": verdicts.count(SURVIVED),
+            "bad_test": verdicts.count(BAD_TEST),
+        }
+
+
+@dataclass
+class NewTask:
+    path: Path
+    template: str
+
+
+@dataclass
+class TaskCheck:
+    id: str
+    category: str
+    errors: list[str]
+
+
+@dataclass
+class RoundInfo:
+    """A round found under the workspaces folder. The id is its folder name."""
+
+    id: str
+    path: Path
+    task: Task
+    marker: dict
+    stage: int  # how many stages are revealed
+    started: datetime | None
+
+    @property
+    def ends(self) -> datetime | None:
+        return self.started + timedelta(minutes=self.task.time_limit_minutes) if self.started else None
+
+
+@dataclass
+class FileChange:
+    path: str
+    status: str  # "added", "modified" or "deleted"
+    additions: int
+    deletions: int
+
+
+@dataclass
+class Changes:
+    files: list[FileChange]
+    diff: str
+    truncated: bool
+
+
+def start_round(
+    task: Task, dest: Path, *, force: bool = False, git: bool = True, open_editor: bool = True
+) -> StartedRound:
+    """Set up a workspace: starter code, editor tasks, git, the marker and TASK.md. Starts the clock."""
+    if ws.is_inside(dest, bench_root()):
+        raise RoundError(
+            f"{dest} is inside {bench_root()}, which holds the hidden tests and reference solutions, "
+            f"so an AI assistant working there could read them. Pick a folder outside it, or leave out "
+            f"--dir to use {ws.default_workspace(task.id)}."
+        )
+    if dest.exists():
+        if not force:
+            raise RoundError(f"{dest} already exists. Use --force to overwrite it (your changes there will be lost).")
+        ws.remove_tree(dest)
+    shutil.copytree(task.starter_dir, dest)
+    wrote_tasks = ws.write_editor_tasks(dest)
+    git_ok = git and ws.git_init(dest, ignored=[ws.EDITOR_TASKS.as_posix()] if wrote_tasks else [])
+    started = datetime.now(timezone.utc)
+    ws.write_marker(dest, {"task": task.id, "started_at": started.isoformat(), "stage": 1, "git": git_ok})
+    (dest / BRIEF).write_text(ws.brief(task, started, git_ok), encoding="utf-8")
+    editor = ws.open_in_editor(dest) if open_editor else None
+    return StartedRound(task, dest, started, git_ok, editor)
+
+
+def start_in_free_folder(task: Task, *, git: bool = True, open_editor: bool = True) -> StartedRound:
+    """Start a round in <task>, or <task>-2, <task>-3...: an earlier round is never overwritten."""
+    root = ws.workspaces_root()
+    names = itertools.chain([task.id], (f"{task.id}-{n}" for n in itertools.count(2)))
+    dest = next(root / name for name in names if not (root / name).exists())
+    return start_round(task, dest, git=git, open_editor=open_editor)
+
+
+def round_path(round_id: str) -> Path:
+    """The folder of `round_id`, which comes from a URL: nothing but a direct child of the workspaces folder."""
+    missing = UnknownRound(f"There is no round called '{round_id}'.")
+    if not SAFE_NAME.fullmatch(round_id):
+        raise missing
+    root = ws.workspaces_root().resolve()
+    path = (root / round_id).resolve()
+    if path.parent != root or path.name != round_id:
+        raise missing
+    return path
+
+
+def _started_at(marker: dict) -> datetime | None:
+    try:
+        started = datetime.fromisoformat(marker["started_at"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    return started if started.tzinfo else started.astimezone()
+
+
+def load_round(round_id: str) -> RoundInfo:
+    """A round by id. Raises UnknownRound for anything that isn't a readable round."""
+    path = round_path(round_id)
+    try:
+        marker = ws.read_marker(path)
+        task = get_task(marker["task"])
+        stage = int(marker.get("stage", 1))
+    except (AttributeError, KeyError, TypeError, ValueError, OSError, TaskError) as exc:
+        raise UnknownRound(f"There is no round called '{round_id}'.") from exc
+    return RoundInfo(round_id, path, task, marker, max(1, min(stage, len(task.stages))), _started_at(marker))
+
+
+def list_rounds() -> list[RoundInfo]:
+    """Every round in the workspaces folder, newest first. Other folders there are skipped."""
+    root = ws.workspaces_root()
+    found = []
+    for path in root.iterdir() if root.is_dir() else ():
+        try:
+            found.append(load_round(path.name))
+        except UnknownRound:
+            continue
+    return sorted(found, key=lambda r: r.started.timestamp() if r.started else 0, reverse=True)
+
+
+def delete_round(round_id: str) -> None:
+    ws.remove_tree(load_round(round_id).path)
+
+
+def changes(task: Task, workspace: Path) -> Changes:
+    """What differs from the starter, under the grader's ignore rules. Needs no git."""
+    before, before_skipped = _read_tree(task.starter_dir)
+    after, after_skipped = _read_tree(workspace)
+    files: list[FileChange] = []
+    diffs: list[str] = []
+    for name in sorted({*before, *after, *before_skipped, *after_skipped}):
+        old, new = task.starter_dir / name, workspace / name
+        if name in before and name in after:
+            changed = before[name] != after[name]
+        else:  # binary or too large to diff
+            changed = not (old.is_file() and new.is_file()) or old.read_bytes() != new.read_bytes()
+        if not changed:
+            continue
+        diff = _diff({k: v for k, v in before.items() if k == name}, {k: v for k, v in after.items() if k == name})
+        body = diff.split("\n")[2:]  # after the ---/+++ header
+        files.append(FileChange(
+            name, "deleted" if not new.is_file() else "added" if not old.is_file() else "modified",
+            sum(line.startswith("+") for line in body), sum(line.startswith("-") for line in body),
+        ))
+        if diff:
+            diffs.append(diff)
+    diff = "\n".join(diffs)
+    return Changes(files, diff[:MAX_DIFF_CHARS], len(diff) > MAX_DIFF_CHARS)
+
+
+def fingerprint(workspace: Path) -> str:
+    """A hash of the graded files: it changes exactly when grading could give a different answer."""
+    digest = hashlib.sha256()
+    for path in graded_files(workspace):
+        digest.update(path.relative_to(workspace).as_posix().encode() + b"\0")
+        try:
+            digest.update(path.read_bytes() + b"\0")
+        except OSError:
+            continue
+    return digest.hexdigest()
+
+
+def next_stage(task: Task, workspace: Path, marker: dict) -> RevealedStage:
+    """Commit and tag the work so far, then add the next stage to the marker and TASK.md."""
+    current = int(marker.get("stage", 1))
+    if current >= len(task.stages):
+        raise AllRevealed(f"All {len(task.stages)} stages are already revealed. Run `ib grade` when you're done.")
+    tagged = None
+    if marker.get("git") and ws.checkpoint(workspace, f"Stage {current} done", tag=f"stage-{current}"):
+        tagged = f"stage-{current}"
+    number = current + 1
+    marker["stage"] = number
+    ws.write_marker(workspace, marker)
+    ws.append_stage(workspace, task, number)
+    return RevealedStage(number, tagged)
+
+
+def grade_round(
+    task: Task,
+    workspace: Path,
+    runner: Runner,
+    *,
+    judge: str = "none",
+    settings: JudgeSettings | None = None,
+    reply: str | None = None,
+    reply_label: str = "pasted reply",
+    timeout: int | None = None,
+    report_path: Path | None = None,
+    prior: GradeResult | None = None,
+    request: JudgeRequest | None = None,
+    progress: Progress = no_progress,
+) -> GradeOutcome:
+    """Run the hidden tests, optionally the judge, and write the report. Raises RunnerError.
+
+    judge: "none", "api" (a model, through `settings`), "prepare" (only build the prompt) or "reply"
+    (score a chatbot's `reply`). A judge failure keeps the hidden-test scores and sets `judge_error`.
+    `prior` and `request` are earlier results for this same code, which save running the tests again.
+    """
+    settings = settings or JudgeSettings()
+    result = prior or grade(task, workspace, runner, timeout=timeout, progress=progress)
+    judge_error = None
+    try:
+        if judge == "api":
+            run_judge(
+                result, workspace, runner=runner, model=settings.model, timeout=timeout,
+                backend=settings.backend, api_key=settings.api_key, base_url=settings.base_url,
+                progress=progress,
+            )
+        elif judge != "none":
+            request = request or prepare_judge(result, workspace, runner=runner, timeout=timeout, progress=progress)
+            if judge == "reply":
+                apply_judgment(result, request, parse_reply(reply or ""), reply_label)
+    except (JudgeError, RunnerError) as exc:
+        judge_error = str(exc)
+        if settings.api_key:  # a provider's error can quote the key it was given
+            judge_error = judge_error.replace(settings.api_key, "[API key]")
+    (report_path or workspace / REPORT).write_text(to_markdown(result), encoding="utf-8")
+    return GradeOutcome(result, request, judge_error)
+
+
+def time_used_minutes(marker: dict | None) -> int | None:
+    started = _started_at(marker or {})
+    return int((datetime.now(timezone.utc) - started).total_seconds() // 60) if started else None
+
+
+def tokens_estimate(text: str) -> int:
+    return len(text) // 4
+
+
+def write_attack_prompt(task: Task, workspace: Path, marker: dict) -> Path:
+    revealed = min(int(marker.get("stage", len(task.stages))), len(task.stages))
+    path = workspace / ATTACK_PROMPT
+    path.write_text(attack_prompt(task, workspace, revealed), encoding="utf-8")
+    return path
+
+
+def break_round(
+    task: Task,
+    workspace: Path,
+    attack: Path,
+    runner: Runner,
+    timeout: int | None = None,
+    progress: Progress = no_progress,
+) -> BreakOutcome:
+    """Run an attack test file. Raises RunnerError."""
+    return BreakOutcome(run_break(task, workspace, attack, runner, timeout, progress))
+
+
+def suggested_attack_file(task: Task) -> str:
+    """A name the task's test runner will collect, following the naming of the starter's own tests."""
+    folder = task.starter_dir / task.attack_dir
+    names = sorted(p.name for p in folder.iterdir() if p.is_file()) if folder.is_dir() else []
+    for name in names:
+        match = re.fullmatch(r"(test[_-])\w[\w.-]*?((?:\.\w+)+)", name, re.IGNORECASE)
+        if match:  # test_limiter.py -> test_attack.py
+            return f"{match[1]}attack{match[2]}"
+        match = re.fullmatch(r"\w[\w.-]*?([._-]?(?:test|spec)(?:\.\w+)+)", name, re.IGNORECASE)
+        if match:  # merge.test.ts -> attack.test.ts, limiter_test.go -> attack_test.go
+            return f"attack{match[1]}"
+    return "attack_test.txt"
+
+
+def check_attack_name(task: Task, filename: str) -> None:
+    if not SAFE_NAME.fullmatch(filename) or set(filename) == {"."}:
+        raise RoundError(f"'{filename}' isn't a plain file name. Use something like {suggested_attack_file(task)}.")
+
+
+def break_content(
+    task: Task,
+    workspace: Path,
+    filename: str,
+    content: str,
+    runner: Runner,
+    timeout: int | None = None,
+    progress: Progress = no_progress,
+) -> BreakOutcome:
+    """`ib break` on a file held in memory. It goes to a temp folder, never to the workspace."""
+    check_attack_name(task, filename)
+    with tempfile.TemporaryDirectory(prefix="ib-attack-", ignore_cleanup_errors=True) as tmp:
+        attack = Path(tmp) / filename
+        attack.write_text(content, encoding="utf-8", newline="")
+        return break_round(task, workspace, attack, runner, timeout, progress)
+
+
+def check_task(task: Task, runner: Runner, progress: Progress = no_progress) -> list[str]:
+    """The starter fails stage 1, and after applying solutions 1..N, stage N's tests all pass."""
+    errors = []
+    try:
+        progress(f"Checking that the {task.id} starter fails stage 1")
+        first = grade(task, task.starter_dir, runner).stages[0]
+        if first.error:
+            errors.append(f"stage 1 tests could not run on the starter: {first.error}")
+        elif first.ratio >= 1:
+            errors.append("the starter code already passes stage 1")
+        with tempfile.TemporaryDirectory(prefix="ib-", ignore_cleanup_errors=True) as tmp:
+            for stage in task.stages:
+                progress(f"Checking {task.id} stage {stage.number} of {len(task.stages)} against its solution")
+                ref = build_reference(task, Path(tmp) / f"ref-{stage.number}", runner, upto=stage.number)
+                result = grade(task, ref, runner).stages[stage.number - 1]
+                if result.error or result.total == 0 or result.passed != result.total:
+                    detail = result.error or ", ".join(f.name for f in result.failures) or "no tests ran"
+                    errors.append(f"after solutions 1..{stage.number}, stage {stage.number} fails: {detail}")
+    except RunnerError as exc:
+        errors.append(str(exc))
+    return errors
+
+
+def available_tasks() -> list[Task]:
+    """Every task that loads: while one is being written, the rest stay usable."""
+    tasks = []
+    for path in _task_dirs(tasks_root()) if tasks_root().is_dir() else ():
+        try:
+            tasks.append(load_task(path))
+        except TaskError:
+            continue
+    return tasks
+
+
+def validate_tasks(
+    task_ids: list[str] | None, runner: Runner | None, progress: Progress = no_progress
+) -> list[TaskCheck]:
+    """`ib validate` as data: a task that doesn't load is a failed check rather than an exception."""
+    dirs = _task_dirs(tasks_root()) if tasks_root().is_dir() else []
+    unknown = sorted(set(task_ids or ()) - {d.name for d in dirs})
+    if unknown:
+        raise RoundError(f"Unknown task '{unknown[0]}'. Available: {', '.join(d.name for d in dirs) or 'none'}")
+    checks = []
+    for path in dirs:
+        if task_ids and path.name not in task_ids:
+            continue
+        try:
+            task = load_task(path)
+            errors = check_task(task, runner, progress) if runner else []
+        except TaskError as exc:
+            errors = [str(exc)]
+        checks.append(TaskCheck(path.name, path.parent.name, errors))
+    return checks
+
+
+def templates() -> list[str]:
+    root = templates_root()
+    return sorted(p.name for p in root.iterdir() if p.is_dir()) if root.is_dir() else []
+
+
+def new_task(task_id: str, category: str, template: str | None = None) -> NewTask:
+    """Create a task skeleton from a template."""
+    known = categories()
+    if category not in known:
+        raise RoundError(f"Unknown category '{category}'. Known: {', '.join(known)}. Add rubrics/{category}.yaml to create one.")
+    available = templates()
+    template = template or next((t for t in available if t.startswith(f"{category}-")), None)
+    if template not in available:
+        raise RoundError(f"No template for '{category}'. Available: {', '.join(available) or 'none'}. Pass --template.")
+    if any(d.name == task_id for d in tasks_root().glob("*/*")):
+        raise RoundError(f"A task named '{task_id}' already exists")
+    dest = tasks_root() / category / task_id
+    shutil.copytree(templates_root() / template, dest)
+    for path in dest.rglob("*"):
+        if path.is_file() and path.suffix in (".toml", ".md", ".yaml"):
+            text = path.read_text(encoding="utf-8")
+            text = text.replace("{{task_id}}", task_id).replace("{{category}}", category)
+            path.write_text(text, encoding="utf-8", newline="\n")
+    return NewTask(dest, template)
