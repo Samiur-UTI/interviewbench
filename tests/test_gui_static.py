@@ -1,5 +1,7 @@
 """The browser side of `ib ui`: its node tests, plus the rules of docs/GUI.md that a reader can miss."""
 
+import hashlib
+import json
 import re
 import shutil
 import subprocess
@@ -10,11 +12,14 @@ import pytest
 ROOT = Path(__file__).parents[1]
 STATIC = ROOT / "src" / "interviewbench" / "ui" / "static"
 NODE_TESTS = ROOT / "tests" / "gui_js"
-JS = sorted(STATIC.rglob("*.js"))
+VENDOR = STATIC / "vendor"
+JS = sorted(p for p in STATIC.rglob("*.js") if VENDOR not in p.parents)  # our code; vendor/ is pinned below
 
 # The only way Markdown reaches the page: renderMarkdown escapes the source before it builds a tag.
 MARKDOWN_SINK = "element.innerHTML = renderMarkdown(source, options);"
-HTML_SINKS = re.compile(r"\.innerHTML|\.outerHTML|insertAdjacentHTML|document\.write|\beval\(|new Function|srcdoc")
+HTML_SINKS = re.compile(
+    r"\.innerHTML|\.outerHTML|insertAdjacentHTML|document\.write|\beval\(|new Function|srcdoc|dangerouslySetInnerHTML"
+)
 # Addresses the code may contain. None is ever loaded: one's a namespace, the rest are judge settings.
 ALLOWED_URLS = {
     "http://www.w3.org/2000/svg",
@@ -92,6 +97,31 @@ def test_modules_import_only_local_files_that_exist():
         for target in re.findall(r"""^(?:import\b|export\s*[{*])[^"']*["']([^"']+)["']""", read(path), re.M):
             assert target.startswith("."), f"{path.name}: {target}"
             assert (path.parent / target).is_file(), f"{path.name}: {target}"
+
+
+def test_only_preact_js_reaches_the_vendor_folder():
+    for path in JS:
+        if "vendor/" in read(path):
+            assert path == STATIC / "js" / "preact.js", path.name
+
+
+def test_core_stays_free_of_the_framework_so_node_can_test_it():
+    for path in sorted((STATIC / "js" / "core").glob("*.js")):
+        assert "preact" not in read(path), path.name
+
+
+def test_vendored_files_match_their_pinned_hashes():
+    manifest = json.loads(read(VENDOR / "manifest.json"))
+    assert sorted(manifest) == sorted(p.name for p in VENDOR.glob("*.js"))
+    for name, entry in manifest.items():
+        assert hashlib.sha256((VENDOR / name).read_bytes()).hexdigest() == entry["sha256"], name
+
+
+def test_vendored_code_needs_nothing_the_csp_forbids():
+    for path in VENDOR.glob("*.js"):
+        text = read(path)
+        assert "new Function" not in text and not re.search(r"\beval\(", text), path.name
+        assert not re.search(r"""from\s*["'][^."']""", text), f"{path.name} has a bare import"
 
 
 def test_no_emoji_or_terminal_commands_in_the_normal_flow():

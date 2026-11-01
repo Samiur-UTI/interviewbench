@@ -69,6 +69,12 @@ export const api = {
   job: (id) => call("GET", `/api/jobs/${encodeURIComponent(id)}`),
 };
 
+// docs/GUI.md doesn't fix what active_job holds, so take a job or its id.
+export function activeJobId(summary) {
+  const active = summary.active_job;
+  return active && typeof active === "object" ? active.id : active ?? null;
+}
+
 function wait(ms, signal) {
   return new Promise((resolve) => {
     const timer = setTimeout(resolve, ms);

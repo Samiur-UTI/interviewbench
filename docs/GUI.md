@@ -6,9 +6,9 @@ the CLI: neither contains workflow logic of its own.
 
 ## Design rules
 
-- **Standard library only.** `http.server.ThreadingHTTPServer` on the Python side; hand-written ES
-  modules and CSS in the browser. No npm, no bundler, no build step, no CDN, no web fonts: it must
-  work offline and from an installed wheel.
+- **No toolchain.** `http.server.ThreadingHTTPServer` on the Python side; ES modules, Preact and htm
+  in the browser. Preact and htm are vendored and pinned in `ui/static/vendor/`. No npm, no bundler,
+  no build step, no CDN, no web fonts: it must work offline and from an installed wheel.
 - **One service layer.** `src/interviewbench/rounds.py` owns the workflows (start a round, next stage,
   grade, judge, break, validate, new). `cli.py` and `ui/` only translate input and output.
 - **The GUI never spoils a stage.** Only revealed stages are sent to the browser. Grading runs every
@@ -32,11 +32,20 @@ src/interviewbench/
   ui/serialize.py      dataclasses -> the JSON shapes below, including spoiler rules
   ui/static/
     index.html  styles.css
-    js/app.js          router and app state
-    js/api.js          fetch wrapper, job polling
-    js/markdown.js     escape-first Markdown renderer
-    js/views/*.js      one module per screen
+    vendor/            Preact and htm, pinned by manifest.json. See its README to update them.
+    js/main.js         entry point
+    js/preact.js       the only import of vendor/: html, render and the hooks
+    js/core/           no framework, so node can test it: API client, routes, formatting, diff, Markdown
+    js/hooks/          reusable hooks: useAsync for loading data, useNow, useBusy
+    js/components/     shared UI: Button, Dialog, Notice, Async, MarkdownView
+    js/app/            the frame: routing, status, theme, top and status bars
+    js/views/<screen>/ one folder per screen; a screen's parts stay in its folder
 ```
+
+Dependencies point one way: `views` use `components` and `hooks`, which use `core`. Logic worth
+testing goes in a pure module, as `views/round/round-state.js` does, with a test in `tests/gui_js/`.
+To add a screen, add it to `core/routes.js` and `app/views.js`. To add a Round panel, add it to
+`PANELS` in `views/round/round-view.js`.
 
 ## Security
 
@@ -57,8 +66,9 @@ The server can run code, so a web page the candidate visits must not be able to 
   No inline scripts or inline styles.
 - Static paths resolve inside `ui/static/` or return `404`. Round ids match `^[A-Za-z0-9._-]+$`,
   aren't `.` or `..`, and must resolve to a direct child of the workspaces folder.
-- Candidate output, model output and pasted replies are data. The front end renders them with
-  `textContent`, or through `markdown.js`, which escapes first. Never `innerHTML` with unescaped data.
+- Candidate output, model output and pasted replies are data. The front end renders them as text
+  through htm templates, or through `markdown.js`, which escapes first. Never `innerHTML` with
+  unescaped data, and never `dangerouslySetInnerHTML`.
 
 ## Rounds
 

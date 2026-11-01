@@ -7,30 +7,11 @@
   <title>interviewbench</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/styles.css">
-  <script type="module" src="/js/app.js"></script>
+  <script type="module" src="/js/main.js"></script>
 </head>
 <body>
   <button class="skip-link" id="skip-link" type="button">Skip to content</button>
-  <div class="app">
-    <header class="topbar">
-      <a class="brand" href="#/tasks">
-        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M1.5 6h13v2h-13zM3.5 8H5v5.5H3.5zM11 8h1.5v5.5H11z"/></svg>
-        <span>interviewbench</span>
-      </a>
-      <nav class="mainnav" aria-label="Main">
-        <a href="#/tasks" data-nav="tasks">Tasks</a>
-        <a href="#/rounds" data-nav="rounds">Rounds</a>
-        <a href="#/author" data-nav="author">Author</a>
-        <a href="#/settings" data-nav="settings">Settings</a>
-      </nav>
-      <button class="icon-button" id="theme-toggle" type="button"></button>
-    </header>
-    <div class="banner" id="banner" role="alert" hidden></div>
-    <main id="main" tabindex="-1">
-      <noscript><p class="page">This app needs JavaScript. Turn it on and reload the page.</p></noscript>
-    </main>
-    <footer class="statusbar" id="statusbar"></footer>
-  </div>
+  <div class="app" id="app"><noscript><p class="page">This app needs JavaScript. Turn it on and reload the page.</p></noscript></div>
   <div class="visually-hidden" id="live" aria-live="polite"></div>
 </body>
 </html>
