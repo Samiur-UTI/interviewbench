@@ -11,6 +11,7 @@ import json
 import os
 import shlex
 import shutil
+import stat
 import subprocess
 import sys
 from datetime import datetime, timedelta
@@ -29,14 +30,28 @@ _GIT_IDENTITY = (
 )
 
 
-def default_workspace(task_id: str) -> Path:
-    """$IB_WORKSPACES/<task>, else ~/ib-workspaces/<task>: away from the repo's hidden tests."""
+def workspaces_root() -> Path:
+    """$IB_WORKSPACES, else ~/ib-workspaces: away from the repo's hidden tests."""
     base = os.environ.get("IB_WORKSPACES")
-    return (Path(base).expanduser() if base else Path.home() / "ib-workspaces") / task_id
+    return Path(base).expanduser() if base else Path.home() / "ib-workspaces"
+
+
+def default_workspace(task_id: str) -> Path:
+    return workspaces_root() / task_id
 
 
 def is_inside(path: Path, root: Path) -> bool:
     return path.resolve().is_relative_to(root.resolve())
+
+
+def remove_tree(path: Path) -> None:
+    """shutil.rmtree that clears read-only bits first: git's objects have them, and Windows won't delete those."""
+    for dirpath, dirnames, filenames in os.walk(path):
+        for name in dirnames + filenames:
+            target = Path(dirpath) / name
+            if not target.is_symlink():
+                target.chmod(target.stat().st_mode | stat.S_IWRITE)
+    shutil.rmtree(path)
 
 
 def read_marker(workspace: Path) -> dict | None:
@@ -101,6 +116,11 @@ def editor_command() -> list[str] | None:
     return None
 
 
+def editor_name() -> str | None:
+    command = editor_command()
+    return Path(command[0]).stem if command else None
+
+
 def open_in_editor(folder: Path) -> str | None:
     """Open `folder` in the candidate's editor without waiting. Returns the editor's name, or None."""
     command = editor_command()
@@ -110,7 +130,7 @@ def open_in_editor(folder: Path) -> str | None:
         _launch([*command, str(folder)])
     except OSError:
         return None
-    return Path(command[0]).stem
+    return editor_name()
 
 
 def _launch(command: list[str]) -> None:

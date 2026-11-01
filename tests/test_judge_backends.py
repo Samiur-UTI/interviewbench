@@ -2,16 +2,21 @@
 
 import http.server
 import json
+import os
 import shutil
+import sys
 import threading
+import types
 
 import pytest
 from typer.testing import CliRunner
 
 from conftest import RUNNER_KIND
+from interviewbench import judge
 from interviewbench.cli import app
 from interviewbench.grader import grade
 from interviewbench.judge import JudgeError, parse_reply, run_judge
+from interviewbench.rounds import JudgeSettings, grade_round
 from interviewbench.tasks import JUDGE_PROMPT, JUDGE_REPLY, MARKER, REPORT
 
 cli = CliRunner()
@@ -124,6 +129,66 @@ def test_openai_compatible_backend(task, workspace, provider, runner):
     assert result.points == pytest.approx(100)
     assert result.review.issues[0].severity == "low"  # unknown severities are normalized
     assert "some/free-model via http://127.0.0.1" in result.review.model
+
+
+def test_explicit_credentials_override_the_environment(task, workspace, provider, runner, monkeypatch):
+    provider.response = chat(json.dumps(answer(task)))
+    url = f"{os.environ['IB_JUDGE_BASE_URL']}"
+    monkeypatch.setenv("IB_JUDGE_BASE_URL", "http://127.0.0.1:1/never-called")
+    run_judge(
+        grade(task, workspace, runner), workspace, runner=runner, backend="openai", model="m",
+        api_key="typed-in-the-gui", base_url=url,
+    )
+    path, auth, _ = provider.seen[0]
+    assert path == "/v1/chat/completions" and auth == "Bearer typed-in-the-gui"
+    assert "typed-in-the-gui" not in os.environ.values()
+
+
+def test_a_wrong_explicit_key_is_not_blamed_on_the_environment(task, workspace, provider, runner):
+    provider.response = (401, {"error": "invalid key"})
+    with pytest.raises(JudgeError, match="HTTP 401 .check the API key."):
+        run_judge(grade(task, workspace, runner), workspace, runner=runner, backend="openai", model="m", api_key="k")
+
+
+def test_grade_round_never_repeats_the_key_in_an_error(task, workspace, provider, runner):
+    provider.response = (401, {"error": "bad key: secret-123"})
+    settings = JudgeSettings(backend="openai", model="m", api_key="secret-123")
+    outcome = grade_round(task, workspace, runner, judge="api", settings=settings)
+    assert "HTTP 401" in outcome.judge_error and "secret-123" not in outcome.judge_error
+    assert "secret-123" not in repr(settings)
+
+
+def test_claude_backend_gets_an_explicit_key(task, workspace, runner, monkeypatch):
+    seen = {}
+
+    def fake_claude(model, *, system, user, schema, api_key=None):
+        seen["api_key"] = api_key
+        return answer(task)
+
+    monkeypatch.setattr(judge, "_call_claude", fake_claude)
+    run_judge(grade(task, workspace, runner), workspace, runner=runner, model="m", api_key="sk-typed")
+    assert seen["api_key"] == "sk-typed"
+
+
+def test_anthropic_client_is_built_with_the_explicit_key(monkeypatch):
+    built = []
+
+    class Stop(Exception):
+        pass
+
+    class Client:
+        def __init__(self, **kwargs):
+            built.append(kwargs)
+            raise Stop
+
+    sdk = types.ModuleType("anthropic")
+    sdk.Anthropic = Client
+    monkeypatch.setitem(sys.modules, "anthropic", sdk)
+    with pytest.raises(Stop):
+        judge._call_claude("m", system="s", user="u", schema={}, api_key="sk-typed")
+    with pytest.raises(Stop):
+        judge._call_claude("m", system="s", user="u", schema={})
+    assert built == [{"api_key": "sk-typed"}, {}]
 
 
 def test_openai_backend_reports_http_errors(task, workspace, provider, runner):
