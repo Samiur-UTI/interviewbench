@@ -12,7 +12,7 @@ export function useAsync(load, deps = [], initial = null) {
 
   const reload = useCallback(async () => {
     const call = ++latest.current;
-    setState((current) => ({ ...current, loading: true }));
+    setState((current) => ({ ...current, error: null, loading: true }));
     try {
       const data = await load();
       failed.current = false;

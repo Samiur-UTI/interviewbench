@@ -1,7 +1,7 @@
 // Loads a round and owns its running job: starting it, following it, and picking it up after a reload.
 
 import { announce } from "../../core/announce.js";
-import { ApiError, activeJobId, api, followJob } from "../../core/api.js";
+import { ApiError, api, followJob } from "../../core/api.js";
 import { useAbortSignal } from "../../hooks/use-dom.js";
 import { useAsync } from "../../hooks/use-async.js";
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "../../preact.js";
@@ -20,26 +20,28 @@ function draftsFor(id) {
 export function useRound(id) {
   const [state, dispatch] = useReducer(roundReducer, initialRoundState);
   const signal = useAbortSignal();
-  const following = useRef(false);  // set at once: state only changes on the next render
+  const following = useRef(false);  // state only changes on the next render, and a press can't wait
   const memo = useRef({});
   const query = useAsync(() => api.round(id), [id]);
 
-  const refresh = useCallback(async () => {
+  const fetchRound = useCallback(async () => {
     try {
-      const round = await api.round(id);
-      if (!signal.aborted) dispatch({ type: "loaded", round });
-      return round;
+      return await api.round(id);
     } catch {
       return null;  // what's on screen stays; the connection banner covers an outage
     }
-  }, [id, signal]);
+  }, [id]);
 
+  // The round is fetched before the job counts as over. Next stage is blocked until then, so this
+  // answer can't arrive after moving on and put the old stage back.
   const finish = useCallback(async (job) => {
+    if (job) announce(`${jobName(job.kind)} ${job.state === "failed" ? "failed" : "finished"}.`);
+    const round = await fetchRound();
+    if (signal.aborted) return;
     following.current = false;
     dispatch({ type: "job-ended", job });
-    if (job) announce(`${jobName(job.kind)} ${job.state === "failed" ? "failed" : "finished"}.`);
-    await refresh();
-  }, [refresh]);
+    if (round) dispatch({ type: "loaded", round });
+  }, [fetchRound, signal]);
 
   const attach = useCallback(async (job) => {
     following.current = true;
@@ -61,25 +63,31 @@ export function useRound(id) {
   }, [signal, finish]);
 
   const reattach = useCallback((round) => {
-    const running = activeJobId(round);
-    if (running && !following.current) attach({ id: running, phase: "Picking up the running job…", log: [], started_at: null });
+    if (round.active_job && !following.current) {
+      attach({ id: round.active_job, phase: "Picking up the running job…", log: [], started_at: null });
+    }
   }, [attach]);
 
   const runJob = useCallback(async (start) => {
     if (following.current) return;
+    following.current = true;
     try {
       await attach(await start());
     } catch (err) {
+      following.current = false;
       if (err.code === "busy") {
-        const round = await refresh();
-        if (round) reattach(round);
+        const round = await fetchRound();
+        if (round && !signal.aborted) {
+          dispatch({ type: "loaded", round });
+          reattach(round);
+        }
       } else if (err instanceof ApiError) {
         dispatch({ type: "start-failed", message: err.message });
       } else {
         throw err;
       }
     }
-  }, [attach, refresh, reattach]);
+  }, [attach, fetchRound, reattach, signal]);
 
   useEffect(() => {
     if (!query.data) return;
@@ -92,10 +100,11 @@ export function useRound(id) {
     job: state.job,
     blocked: state.job ? BUSY : null,
     runJob,
+    settled: state.recent?.finished_at ?? null,
     failure: (kind) => state.failures[kind] ?? null,
     memo: memo.current,
     drafts: draftsFor(id),
-  }), [state.round, state.job, state.failures, runJob, id]);
+  }), [state.round, state.job, state.recent, state.failures, runJob, id]);
 
   return { state, dispatch, query, context };
 }

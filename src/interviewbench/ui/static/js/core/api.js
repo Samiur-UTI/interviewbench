@@ -69,35 +69,35 @@ export const api = {
   job: (id) => call("GET", `/api/jobs/${encodeURIComponent(id)}`),
 };
 
-// docs/GUI.md doesn't fix what active_job holds, so take a job or its id.
-export function activeJobId(summary) {
-  const active = summary.active_job;
-  return active && typeof active === "object" ? active.id : active ?? null;
-}
-
 function wait(ms, signal) {
   return new Promise((resolve) => {
-    const timer = setTimeout(resolve, ms);
-    signal?.addEventListener("abort", () => {
+    const done = () => {
       clearTimeout(timer);
+      signal?.removeEventListener("abort", done);
       resolve();
-    }, { once: true });
+    };
+    const timer = setTimeout(done, ms);
+    signal?.addEventListener("abort", done);
   });
 }
 
-// Follows a job to its end, calling onUpdate with each poll. Returns the finished job, or null if the
-// server no longer knows it (restarted, or kept past the hour) or `signal` aborted. Lost connections
-// are retried: the job keeps running on the server, and the banner tells the candidate.
+// Follows a job to its end, calling onUpdate with each poll. Returns the finished job, or null if it
+// can't be followed: the server no longer knows it (restarted, or kept past the hour), answers with
+// an error, or `signal` aborted. Lost connections are retried: the job keeps running on the server,
+// and the banner tells the candidate.
 export async function followJob(id, onUpdate, signal) {
   while (!signal?.aborted) {
+    let job = null;
     try {
-      const job = await api.job(id);
-      if (signal?.aborted) return null;
+      job = await api.job(id);
+    } catch (err) {
+      if (err.status === 401) throw err;
+      if (err.status !== 0) return null;
+    }
+    if (signal?.aborted) return null;
+    if (job) {
       onUpdate(job);
       if (job.state !== "running") return job;
-    } catch (err) {
-      if (err.status === 404) return null;
-      if (err.status === 401) throw err;
     }
     await wait(POLL_MS, signal);
   }

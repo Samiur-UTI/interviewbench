@@ -1,12 +1,12 @@
 // The briefs revealed so far: the current stage open, earlier ones folded away.
 
-import { Icon } from "../../components/icon.js";
 import { Notice } from "../../components/feedback.js";
+import { Icon } from "../../components/icon.js";
 import { MarkdownView } from "../../components/markdown-view.js";
-import { withoutTitle } from "../../core/format.js";
+import { announce } from "../../core/announce.js";
 import { html, useEffect, useRef } from "../../preact.js";
 
-const StageBody = ({ stage }) => html`<${MarkdownView} source=${withoutTitle(stage.markdown, stage.title)} headingOffset=${2} />`;
+const StageBody = ({ stage }) => html`<${MarkdownView} source=${stage.markdown} headingOffset=${2} />`;
 
 function EarlierStage({ stage }) {
   return html`
@@ -33,6 +33,7 @@ export function Brief({ round, revealed }) {
   const pane = useRef(null);
   useEffect(() => {
     if (!revealed) return;
+    announce(revealed.message);
     pane.current.querySelector(".stage.current")?.scrollIntoView({ block: "start" });
     pane.current.querySelector(".stage.current h2")?.focus({ preventScroll: true });
   }, [revealed]);

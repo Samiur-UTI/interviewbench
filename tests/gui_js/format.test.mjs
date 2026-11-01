@@ -3,8 +3,9 @@ import { test } from "node:test";
 
 import {
   countdown, describeTimeLeft, formatClock, formatElapsed, formatPercent, formatPoints, formatTimeOfDay,
-  formatTokens, judgeProblem, parseTime, plural, timeMilestone, withoutTitle,
+  formatTokens, metaLine, parseTime, plural, testsPassed, timeMilestone,
 } from "../../src/interviewbench/ui/static/js/core/format.js";
+import { judgeProblem } from "../../src/interviewbench/ui/static/js/views/round/panels/judge-problem.js";
 
 const MIN = 60000;
 
@@ -90,9 +91,14 @@ test("judgeProblem says what's missing, and a local model needs no key", () => {
   assert.match(judgeProblem({ ...claude, claude_sdk_installed: false }), /package/);
 });
 
-test("withoutTitle drops only a leading heading that repeats the stage title", () => {
-  assert.equal(withoutTitle("# Fix the bug\n\nBody", "Fix the bug"), "Body");
-  assert.equal(withoutTitle("Fix the bug\n\nBody", "Fix the bug"), "Body");
-  assert.equal(withoutTitle("# Other\n\nBody", "Fix the bug"), "# Other\n\nBody");
-  assert.equal(withoutTitle(null, "Fix the bug"), "");
+test("metaLine keeps the parts that apply", () => {
+  assert.equal(metaLine("docker runner", null, false, "", "graded today"), "docker runner · graded today");
+  assert.equal(metaLine(), "");
+});
+
+test("testsPassed needs at least one test, all passing, and no error", () => {
+  assert.equal(testsPassed({ passed: 3, total: 3, error: null }), true);
+  assert.equal(testsPassed({ passed: 2, total: 3, error: null }), false);
+  assert.equal(testsPassed({ passed: 0, total: 0, error: null }), false);
+  assert.equal(testsPassed({ passed: 3, total: 3, error: "boom" }), false);
 });

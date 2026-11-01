@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { escapeHtml, renderMarkdown as md } from "../../src/interviewbench/ui/static/js/core/markdown.js";
+import { escapeHtml, renderMarkdown as md, setMarkdown } from "../../src/interviewbench/ui/static/js/core/markdown.js";
 
 const ALLOWED_TAG = new RegExp(
   "^</?(?:h[1-6]|p|ul|ol|li|pre|code|em|strong|blockquote|hr|br|table|thead|tbody|tr|th|td)>$"
@@ -205,4 +205,24 @@ test("a long run of markers stays fast", () => {
   const start = performance.now();
   md(`${"*a ".repeat(3000)}\n${"[".repeat(3000)}`);
   assert.ok(performance.now() - start < 2000);
+});
+
+test("hostile Markdown never crashes or freezes the page", () => {
+  const show = (source) => {
+    const element = {};
+    const started = Date.now();
+    setMarkdown(element, source);
+    assert.ok(Date.now() - started < 1500, "took too long");
+    return element;
+  };
+  const inputs = [];
+  for (const size of [1600, 5000, 100000]) inputs.push("> ".repeat(size), "- ".repeat(size), "[".repeat(size), "*a ".repeat(size));
+  for (const source of inputs) {
+    const shown = show(source);
+    assert.equal(typeof (shown.innerHTML ?? shown.textContent), "string");
+  }
+  // Too deep for the renderer, and too long to try: both arrive as the text they were.
+  for (const source of ["> ".repeat(5000), "[".repeat(100000)]) assert.equal(show(source).textContent, source);
+  assert.match(show("**fine**").innerHTML, /<strong>fine<\/strong>/);
+  assert.equal(show(null).innerHTML, "");
 });

@@ -36,14 +36,16 @@ src/interviewbench/
     js/main.js         entry point
     js/preact.js       the only import of vendor/: html, render and the hooks
     js/core/           no framework, so node can test it: API client, routes, formatting, diff, Markdown
-    js/hooks/          reusable hooks: useAsync for loading data, useNow, useBusy
+    js/hooks/          reusable hooks: useAsync to load data, useAction for short calls, useNow, useApp
     js/components/     shared UI: Button, Dialog, Notice, Async, MarkdownView
     js/app/            the frame: routing, status, theme, top and status bars
     js/views/<screen>/ one folder per screen; a screen's parts stay in its folder
 ```
 
-Dependencies point one way: `views` use `components` and `hooks`, which use `core`. Logic worth
-testing goes in a pure module, as `views/round/round-state.js` does, with a test in `tests/gui_js/`.
+Dependencies point one way, and `tests/test_gui_static.py` checks it: `app` uses `views`, which use
+`components`, which use `hooks`, which use `core`. A screen imports only from its own folder. Logic
+worth testing goes in a pure module, as `views/round/round-state.js` does, with a test in
+`tests/gui_js/`.
 To add a screen, add it to `core/routes.js` and `app/views.js`. To add a Round panel, add it to
 `PANELS` in `views/round/round-view.js`.
 

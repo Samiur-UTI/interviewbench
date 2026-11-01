@@ -7,11 +7,12 @@ import { parseDiff } from "../../../core/diff.js";
 import { plural } from "../../../core/format.js";
 import { useAsync } from "../../../hooks/use-async.js";
 import { useWindowFocus } from "../../../hooks/use-dom.js";
-import { html } from "../../../preact.js";
+import { html, useMemo } from "../../../preact.js";
 import { useRoundContext } from "../round-context.js";
 import { FileDiff } from "./diff-view.js";
 
 function ChangedFiles({ data }) {
+  if (!data.files.length) return html`<${Empty} title="No changes yet" text="Edits you save in your editor show up here." />`;
   const byPath = new Map(parseDiff(data.diff).map((file) => [file.path, file]));
   const added = data.files.reduce((sum, file) => sum + file.additions, 0);
   const removed = data.files.reduce((sum, file) => sum + file.deletions, 0);
@@ -25,12 +26,15 @@ function ChangedFiles({ data }) {
 }
 
 export function ChangesPanel() {
-  const { round, memo } = useRoundContext();
+  const { round, memo, settled } = useRoundContext();
   const query = useAsync(async () => {
     memo.changes = await api.changes(round.id);
     return memo.changes;
-  }, [round.id, round.stage], memo.changes ?? null);
+  }, [round.id, round.stage, settled], memo.changes ?? null);
   useWindowFocus(query.reload);
+  // The same vnode tells Preact to skip the subtree, which a long diff makes worth doing: this panel
+  // re-renders on every job poll and status check.
+  const files = useMemo(() => html`<${ChangedFiles} data=${query.data} />`, [query.data]);
 
   return html`
     <div class="stack">
@@ -46,9 +50,7 @@ export function ChangesPanel() {
           query=${query}
           loading="Comparing your code with the starter…"
           failed="Couldn't load your changes"
-          render=${(data) => (data.files.length
-            ? html`<${ChangedFiles} data=${data} />`
-            : html`<${Empty} title="No changes yet" text="Edits you save in your editor show up here." />`)}
+          render=${() => files}
         />
       </div>
     </div>`;

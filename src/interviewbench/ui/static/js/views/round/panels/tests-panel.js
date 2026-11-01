@@ -3,20 +3,19 @@
 import { Button } from "../../../components/button.js";
 import { Empty, Notice } from "../../../components/feedback.js";
 import { api } from "../../../core/api.js";
-import { formatDate, parseTime } from "../../../core/format.js";
+import { formatDate, metaLine, parseTime } from "../../../core/format.js";
 import { html } from "../../../preact.js";
 import { JobLog } from "../job-log.js";
-import { useRoundContext } from "../round-context.js";
+import { useRoundContext, useRunningHere } from "../round-context.js";
 import { TestDetails, TestSummary } from "./test-results.js";
 
 function LastRun({ last, running }) {
   const finished = parseTime(last.finished_at);
-  const meta = [last.runner && `${last.runner} runner`, finished && `finished ${formatDate(finished)}`];
   return html`
     <div class="stack">
       ${running && html`<p class="meta">Showing your last run until this one finishes.</p>`}
       <${TestSummary} result=${last} />
-      <p class="meta">${meta.filter(Boolean).join(" · ")}</p>
+      <p class="meta">${metaLine(last.runner && `${last.runner} runner`, finished && `finished ${formatDate(finished)}`)}</p>
       ${!last.error && last.total === 0 && html`
         <${Notice} kind="warn">No tests ran. Add tests to your project, then run them again.<//>`}
       <${TestDetails} result=${last} />
@@ -24,9 +23,9 @@ function LastRun({ last, running }) {
 }
 
 export function TestsPanel() {
-  const { round, job, blocked, runJob, failure } = useRoundContext();
+  const { round, blocked, runJob, failure } = useRoundContext();
   const last = round.last?.test;
-  const running = job?.kind === "test";
+  const running = useRunningHere("tests");
   const failed = failure("test");
   return html`
     <div class="stack">

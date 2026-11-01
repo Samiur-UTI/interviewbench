@@ -8,7 +8,7 @@ import { formatTokens } from "../../../core/format.js";
 import { useAsync } from "../../../hooks/use-async.js";
 import { html, useEffect } from "../../../preact.js";
 import { JobLog } from "../job-log.js";
-import { useDraft, useRoundContext } from "../round-context.js";
+import { useDraft, useRoundContext, useRunningHere } from "../round-context.js";
 import { Legend, Results } from "./break-results.js";
 
 function problemWith(filename, attack) {
@@ -18,12 +18,12 @@ function problemWith(filename, attack) {
 }
 
 export function BreakPanel() {
-  const { round, job, blocked, drafts, runJob, failure } = useRoundContext();
+  const { round, blocked, drafts, runJob, settled, failure } = useRoundContext();
   const [filename, setFilename] = useDraft("filename");
   const [attack, setAttack] = useDraft("attack");
-  const query = useAsync(() => api.attackPrompt(round.id), [round.id, round.stage]);
-  const info = query.error ? null : query.data;
-  const running = job?.kind === "break";
+  const query = useAsync(() => api.attackPrompt(round.id), [round.id, round.stage, settled]);
+  const info = query.data;
+  const running = useRunningHere("break");
   const last = round.last?.break;
   const failed = failure("break");
 

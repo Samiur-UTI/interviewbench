@@ -1,6 +1,6 @@
 // What happens when a round starts. Remembered per browser.
 
-import { useApp } from "../../app/app-context.js";
+import { useApp } from "../../hooks/use-app.js";
 import { recall, remember } from "../../core/storage.js";
 import { html, useState } from "../../preact.js";
 

@@ -4,22 +4,17 @@ import { Button } from "../../components/button.js";
 import { Dialog } from "../../components/dialog.js";
 import { Notice } from "../../components/feedback.js";
 import { api } from "../../core/api.js";
-import { useBusy } from "../../hooks/use-busy.js";
-import { html, useState } from "../../preact.js";
+import { useAction } from "../../hooks/use-action.js";
+import { html } from "../../preact.js";
 
 export function NextStageDialog({ round, onClose, onMoved }) {
   const next = round.stage + 1;
-  const [error, setError] = useState(null);
-  const [busy, run] = useBusy();
+  const [busy, error, act] = useAction();
 
-  const proceed = () => run(async () => {
-    try {
-      const moved = await api.nextStage(round.id);
-      onClose();  // first: nothing behind an open dialog can take focus
-      onMoved(moved);
-    } catch (err) {
-      setError(err.message);
-    }
+  const proceed = () => act(async () => {
+    const moved = await api.nextStage(round.id);
+    onClose();  // first: nothing behind an open dialog can take focus
+    onMoved(moved);
   });
 
   const actions = html`

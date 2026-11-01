@@ -4,7 +4,7 @@ import { Button } from "../../components/button.js";
 import { Notice } from "../../components/feedback.js";
 import { announce } from "../../core/announce.js";
 import { api } from "../../core/api.js";
-import { useBusy } from "../../hooks/use-busy.js";
+import { useAction } from "../../hooks/use-action.js";
 import { html, useEffect, useRef, useState } from "../../preact.js";
 import { PRESETS, presetFor } from "./presets.js";
 
@@ -29,8 +29,7 @@ export function SettingsForm({ judge, onSaved, focusSave }) {
   const [model, setModel] = useState(judge.model ?? "");
   const [baseUrl, setBaseUrl] = useState(judge.base_url ?? "");
   const [apiKey, setApiKey] = useState("");
-  const [error, setError] = useState(null);
-  const [busy, run] = useBusy();
+  const [busy, error, act] = useAction();
   const form = useRef(null);
   const claude = preset.backend === "claude";
 
@@ -38,16 +37,11 @@ export function SettingsForm({ judge, onSaved, focusSave }) {
     if (focusSave) form.current.querySelector('[type="submit"]').focus();
   }, []);
 
-  const save = (extra = {}) => run(async () => {
-    setError(null);
-    try {
-      const body = { backend: preset.backend, model: model.trim(), base_url: claude ? "" : baseUrl.trim(), ...extra };
-      if (apiKey && extra.api_key === undefined) body.api_key = apiKey;
-      onSaved(await api.saveSettings(body));
-      announce("Settings saved.");
-    } catch (err) {
-      setError(err.message);
-    }
+  const save = (extra = {}) => act(async () => {
+    const body = { backend: preset.backend, model: model.trim(), base_url: claude ? "" : baseUrl.trim(), ...extra };
+    if (apiKey && extra.api_key === undefined) body.api_key = apiKey;
+    onSaved(await api.saveSettings(body));
+    announce("Settings saved.");
   });
 
   const choose = (item) => {
@@ -90,6 +84,7 @@ export function SettingsForm({ judge, onSaved, focusSave }) {
           type="url"
           class="mono"
           autocomplete="off"
+          disabled=${claude}
           spellcheck=${false}
           value=${baseUrl}
           onInput=${(event) => setBaseUrl(event.target.value)}

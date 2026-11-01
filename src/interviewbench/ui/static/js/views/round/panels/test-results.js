@@ -2,6 +2,7 @@
 
 import { Notice } from "../../../components/feedback.js";
 import { Icon } from "../../../components/icon.js";
+import { testsPassed } from "../../../core/format.js";
 import { html } from "../../../preact.js";
 
 function FailureList({ failures }) {
@@ -15,12 +16,12 @@ function FailureList({ failures }) {
     </ul>`;
 }
 
-export function TestSummary({ result, what = "of your tests passed" }) {
-  const clean = result.total > 0 && result.passed === result.total && !result.error;
+export function TestSummary({ result }) {
+  const clean = testsPassed(result);
   return html`
     <p class=${`result-line ${clean ? "ok" : "fail"}`}>
       <${Icon} name=${clean ? "check" : "cross"} />
-      <span class="result-count">${result.passed} of ${result.total}</span> ${what}
+      <span class="result-count">${result.passed} of ${result.total}</span> of your tests passed
     </p>`;
 }
 

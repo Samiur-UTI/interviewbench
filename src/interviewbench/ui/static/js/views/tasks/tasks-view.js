@@ -1,6 +1,6 @@
 // Tasks: filter the catalogue, peek at the rubric, start a round.
 
-import { HowToNote } from "../../app/howto.js";
+import { HowToNote } from "../../components/howto.js";
 import { Button } from "../../components/button.js";
 import { Async, Empty } from "../../components/feedback.js";
 import { api } from "../../core/api.js";

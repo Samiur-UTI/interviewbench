@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "../preact.js";
 
-// Returns [busy, run]: `run(fn)` sets busy while fn is going, and ignores a second press.
-export function useBusy() {
+// Returns [busy, error, act]: `act(fn)` runs fn once at a time, and keeps the message if it throws.
+export function useAction() {
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
   const running = useRef(false);
   const mounted = useRef(true);
   useEffect(() => {
@@ -13,16 +14,19 @@ export function useBusy() {
       mounted.current = false;
     };
   }, []);
-  const run = useCallback(async (fn) => {
-    if (running.current) return undefined;
+  const act = useCallback(async (fn) => {
+    if (running.current) return;
     running.current = true;
     setBusy(true);
+    setError(null);
     try {
-      return await fn();
+      await fn();
+    } catch (err) {
+      if (mounted.current) setError(err.message);
     } finally {
       running.current = false;
       if (mounted.current) setBusy(false);
     }
   }, []);
-  return [busy, run];
+  return [busy, error, act];
 }

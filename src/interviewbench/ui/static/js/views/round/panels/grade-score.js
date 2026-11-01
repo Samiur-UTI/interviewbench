@@ -3,7 +3,7 @@
 import { CopyablePath } from "../../../components/button.js";
 import { Badge, Notice } from "../../../components/feedback.js";
 import { Icon } from "../../../components/icon.js";
-import { formatDate, formatPercent, formatPoints, parseTime, plural } from "../../../core/format.js";
+import { formatDate, formatPercent, formatPoints, metaLine, parseTime, plural, testsPassed } from "../../../core/format.js";
 import { html, useLayoutEffect, useRef } from "../../../preact.js";
 import { TestDetails } from "./test-results.js";
 
@@ -21,11 +21,11 @@ export function ScoreSection({ grade }) {
   const finished = parseTime(grade.finished_at);
   const pending = grade.pending_weight > 0;
   const used = grade.time_used_minutes;
-  const meta = [
+  const meta = metaLine(
     used !== null && used !== undefined && `${used} min used`,
     grade.runner && `${grade.runner} runner`,
     finished && `graded ${formatDate(finished)}`,
-  ];
+  );
   return html`
     <section class="stack" aria-label="Score">
       <div class="score">
@@ -39,7 +39,7 @@ export function ScoreSection({ grade }) {
           ${pending && html`<p class="muted">${formatPoints(grade.pending_weight)} more points wait for the AI review.</p>`}
         </div>
       </div>
-      <p class="meta">${meta.filter(Boolean).join(" · ")}</p>
+      <p class="meta">${meta}</p>
       ${grade.report_path && html`<p class="meta report">Report <${CopyablePath} path=${grade.report_path} /></p>`}
       ${grade.judge_error && html`
         <${Notice} kind="warn">
@@ -49,7 +49,7 @@ export function ScoreSection({ grade }) {
 }
 
 export function StageRow({ stage }) {
-  const clean = stage.total > 0 && stage.passed === stage.total && !stage.error;
+  const clean = testsPassed(stage);
   const failures = Array.isArray(stage.failures) ? stage.failures : [];
   return html`
     <li class="stage-result">
