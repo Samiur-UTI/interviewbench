@@ -1,0 +1,63 @@
+import { html } from "./html.ts";
+import { PLATFORM_NAMES, formatTime, isoTime } from "./format.ts";
+import type { Campaign, PublicEvent, PublicRun, RunStatus } from "../../shared/types.ts";
+
+export interface RunListProps {
+  runs: PublicRun[];
+  campaigns: Record<string, Campaign>;
+  events: Record<string, PublicEvent[]>;
+}
+
+const RUN_STATUS_TEXT: Record<RunStatus, string> = {
+  queued: "Queued",
+  running: "Running",
+  paused: "Paused",
+  completed: "Completed",
+  failed: "Failed",
+};
+
+function EventItem({ event }: { event: PublicEvent }) {
+  // LinkedIn marks the keywords that matched the search with <em>; keep the highlighting.
+  const headline = event.target?.headline;
+  return html`
+    <li class=${`event event-${event.type}`}>
+      <time datetime=${isoTime(event.at)}>${formatTime(event.at)}</time>
+      <span class="message">${event.message}</span>
+      ${headline && html`<span class="headline" dangerouslySetInnerHTML=${{ __html: headline }}></span>`}
+    </li>
+  `;
+}
+
+function RunItem({ run, campaign, events }: { run: PublicRun; campaign?: Campaign; events: PublicEvent[] }) {
+  const titleId = `run-${run.id}-title`;
+  const { sent, total } = run.progress;
+  return html`
+    <section class="run" data-status=${run.status} aria-labelledby=${titleId}>
+      <header class="run-header">
+        <h3 id=${titleId}>${campaign?.name ?? run.campaignId}</h3>
+        <span class="badge">${RUN_STATUS_TEXT[run.status]}</span>
+        ${campaign && html`<span class="platform">${PLATFORM_NAMES[campaign.platform]}</span>`}
+      </header>
+      <label class="progress">
+        <span>${sent} of ${total} ${campaign ? campaign.itemLabel.toLowerCase() : "items"} sent</span>
+        <progress max=${total} value=${sent}></progress>
+      </label>
+      ${events.length === 0
+        ? html`<p class="empty">No activity yet.</p>`
+        : html`<ol class="events">
+            ${events.map((event) => html`<${EventItem} key=${event.id} event=${event} />`)}
+          </ol>`}
+    </section>
+  `;
+}
+
+export function RunList({ runs, campaigns, events }: RunListProps) {
+  if (runs.length === 0) return html`<p class="empty">No campaign has run yet.</p>`;
+  return html`
+    <div class="runs">
+      ${runs.map(
+        (run) => html`<${RunItem} key=${run.id} run=${run} campaign=${campaigns[run.campaignId]} events=${events[run.id] ?? []} />`,
+      )}
+    </div>
+  `;
+}
