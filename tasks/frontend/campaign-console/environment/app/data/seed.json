@@ -1,0 +1,446 @@
+{
+  "connections": [
+    {
+      "id": "conn_google",
+      "platform": "google",
+      "method": "oauth",
+      "label": "Google Ads",
+      "accountName": "Northwind Outdoor (123-456-7890)",
+      "credential": {
+        "method": "oauth",
+        "accessToken": "fakeN8mMlvsFsyFzWazVFVWOW5rZw97Nn19PDQfmzZXYqzzL",
+        "refreshToken": "fakenMGP1qGeocnM6IFQJnsC30LZ5oOjieVOTRnJXoDP",
+        "expiresAt": 1794286800000,
+        "scope": "https://www.googleapis.com/auth/adwords"
+      },
+      "lastProbe": {
+        "connectionId": "conn_google",
+        "ok": true,
+        "checkedAt": 1794297840000
+      },
+      "createdAt": 1772446500000
+    },
+    {
+      "id": "conn_meta",
+      "platform": "meta",
+      "method": "oauth",
+      "label": "Meta",
+      "accountName": "Northwind Outdoor (act_20817733)",
+      "credential": {
+        "method": "oauth",
+        "accessToken": "fakeFzlhQ5M11TXBZwsZwngCHbqRc1l4xMZMW2dWzgdYYU4en1Zu",
+        "expiresAt": 1797753600000,
+        "scope": "ads_management,ads_read"
+      },
+      "lastProbe": {
+        "connectionId": "conn_meta",
+        "ok": true,
+        "checkedAt": 1794297840000
+      },
+      "createdAt": 1776523200000
+    },
+    {
+      "id": "conn_twilio",
+      "platform": "twilio",
+      "method": "api_key",
+      "label": "Twilio",
+      "accountName": "Northwind SMS",
+      "credential": {
+        "method": "api_key",
+        "accountSid": "AC55007027a397e5a48045d45d15141bbe",
+        "apiKeySid": "SK460546b9c026d8f781d28782da382dc7",
+        "apiKeySecret": "fakegg8s7J8985k6TORZhCMGFS44ofPlPxXaTs95"
+      },
+      "lastProbe": {
+        "connectionId": "conn_twilio",
+        "ok": true,
+        "checkedAt": 1794297840000
+      },
+      "createdAt": 1770800400000
+    },
+    {
+      "id": "conn_linkedin",
+      "platform": "linkedin",
+      "method": "session",
+      "label": "LinkedIn",
+      "accountName": "Maya Okafor",
+      "credential": {
+        "method": "session",
+        "cookies": {
+          "li_at": "fakeMt9UXg9Lhk7YmhAdISxGVcQ9YRroJ0I1iqe3BrIMDKrmJmDV",
+          "JSESSIONID": "fakebT3bBXwGE82xpSQXzGm3sUr8Rrp8nvCmAjQUwmzq"
+        },
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+        "profileUrl": "https://www.linkedin.com/in/maya-okafor-growth"
+      },
+      "lastProbe": {
+        "connectionId": "conn_linkedin",
+        "ok": true,
+        "checkedAt": 1794297840000
+      },
+      "createdAt": 1779898800000
+    }
+  ],
+  "campaigns": [
+    {
+      "id": "camp_1",
+      "name": "Spring reactivation",
+      "platform": "twilio",
+      "connectionId": "conn_twilio",
+      "itemLabel": "SMS",
+      "createdAt": 1794236400000
+    },
+    {
+      "id": "camp_2",
+      "name": "Founders outreach",
+      "platform": "linkedin",
+      "connectionId": "conn_linkedin",
+      "itemLabel": "Connection request",
+      "createdAt": 1794241800000
+    },
+    {
+      "id": "camp_3",
+      "name": "Winter search refresh",
+      "platform": "google",
+      "connectionId": "conn_google",
+      "itemLabel": "Ad",
+      "createdAt": 1794296700000
+    }
+  ],
+  "runs": [
+    {
+      "id": "run_1",
+      "campaignId": "camp_1",
+      "connectionId": "conn_twilio",
+      "status": "completed",
+      "progress": {
+        "nextIndex": 3,
+        "sent": 3,
+        "total": 3
+      },
+      "items": [
+        {
+          "id": "itm_1_1",
+          "target": {
+            "name": "Priya Shah"
+          },
+          "payload": {
+            "to": "+447700900123",
+            "body": "Hi, the Northwind spring range is in: 20% off this week with code SPRING20. Reply STOP to opt out."
+          }
+        },
+        {
+          "id": "itm_1_2",
+          "target": {
+            "name": "Tom Becker"
+          },
+          "payload": {
+            "to": "+447700900456",
+            "body": "Hi, the Northwind spring range is in: 20% off this week with code SPRING20. Reply STOP to opt out."
+          }
+        },
+        {
+          "id": "itm_1_3",
+          "target": {
+            "name": "O'Brien & Sons"
+          },
+          "payload": {
+            "to": "+447700900789",
+            "body": "Hi, the Northwind spring range is in: 20% off this week with code SPRING20. Reply STOP to opt out."
+          }
+        }
+      ],
+      "startedAt": 1794236700000,
+      "updatedAt": 1794236709000
+    },
+    {
+      "id": "run_2",
+      "campaignId": "camp_2",
+      "connectionId": "conn_linkedin",
+      "status": "running",
+      "progress": {
+        "nextIndex": 2,
+        "sent": 2,
+        "total": 5
+      },
+      "items": [
+        {
+          "id": "itm_2_1",
+          "target": {
+            "name": "Ana <Lima>",
+            "headline": "Head of Growth at Lima Labs"
+          },
+          "payload": {
+            "profileId": "ACoAABx1aLima",
+            "note": "Hi, I run growth at Northwind Outdoor. Would love to compare notes on outdoor retail."
+          }
+        },
+        {
+          "id": "itm_2_2",
+          "target": {
+            "name": "Jonas Weber",
+            "headline": "Founder & CEO, Trailhead Growth Partners"
+          },
+          "payload": {
+            "profileId": "ACoAABx2jWeber",
+            "note": "Hi, I run growth at Northwind Outdoor. Would love to compare notes on outdoor retail."
+          }
+        },
+        {
+          "id": "itm_2_3",
+          "target": {
+            "name": "Seán O'Brien",
+            "headline": "Growth marketing @ O'Brien & Sons"
+          },
+          "payload": {
+            "profileId": "ACoAABx3sObrien",
+            "note": "Hi, I run growth at Northwind Outdoor. Would love to compare notes on outdoor retail."
+          }
+        },
+        {
+          "id": "itm_2_4",
+          "target": {
+            "name": "Mei Tanaka",
+            "headline": "VP Marketing, Summit Gear <outdoor>"
+          },
+          "payload": {
+            "profileId": "ACoAABx4mTanaka",
+            "note": "Hi, I run growth at Northwind Outdoor. Would love to compare notes on outdoor retail."
+          }
+        },
+        {
+          "id": "itm_2_5",
+          "target": {
+            "name": "Kofi Mensah",
+            "headline": "Partnerships, Ridge & River Co."
+          },
+          "payload": {
+            "profileId": "ACoAABx5kMensah",
+            "note": "Hi, I run growth at Northwind Outdoor. Would love to compare notes on outdoor retail."
+          }
+        }
+      ],
+      "startedAt": 1794297480000,
+      "updatedAt": 1794297690000
+    },
+    {
+      "id": "run_3",
+      "campaignId": "camp_3",
+      "connectionId": "conn_google",
+      "status": "running",
+      "progress": {
+        "nextIndex": 1,
+        "sent": 1,
+        "total": 4
+      },
+      "items": [
+        {
+          "id": "itm_3_1",
+          "target": {
+            "name": "Tents, UK"
+          },
+          "payload": {
+            "adGroup": "customers/1234567890/adGroups/55501",
+            "headline": "Winter tents, ready to ship"
+          }
+        },
+        {
+          "id": "itm_3_2",
+          "target": {
+            "name": "Sleeping bags, UK"
+          },
+          "payload": {
+            "adGroup": "customers/1234567890/adGroups/55502",
+            "headline": "Rated to -15 °C"
+          }
+        },
+        {
+          "id": "itm_3_3",
+          "target": {
+            "name": "Stoves, UK"
+          },
+          "payload": {
+            "adGroup": "customers/1234567890/adGroups/55503",
+            "headline": "Camp stoves from £39"
+          }
+        },
+        {
+          "id": "itm_3_4",
+          "target": {
+            "name": "Jackets, UK"
+          },
+          "payload": {
+            "adGroup": "customers/1234567890/adGroups/55504",
+            "headline": "Waterproof jackets, free returns"
+          }
+        }
+      ],
+      "startedAt": 1794297000000,
+      "updatedAt": 1794297130000
+    },
+    {
+      "id": "run_4",
+      "campaignId": "camp_1",
+      "connectionId": "conn_twilio",
+      "status": "paused",
+      "pausedReason": "user",
+      "progress": {
+        "nextIndex": 1,
+        "sent": 1,
+        "total": 4
+      },
+      "items": [
+        {
+          "id": "itm_4_1",
+          "target": {
+            "name": "Lena Fischer"
+          },
+          "payload": {
+            "to": "+447700900321",
+            "body": "Hi, the Northwind spring range is in: 20% off this week with code SPRING20. Reply STOP to opt out."
+          }
+        },
+        {
+          "id": "itm_4_2",
+          "target": {
+            "name": "Ravi Patel"
+          },
+          "payload": {
+            "to": "+447700900654",
+            "body": "Hi, the Northwind spring range is in: 20% off this week with code SPRING20. Reply STOP to opt out."
+          }
+        },
+        {
+          "id": "itm_4_3",
+          "target": {
+            "name": "Chloé Martin"
+          },
+          "payload": {
+            "to": "+447700900987",
+            "body": "Hi, the Northwind spring range is in: 20% off this week with code SPRING20. Reply STOP to opt out."
+          }
+        },
+        {
+          "id": "itm_4_4",
+          "target": {
+            "name": "Marek Nowak"
+          },
+          "payload": {
+            "to": "+447700900111",
+            "body": "Hi, the Northwind spring range is in: 20% off this week with code SPRING20. Reply STOP to opt out."
+          }
+        }
+      ],
+      "startedAt": 1794295800000,
+      "updatedAt": 1794295865000
+    }
+  ],
+  "events": [
+    {
+      "id": 1,
+      "runId": "run_1",
+      "at": 1794236702000,
+      "type": "sent",
+      "message": "SMS sent to Priya Shah",
+      "target": {
+        "name": "Priya Shah"
+      }
+    },
+    {
+      "id": 2,
+      "runId": "run_1",
+      "at": 1794236704000,
+      "type": "sent",
+      "message": "SMS sent to Tom Becker",
+      "target": {
+        "name": "Tom Becker"
+      }
+    },
+    {
+      "id": 3,
+      "runId": "run_1",
+      "at": 1794236709000,
+      "type": "sent",
+      "message": "SMS sent to O'Brien & Sons",
+      "target": {
+        "name": "O'Brien & Sons"
+      }
+    },
+    {
+      "id": 4,
+      "runId": "run_1",
+      "at": 1794236709000,
+      "type": "completed",
+      "message": "3 of 3 sent"
+    },
+    {
+      "id": 1,
+      "runId": "run_2",
+      "at": 1794297521000,
+      "type": "sent",
+      "message": "Connection request sent to Ana <Lima>",
+      "target": {
+        "name": "Ana <Lima>",
+        "headline": "Head of Growth at Lima Labs"
+      }
+    },
+    {
+      "id": 2,
+      "runId": "run_2",
+      "at": 1794297612000,
+      "type": "retry",
+      "message": "Attempt 1 for Jonas Weber failed (linkedin: HTTP 999); retrying in 412 ms",
+      "detail": {
+        "request": {
+          "url": "https://www.linkedin.com/voyager/api/growth/normInvitations",
+          "method": "POST",
+          "authorization": "li_at=fakeMt9UXg9Lhk7YmhAdISxGVcQ9YRroJ0I1iqe3BrIMDKrmJmDV; JSESSIONID=\"fakebT3bBXwGE82xpSQXzGm3sUr8Rrp8nvCmAjQUwmzq\""
+        },
+        "status": 999,
+        "body": ""
+      },
+      "target": {
+        "name": "Jonas Weber",
+        "headline": "Founder & CEO, Trailhead Growth Partners"
+      }
+    },
+    {
+      "id": 3,
+      "runId": "run_2",
+      "at": 1794297690000,
+      "type": "sent",
+      "message": "Connection request sent to Jonas Weber",
+      "target": {
+        "name": "Jonas Weber",
+        "headline": "Founder & CEO, Trailhead Growth Partners"
+      }
+    },
+    {
+      "id": 1,
+      "runId": "run_3",
+      "at": 1794297130000,
+      "type": "sent",
+      "message": "Ad sent to Tents, UK",
+      "target": {
+        "name": "Tents, UK"
+      }
+    },
+    {
+      "id": 1,
+      "runId": "run_4",
+      "at": 1794295840000,
+      "type": "sent",
+      "message": "SMS sent to Lena Fischer",
+      "target": {
+        "name": "Lena Fischer"
+      }
+    },
+    {
+      "id": 2,
+      "runId": "run_4",
+      "at": 1794295865000,
+      "type": "paused",
+      "message": "Paused by Dana Kim (ops): customer asked to hold sends until Monday"
+    }
+  ]
+}

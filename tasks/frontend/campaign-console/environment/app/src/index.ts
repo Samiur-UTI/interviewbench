@@ -1,0 +1,22 @@
+// Server-side public API. Tests and tools import from here; the browser imports src/client/index.ts.
+export { createApp } from "./server/app.ts";
+export type { App, AppOptions } from "./server/app.ts";
+export { createStore } from "./server/store.ts";
+export type { NewEvent, Seed, Store, StoreChange, StoreListener } from "./server/store.ts";
+export { TokenCache } from "./server/tokens.ts";
+export { ProbeService } from "./server/connectivity.ts";
+export { CampaignRunner } from "./server/runner.ts";
+export { CircuitBreaker, CircuitOpenError } from "./server/breaker.ts";
+export { probeCause } from "./server/connectivity.ts";
+export { withRetry, backoffDelay } from "./server/retry.ts";
+export { PlatformError, NotFoundError, ValidationError } from "./server/errors.ts";
+export { renderDashboardPage } from "./server/pages/dashboard.ts";
+export { toPublicConnection, toPublicRun, toPublicEvent, toDashboardState } from "./server/views.ts";
+export { decodeFrame, encodeFrame, FrameError, OPCODES, CLOSE_CODES, MAX_PAYLOAD_BYTES } from "./server/ws.ts";
+export { config } from "./shared/config.ts";
+export type { Config } from "./shared/config.ts";
+export { realScheduler, sleep } from "./shared/scheduler.ts";
+export type { Scheduler } from "./shared/scheduler.ts";
+export type { PlatformAdapter, PlatformRegistry } from "./server/platforms/types.ts";
+export type { ClientMessage, ServerMessage } from "./shared/protocol.ts";
+export type * from "./shared/types.ts";
