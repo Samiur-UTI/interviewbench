@@ -71,7 +71,12 @@ function state(overrides: Record<string, unknown> = {}): any {
 
 const unauthorized = (at: number) => ({ type: "probe", result: { connectionId: "conn_twilio", ok: false, cause: "unauthorized", checkedAt: at } });
 
-/** A dashboard client whose Twilio card is Disconnected (three rejected checks), with a scripted fetch. */
+/**
+ * A dashboard client whose Twilio card is Disconnected, with a scripted fetch. It gets there the way
+ * README's Connectivity rules describe: a rejected result, then the two confirming checks the
+ * monitor asks for confirmIntervalMs after each answer, both rejected. (Results the monitor didn't
+ * ask for may or may not count as strikes; the brief leaves that to the candidate.)
+ */
 async function disconnectedClient(answer: (url: string, init: any) => Promise<Response>) {
   const client = await loadClient();
   const scheduler = new FakeScheduler(NOW);
@@ -88,8 +93,14 @@ async function disconnectedClient(answer: (url: string, init: any) => Promise<Re
     },
   });
   dc.handle({ type: "snapshot", state: state() });
-  for (let i = 0; i < 3; i++) dc.handle(unauthorized(NOW + i));
-  assert.equal(dc.statusOf("conn_twilio"), "disconnected", "setup: three rejected checks");
+  dc.handle(unauthorized(scheduler.now()));
+  for (let i = 0; i < 2; i++) {
+    await scheduler.advance(CONFIG.connectivity.confirmIntervalMs);
+    assert.ok(sent.some((m) => m?.type === "probe" && m.connectionId === "conn_twilio"), `setup: confirming check ${i + 1} was asked for`);
+    sent.length = 0;
+    dc.handle(unauthorized(scheduler.now()));
+  }
+  assert.equal(dc.statusOf("conn_twilio"), "disconnected", "setup: three rejected checks, the last two asked for by the monitor");
   sent.length = 0;
   return { dc, scheduler, sent, requests };
 }
