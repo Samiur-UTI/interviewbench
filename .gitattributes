@@ -8,3 +8,5 @@ Dockerfile  text eol=lf
 src/interviewbench/ui/static/** text eol=lf
 tasks/backend/flight-search-aggregator/**/*.json  text eol=lf
 tasks/backend/flight-search-aggregator/**/*.md    text eol=lf
+tasks/frontend/campaign-console/**/*.json  text eol=lf
+tasks/frontend/campaign-console/**/*.md    text eol=lf
