@@ -1,0 +1,184 @@
+# Inherits rubrics/base.yaml and rubrics/frontend.yaml. Entries below add criteria or override
+# inherited ones by id. Total weight: 45 auto + 55 judge = 100
+# (15 + 15 + 15 + correctness 10 + root-cause 10 + code-quality 5 + verification 5
+#  + business-alignment 5 + communication 5 + accessibility 5 + state-management 5 + security 5).
+
+focus: |
+  The truth in this repo is scattered: README's Connectivity rules and Rules, docs/platforms/*.md,
+  the types in src/shared/types.ts, the numbers in src/shared/config.ts, and sibling code paths
+  (the runner next to the probe service). Reward candidates who cross-checked the data flow end to
+  end; penalise fixes that make one layer look right. Watch for:
+  - T1 (stage 1): the monitor's confirmation spaced with probeIntervalMs (60 s) or counted against
+    breaker.failureThreshold (5) instead of confirmIntervalMs (2 s) and confirmAttempts (3);
+    confirm timers counted from the first failure instead of from each result's arrival; three
+    strikes counted without spacing.
+  - T2 (stage 1): every ok:false treated alike. unauthorized is the only cause that can lead to
+    Reconnect; unreachable/rate_limited keep checking; circuit_open is paused and stops checking.
+  - T3 (stage 1): a browser-only fix. ProbeService builds the probe's credential with
+    tokens.peek(id) ?? the stored credential while the runner uses tokens.getFresh(id), so after
+    an hour Google probes send an expired token while the campaign keeps sending. The fix is to
+    probe through getFresh (shared refresh, no second refresh path). Moving confirmation into the
+    server, or refreshing inside the adapter, is the wrong layer.
+  - T4/T5 (stage 1): stripping accessToken/refreshToken only (apiKeySecret and the LinkedIn cookies
+    remain); stripping credentials but not event `detail` and `message` (PlatformError details
+    carry the authorization header and Google/Twilio messages quote the token); fixing only the
+    real adapters (the hidden tests' fakes attach the same); redacting by known secret values (the
+    token quoted before a forced refresh is no longer the stored one, and Twilio's basic auth is
+    base64); a deny-list of field names. The right shape: an allow-list at the browser boundary
+    (views.ts builds every browser-facing shape field by field: `public` per method, events without
+    `detail`) plus our own wording for failures (the runner composes event messages from the cause
+    and the target and keeps the adapter's error server-side in `detail`). Lead names and
+    headlines must still be shown.
+  - T6/T7 (stage 1): fixing one sink of several (the state script, the headline innerHTML, three
+    endpoints sharing views) or one crash path of several (JSON.parse, unknown id over WS and
+    HTTP, unmasked frames, async handlers without a catch). Escaping the state script by
+    HTML-entity-encoding the JSON breaks the __STATE__ contract; dropping the headline instead of
+    rendering it as text breaks rule 3.
+  - T8 (stage 2): resuming runs paused by an operator (pausedReason "user") or runs of other
+    connections; expiresIn seconds stored as ms (or vice versa); accepting a different Twilio
+    accountSid; dropping the stored Google refresh token when none is sent (or storing one for
+    Meta, which has none); spreading the body into the stored credential (overwrites LinkedIn's
+    profileUrl, the method, adds unknown fields); not calling tokens.invalidate and breakers.reset,
+    so the check after the reconnect goes out with the cached, rejected token or is answered
+    circuit_open without a platform call, and nothing resumes (or the run pauses again at once);
+    resuming when that check failed; resuming from item 0 or re-sending the last sent item;
+    resume() that waits for the whole run, or races a send loop that is still winding down;
+    echoing the new credential in the answer or the `connection` message; quoting the adapter's
+    error in the `paused` event. In the browser: the form without labels, secrets in text inputs
+    or prefilled, an editable account SID, a refresh-token field for Meta, field errors not tied to
+    their input; the client waiting for the next pushed probe instead of applying the answer's; a
+    live region kept only in transient state that a snapshot wipes. Inputs given a `value` with no
+    state behind it reset what was typed on every re-render (e.g. when pending flips): a real bug
+    the tests can't see.
+  - T9 (stage 3): the per-socket probe loop (and the probes on connect) replaced by one schedule
+    that starts at listen(), books each round before its checks start (a hanging platform must
+    not hold up the others) and is stopped by close(). Wrong: answering a dashboard's confirm
+    request from the stored lastProbe, or leaving it to the next round (both make the monitor's
+    three confirmations repeat one old answer: the stage 1 timeline breaks); keeping the
+    per-socket loop alongside; a round that calls a connection whose check is still in flight;
+    a joined check whose result reaches only the requesters; a reconnect's check that joins one
+    started with the old credential (rubric correctness, not tested). Joining overlapping
+    requests into one platform call, pushed once to every dashboard, is expected.
+  - T10 (stage 3): removing the client's snapshot re-request without fixing the hub's connect
+    ordering (the snapshot state is read before the first probes are awaited and the socket is
+    registered after them, so changes in that window are lost: "the counter is one behind").
+    Registering the socket and sending its snapshot in one synchronous step (or subscribing first
+    and replaying what the snapshot doesn't cover), with a server-wide seq that the snapshot
+    carries, is the fix; seq per socket, a snapshot without the seq it is current to, a client
+    that asks for a snapshot on every message or never again after its first gap, or that drops
+    older events it holds on a resync, are not. Also stage 3: trimming the snapshot but not the
+    page (or the reverse), eventCount computed from the events sent instead of the total, the
+    events page with `before` inclusive, descending, a wrong nextBefore at the end, no limit
+    bound, recentEvents hard-coded instead of read from the app's config, `detail` in the
+    events API, loadEarlierEvents duplicating on a double click. Reward NOTES.md that measures
+    before and after (calls per interval per number of dashboards, bytes of a snapshot and the
+    page).
+
+business: |
+  The client is Relay, a SaaS console for outbound marketing. Agencies and growth teams keep the
+  dashboard open all day to watch their customers' connections (Google Ads, Meta, Twilio,
+  LinkedIn) and campaign runs; agencies with 40+ connections keep it open on many screens.
+
+  Connectivity (README, "Connectivity"): the browser's monitor decides what a card shows; the
+  server answers each probe request with one platform call and keeps no per-viewer state.
+  Reconnect only after confirmAttempts consecutive unauthorized results spaced by
+  confirmIntervalMs; unreachable/rate_limited never lead to Reconnect; circuit_open shows paused;
+  a failed snapshot lastProbe is strike one; the campaign is the ground truth.
+
+  Rules (README, "Rules"):
+  1. Never make users reconnect for nothing. Reconnecting rotates the credential, drops cached
+     tokens and (before stage 2) aborts the run; for LinkedIn a re-login can get the customer's
+     account restricted.
+  2. Secrets never reach the browser: access/refresh tokens, API key secrets and session cookies
+     are not in the page, any API response, WebSocket messages, run events, error details or error
+     messages. Public identifiers (accountSid, apiKeySid, scope, expiresAt, profileUrl, userAgent)
+     may be shown.
+  3. Everything the platforms and browsers send us is untrusted. Platform text is shown as text,
+     never as markup, and never dropped. No message a browser can send may take the console down.
+  4. A paused run resumes where it stopped and never sends an item twice (stage 2).
+  5. Our own health checks must not eat the platforms' quotas (Meta's debug_token budget,
+     LinkedIn's challenge threshold) or lose events (stage 3).
+
+  Priorities when they conflict: secrets and server availability > never-reconnect-for-nothing >
+  resume-without-duplicates > honest live status > quota and bandwidth. Showing "checking" a
+  little longer is better than a false Reconnect; an operator-paused run staying paused is right;
+  one shared probe per interval is right even if a viewer's card updates up to an interval later.
+
+criteria:
+  - id: stage1-both-halves
+    type: auto
+    stage: 1
+    weight: 15
+    description: Hidden stage 1 tests pass, a mix of unit and full-stack tests; full marks need both the browser and the server changes (confirmation in the monitor, probes with fresh tokens, no secret or executable data reaching the browser, no browser message that stops the server).
+
+  - id: stage2-reconnect-resume
+    type: auto
+    stage: 2
+    weight: 15
+    description: Hidden stage 2 tests pass, a mix of unit and full-stack tests; full marks need both the browser and the server changes (unauthorized runs pause with their checkpoint, the reconnect endpoint validates and resumes only the right runs, the reconnect form and client flow).
+
+  - id: stage3-shared-probes
+    type: auto
+    stage: 3
+    weight: 15
+    description: Hidden stage 3 tests pass, a mix of unit and full-stack tests; full marks need both the browser and the server changes (one probe schedule for every dashboard with joined checks and confirm requests still answered by a platform call, server-wide seq with snapshots consistent with it and a client that resyncs only after a gap, recent events only with eventCount, the events paging API and "Load earlier events").
+
+  - id: correctness
+    weight: 10
+    levels:
+      0: Wrong in common cases, or the candidate's tests fail.
+      1: Works for the tested paths but has a real bug the tests miss (e.g. a confirm timer that survives stop(), a reconnect that double-resumes a run, a joined probe that never settles when the platform hangs).
+      2: Correct, with at most minor edge-case gaps.
+      3: Correct, including races (refresh in flight, events during connect, concurrent reconnects), hostile input and closed sockets.
+
+  - id: root-cause
+    weight: 10
+    description: Fixes the stage 1 root causes where they live, in both halves, instead of patching symptoms.
+    levels:
+      0: No fix, or only a symptom hidden (e.g. never showing Disconnected, catching every error, deleting the headline).
+      1: Works but in the wrong layer or by the wrong means (confirmation moved into the server, a second refresh path in the probe, redaction by known secret values, a deny-list of field names, or a fix in the real adapters only).
+      2: Monitor fixed in the browser; probes through getFresh; an allow-list at the browser boundary plus our own wording for failures (no adapter message or details reach events shown to the browser); the message parser and handlers hardened.
+      3: As 2, and NOTES.md explains why only Google cards stuck at Disconnected (peek vs getFresh and the one-hour token) and why Meta/Twilio flipped only briefly.
+
+  - id: code-quality
+    weight: 5
+
+  - id: verification
+    weight: 5
+    levels:
+      0: No new tests.
+      1: Some tests, but they would not have caught the original bugs.
+      2: Regression tests for the monitor timeline, the probe credential, and each leak and crash path, plus tests for reconnect-and-resume.
+      3: As 2, plus tests for shared probes, seq gaps and the connect-window race.
+
+  - id: business-alignment
+    weight: 5
+    levels:
+      0: Breaks a rule (a secret in anything the browser receives, a browser message that stops the server, a Reconnect for a transient failure, an operator-paused run resumed, an item sent twice).
+      1: Rules hold, but a judgement call works against users (e.g. dropping hostile text instead of showing it, a confirmation so slow a dead credential takes minutes to show, extra platform calls per viewer).
+      2: Every rule holds, and judgement calls follow the stated priorities.
+
+  - id: communication
+    weight: 5
+
+  # From rubrics/frontend.yaml (weights unchanged); levels made specific to this task (reconnect form, live updates, "Load earlier events").
+  - id: accessibility
+    levels:
+      0: The reconnect form or its errors can't be used without a mouse and sight (unlabelled fields, errors only in colour, no way to cancel from the keyboard), or "Load earlier events" is not a real button.
+      1: Labelled and keyboard-usable, with gaps (focus lost when the form opens or closes, errors not tied to their field, no announcement when a run resumes, a "Load earlier events" control that doesn't say how much is hidden).
+      2: "Every field labelled, secrets as password fields, the read-only account SID marked as such, errors tied to their field (aria-invalid, aria-describedby), the Reconnect button described by the status, focus moved into the form and back to Reconnect (or to the status after success), Escape closes it, and a polite live region announces the resume; 'Load earlier events' is a real button (type=button) that says how many events are shown of how many and controls the list."
+
+  - id: state-management
+    levels:
+      0: State can become inconsistent (a double submit swaps the credential twice or resumes a run twice, a card stuck on Disconnected after a passed check, typed secrets lost on re-render).
+      1: Consistent in normal use, but with edge cases (the form left open after another viewer reconnected, an in-flight reconnect after the card unmounts, the live region lost on a snapshot, a resync that drops events the user loaded, an eventCount that drifts until the next run message, loads that interleave).
+      2: "Consistent in all the cases the brief implies: the answer's connection and check applied once and idempotent with the pushed copies, the form's pending and error state local to the card, reconnects of one connection serialised on the server, the announcement derived from state that survives a snapshot; live messages applied once and in seq order with one resync per gap, a snapshot merged without losing or doubling events, eventCount kept with the events, earlier pages merged by id."
+
+  - id: security
+    type: judge
+    weight: 5
+    description: The pentest finding is fixed at the boundaries where data leaves the server and where browser input enters it.
+    levels:
+      0: A secret or an executable injection remains (any of the page, the APIs, the WebSocket, events, error text), or a browser message can still stop the server.
+      1: Fixed at one sink only; or by redaction of known secret values, a deny-list of field names, or changes to the real adapters only; or by encoding that breaks the contracts (__STATE__ no longer parseable, headline dropped).
+      2: An allow-list at the browser boundary (every browser-facing shape built field by field, `public` per method, events without adapter details) plus our own wording for failure messages, a state script that can't be ended by data, platform text rendered as text, and validation of everything a browser sends (messages, frames, ids).
