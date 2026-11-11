@@ -1,0 +1,15 @@
+{
+  "name": "relay-console",
+  "version": "0.9.0",
+  "private": true,
+  "description": "Relay campaign console: connections, campaign runs and their live status, for agencies and growth teams.",
+  "type": "module",
+  "engines": {
+    "node": ">=24.11"
+  },
+  "scripts": {
+    "start": "node --no-warnings=ExperimentalWarning src/server/main.ts",
+    "test": "node --single-threaded --no-warnings=ExperimentalWarning --test --test-force-exit --test-timeout=30000 \"tests/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit"
+  }
+}
