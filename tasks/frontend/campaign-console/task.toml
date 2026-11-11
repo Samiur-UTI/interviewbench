@@ -1,0 +1,52 @@
+schema_version = "1.4"
+# Harbor's trial reward is the mean of the three stage rewards (each = fraction of hidden tests passed).
+multi_step_reward_strategy = "mean"
+
+[task]
+name = "interviewbench/campaign-console"
+version = "1.0.0"
+description = "Campaign console: phantom disconnects, a pentest finding, reconnect-and-resume, probes shared across dashboards"
+authors = [{ name = "interviewbench" }]
+keywords = ["typescript", "preact", "ssr", "websocket", "security", "xss", "resilience", "fullstack"]
+
+[metadata]
+category = "frontend"                      # must match the folder: tasks/frontend/
+tags = ["typescript", "preact", "ssr", "websocket", "security", "xss", "resilience", "fullstack", "marketing-automation"]
+difficulty = "hard"                        # Harbor vocabulary: easy | medium | hard
+expert_time_estimate_min = 150
+junior_time_estimate_min = 420
+
+[metadata.interviewbench]
+level = "senior"                           # junior | mid | senior
+language = "typescript"
+time_limit_minutes = 240
+# How the candidate's own tests are run (from $APP_DIR). Needs Node.js >= 24.11 (built-in type
+# stripping); with the local runner that means on the host. Same flags as tests/test.sh, including
+# --single-threaded: without it the stage 2 reference's socket tests aborted at forced exit on
+# Windows in 15 of 15 `npm test` runs (libuv UV_HANDLE_CLOSING assertion), 0 of 15 with it.
+candidate_tests = 'node --single-threaded --no-warnings=ExperimentalWarning --test --test-force-exit --test-timeout=30000 --test-reporter=junit --test-reporter-destination="$LOGS_DIR/junit.xml" --test-reporter=spec --test-reporter-destination=stdout "tests/**/*.test.ts"'
+attack_dir = "tests"
+
+[[steps]]
+name = "stage-1"
+[steps.agent]
+timeout_sec = 2400
+
+[[steps]]
+name = "stage-2"
+[steps.agent]
+timeout_sec = 2400
+
+[[steps]]
+name = "stage-3"
+[steps.agent]
+timeout_sec = 2400
+
+[verifier]
+# tests/test.sh runs each test with --test-timeout=30000 and the whole run under `timeout 540s`.
+timeout_sec = 600
+
+[environment]
+build_timeout_sec = 600
+cpus = 2
+memory_mb = 2048
