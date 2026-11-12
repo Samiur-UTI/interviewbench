@@ -160,7 +160,7 @@ def _run_tree(args: list[str], cwd: Path, env: dict[str, str], timeout: int) -> 
     """
     group = {} if os.name == "nt" else {"start_new_session": True}
     with subprocess.Popen(
-        args, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        args, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         text=True, encoding="utf-8", errors="replace", **group,
     ) as proc:
         job = _WindowsJob(proc.pid) if os.name == "nt" else None
@@ -300,7 +300,7 @@ def docker_available() -> bool:
 
 def _docker(*args: str, timeout: int | None = None, check: bool = True) -> subprocess.CompletedProcess:
     proc = subprocess.run(
-        ["docker", *args], capture_output=True, text=True, encoding="utf-8", errors="replace",
+        ["docker", *args], stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding="utf-8", errors="replace",
         timeout=timeout,
     )
     if check and proc.returncode != 0:
