@@ -168,3 +168,21 @@ def test_new_rejects_unknown_category():
     result = runner.invoke(app, ["new", "x", "--category", "mobile"])
     assert result.exit_code == 1
     assert "rubrics/mobile.yaml" in result.output
+
+
+def test_output_survives_a_pipe_without_a_utf8_locale():
+    """Piped or redirected, Python on Windows writes the ANSI code page, which can't encode the
+    briefs' U+2212; ib used to crash with UnicodeEncodeError. It must write UTF-8 instead."""
+    import os
+    import subprocess
+    import sys
+
+    env = {k: v for k, v in os.environ.items() if k not in ("PYTHONIOENCODING", "PYTHONUTF8")}
+    if os.name == "nt":
+        env["PYTHONUTF8"] = "0"  # the default for Windows users: no UTF-8 mode
+    done = subprocess.run(
+        [sys.executable, "-m", "interviewbench", "prompt", "flight-search-aggregator"],
+        capture_output=True, env=env, timeout=60,
+    )
+    assert done.returncode == 0, done.stderr.decode("utf-8", "replace")[-500:]
+    assert "−" in done.stdout.decode("utf-8")
