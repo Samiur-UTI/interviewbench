@@ -108,7 +108,7 @@ def _place(source: Path, destination: Path) -> None:
 def _cases(task: Task, runner: Runner, app: Path, logs: Path, timeout: int | None) -> dict[str, str | None]:
     """Test case id -> None if it passed, else the first line of its failure."""
     limit = timeout or task.verifier_timeout
-    done = runner.run(task, task.candidate_tests, Sandbox(app=app, logs=logs), limit)
+    done = runner.run(task, task.candidate_tests, Sandbox(app=app, logs=logs, temp=logs.parent / "temp"), limit)
     junit = logs / "junit.xml"
     if done.timed_out:
         raise RunnerError(f"Tests timed out after {limit}s")

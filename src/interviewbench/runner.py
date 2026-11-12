@@ -9,6 +9,8 @@ Scripts only see four folders, always through these variables (defaults are Harb
   every language; this is what Harbor does.
 - LocalRunner runs the script with bash on this machine, pointing the variables at temp folders.
   Fast and needs no Docker, but the task's toolchain (e.g. Python + pytest) must be installed.
+  TEMP/TMP/TMPDIR point at a folder of the run's own, deleted afterwards, so temp files the
+  tests forget to remove don't pile up in the user's temp folder.
 """
 
 from __future__ import annotations
@@ -16,8 +18,12 @@ from __future__ import annotations
 import hashlib
 import os
 import shutil
+import signal
+import stat
 import subprocess
 import sys
+import tempfile
+import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -40,12 +46,17 @@ class RunnerError(Exception):
 
 @dataclass
 class Sandbox:
-    """Host folders for one script run. `app` and `logs` are copied back out after the run."""
+    """Host folders for one script run. `app` and `logs` are copied back out after the run.
+
+    `temp` is where LocalRunner points TEMP/TMP/TMPDIR; it is emptied and removed after each run.
+    Put it inside the sandbox's own temp folder; without one, the run makes and removes its own.
+    """
 
     app: Path
     logs: Path
     tests: Path | None = None
     solution: Path | None = None
+    temp: Path | None = None
 
     def folders(self) -> dict[str, Path]:
         found = {"app": self.app, "logs": self.logs, "tests": self.tests, "solution": self.solution}
@@ -108,14 +119,155 @@ class LocalRunner(Runner):
         env.setdefault("PYTHON", Path(sys.executable).as_posix())
         env["PYTHONDONTWRITEBYTECODE"] = "1"
         sandbox.logs.mkdir(parents=True, exist_ok=True)
+        if sandbox.temp is not None:
+            temp = sandbox.temp
+            temp.mkdir(parents=True, exist_ok=True)
+        else:
+            temp = Path(tempfile.mkdtemp(prefix="ib-tmp-"))
+        # The native path form: Git Bash converts TEMP/TMP/TMPDIR to /c/... for itself and back
+        # for the programs it starts, so bash's mktemp, Node's os.tmpdir() and Python's tempfile
+        # all land here.
+        native = str(temp.resolve())
+        env.update(TEMP=native, TMP=native, TMPDIR=native)
         try:
-            proc = subprocess.run(
-                [self.bash, "-c", command], cwd=sandbox.app, env=env,
-                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout,
-            )
-        except subprocess.TimeoutExpired as exc:
-            return Completed(-1, _text(exc.stdout) + _text(exc.stderr), timed_out=True)
-        return Completed(proc.returncode, proc.stdout + proc.stderr)
+            return _run_tree([self.bash, "-c", command], sandbox.app, env, timeout)
+        finally:
+            remove_tree(temp)
+
+
+def _run_tree(args: list[str], cwd: Path, env: dict[str, str], timeout: int) -> Completed:
+    """subprocess.run, but a timeout (or Ctrl-C) kills the script's whole process tree.
+
+    Killing only bash leaves its children (pytest, node) running, holding files in the sandbox
+    open so it can't be deleted, and on Windows the output pipes stay open, so waiting for the
+    output blocks until they exit on their own.
+    """
+    group = {} if os.name == "nt" else {"start_new_session": True}
+    with subprocess.Popen(
+        args, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        text=True, encoding="utf-8", errors="replace", **group,
+    ) as proc:
+        job = _WindowsJob(proc.pid) if os.name == "nt" else None
+        try:
+            try:
+                out, err = proc.communicate(timeout=timeout)
+            except subprocess.TimeoutExpired as exc:
+                _kill_tree(proc, job)
+                try:
+                    out, err = proc.communicate(timeout=10)
+                except subprocess.TimeoutExpired:  # something outside the tree still holds the pipes
+                    out, err = _text(exc.stdout), _text(exc.stderr)
+                return Completed(-1, (out or "") + (err or ""), timed_out=True)
+            except BaseException:
+                _kill_tree(proc, job)
+                raise
+            return Completed(proc.returncode, out + err)
+        finally:
+            if job is not None:
+                job.close()  # also ends anything the script left running in the background
+
+
+def _kill_tree(proc: subprocess.Popen, job: _WindowsJob | None) -> None:
+    if job is not None:
+        job.terminate()
+    elif os.name != "nt":
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except OSError:
+            pass
+    proc.kill()
+
+
+class _WindowsJob:
+    """A Windows job object holding a process and everything it starts.
+
+    Windows has no process groups, and `taskkill /T` follows parent ids, which Git Bash's
+    emulated fork() breaks: node started from a bash script isn't a "child" of that bash. Every
+    process a job member creates joins the job, though, so terminating the job kills them all.
+    Closing it does too (KILL_ON_JOB_CLOSE), even if ib itself is killed. bash joins just after
+    it starts, well before its startup gets to running the script. If anything fails, the job
+    is skipped and only bash is killed, as before.
+    """
+
+    def __init__(self, pid: int) -> None:
+        import ctypes
+        from ctypes import wintypes
+
+        class IoCounters(ctypes.Structure):
+            _fields_ = [(name, ctypes.c_ulonglong) for name in (
+                "reads", "writes", "others", "read_bytes", "write_bytes", "other_bytes")]
+
+        class BasicLimits(ctypes.Structure):
+            _fields_ = [
+                ("PerProcessUserTimeLimit", ctypes.c_int64), ("PerJobUserTimeLimit", ctypes.c_int64),
+                ("LimitFlags", wintypes.DWORD), ("MinimumWorkingSetSize", ctypes.c_size_t),
+                ("MaximumWorkingSetSize", ctypes.c_size_t), ("ActiveProcessLimit", wintypes.DWORD),
+                ("Affinity", ctypes.c_size_t), ("PriorityClass", wintypes.DWORD),
+                ("SchedulingClass", wintypes.DWORD),
+            ]
+
+        class ExtendedLimits(ctypes.Structure):
+            _fields_ = [
+                ("BasicLimitInformation", BasicLimits), ("IoInfo", IoCounters),
+                ("ProcessMemoryLimit", ctypes.c_size_t), ("JobMemoryLimit", ctypes.c_size_t),
+                ("PeakProcessMemoryUsed", ctypes.c_size_t), ("PeakJobMemoryUsed", ctypes.c_size_t),
+            ]
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.CreateJobObjectW.restype = wintypes.HANDLE
+        kernel32.CreateJobObjectW.argtypes = (ctypes.c_void_p, wintypes.LPCWSTR)
+        kernel32.SetInformationJobObject.argtypes = (wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD)
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+        kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+        kernel32.AssignProcessToJobObject.argtypes = (wintypes.HANDLE, wintypes.HANDLE)
+        kernel32.TerminateJobObject.argtypes = (wintypes.HANDLE, wintypes.UINT)
+        kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+        self._kernel32 = kernel32
+        self._handle = None
+        job = kernel32.CreateJobObjectW(None, None)
+        if not job:
+            return
+        limits = ExtendedLimits()
+        limits.BasicLimitInformation.LimitFlags = 0x2000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        process = kernel32.OpenProcess(0x0100 | 0x0001, False, pid)  # PROCESS_SET_QUOTA | TERMINATE
+        ok = bool(process) and kernel32.SetInformationJobObject(
+            job, 9, ctypes.byref(limits), ctypes.sizeof(limits)  # JobObjectExtendedLimitInformation
+        ) and kernel32.AssignProcessToJobObject(job, process)
+        if process:
+            kernel32.CloseHandle(process)
+        if ok:
+            self._handle = job
+        else:
+            kernel32.CloseHandle(job)
+
+    def terminate(self) -> None:
+        if self._handle:
+            self._kernel32.TerminateJobObject(self._handle, 1)
+
+    def close(self) -> None:
+        if self._handle:
+            self._kernel32.CloseHandle(self._handle)
+            self._handle = None
+
+
+def remove_tree(path: Path, attempts: int = 5) -> bool:
+    """Delete a folder, clearing read-only bits and retrying files Windows briefly keeps locked
+    (a process that just exited, an antivirus scan). Never raises; False if something is left."""
+
+    def clear_and_retry(func, target, _exc) -> None:
+        try:
+            os.chmod(target, stat.S_IWRITE)
+            func(target)
+        except OSError:
+            pass
+
+    handler = {"onexc": clear_and_retry} if sys.version_info >= (3, 12) else {"onerror": clear_and_retry}
+    for attempt in range(attempts):
+        shutil.rmtree(path, **handler)
+        if not os.path.lexists(path):
+            return True
+        time.sleep(0.1 * 2**attempt)
+    return False
 
 
 # --- Docker ---------------------------------------------------------------------------------
