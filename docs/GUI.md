@@ -78,7 +78,7 @@ The server can run code, so a web page the candidate visits must not be able to 
 A round is a folder under the workspaces folder (`$IB_WORKSPACES`, else `~/ib-workspaces`) holding
 `.interviewbench.json`, so rounds started with `ib start` show up too. The round id is the folder
 name. Starting a task that already has a folder creates `<task>-2`, `<task>-3`, ... so the GUI never
-overwrites work. Only an explicit delete removes a round.
+overwrites work. Only an explicit delete removes a round, along with its private folder.
 
 `ib-ui.json` stores the latest `test`, `grade` and `break` results as the JSON below, so they survive
 a restart. A stored grade keeps every stage's failures, plus the workspace fingerprint; the spoiler

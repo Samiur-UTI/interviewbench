@@ -24,7 +24,7 @@ from .judge import (
 from .report import to_markdown
 from .runner import Runner, RunnerError
 from .tasks import (
-    ATTACK_PROMPT, BRIEF, FULL_REPORT, JUDGE_PROMPT, REPORT, Task, TaskError, _task_dirs, bench_root, categories, get_task, load_task,
+    ATTACK_PROMPT, BRIEF, FULL_REPORT, JUDGE_PROMPT, REPORT, UI_STATE, Task, TaskError, _task_dirs, bench_root, categories, get_task, load_task,
     tasks_root, templates_root,
 )
 
@@ -205,6 +205,7 @@ def start_round(
     """
     if _check_destination(task, dest, force):
         ws.remove_tree(dest)
+    ws.clear_private_dir(dest)  # results of an earlier round in this folder
     shutil.copytree(task.starter_dir, dest, dirs_exist_ok=True)
     wrote_tasks = ws.write_editor_tasks(dest)
     git_ok = git and ws.git_init(dest, ignored=[ws.EDITOR_TASKS.as_posix()] if wrote_tasks else [])
@@ -268,7 +269,9 @@ def list_rounds() -> list[RoundInfo]:
 
 
 def delete_round(round_id: str) -> None:
-    ws.remove_tree(load_round(round_id).path)
+    path = load_round(round_id).path
+    ws.remove_tree(path)
+    ws.clear_private_dir(path)
 
 
 def changes(task: Task, workspace: Path) -> Changes:
@@ -374,6 +377,7 @@ def grade_round(
     (report_path or workspace / REPORT).write_text(to_markdown(result, revealed), encoding="utf-8")
     if full_report:
         full_report.write_text(to_markdown(result), encoding="utf-8")
+    (workspace / UI_STATE).unlink(missing_ok=True)  # an earlier ib kept the GUI's results here, spoilers and all
     return GradeOutcome(result, request, judge_error, revealed, full_report)
 
 
@@ -381,7 +385,11 @@ def revealed_stages(task: Task, marker: dict | None) -> int | None:
     """How many stages a round has revealed, or None for a folder that isn't a round (a hand-back)."""
     if marker is None:
         return None
-    return min(int(marker.get("stage", 1)), len(task.stages))
+    try:
+        stage = int(marker.get("stage", 1))
+    except (AttributeError, TypeError, ValueError):  # a damaged marker: assume the least is revealed
+        stage = 1
+    return max(1, min(stage, len(task.stages)))
 
 
 def private_folder(workspace: Path) -> Path:

@@ -35,9 +35,7 @@ def read_state(workspace: Path) -> dict:
 def write_state(workspace: Path, state: dict) -> None:
     """Raises RoundError when the private folder would be inside the workspace."""
     (private_folder(workspace) / UI_STATE).write_text(json.dumps(state, indent=2), encoding="utf-8")
-    stale = workspace / UI_STATE  # an earlier ib kept it in the workspace, spoilers and all
-    if stale.is_file():
-        stale.unlink()
+    (workspace / UI_STATE).unlink(missing_ok=True)  # an earlier ib kept it in the workspace, spoilers and all
 
 
 def prior_result(stored: dict | None, task: Task, fingerprint: str, runner: str) -> GradeResult | None:
