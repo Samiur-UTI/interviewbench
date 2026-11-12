@@ -14,7 +14,7 @@
 // the runner depend on it), which is why createFakePlatforms takes the loaded app module.
 import type { Module } from "./app.ts";
 
-export type Platform = "google" | "meta" | "twilio" | "linkedin";
+export type Platform = "google" | "meta" | "twilio" | "linkfolio";
 export type Cause = "unauthorized" | "unreachable" | "rate_limited";
 export type Method = "probe" | "send" | "refresh";
 
@@ -67,12 +67,12 @@ export interface FakeOptions {
   tokenLifetimeMs?: number;
 }
 
-/** The secret a credential authenticates with: accessToken, apiKeySecret or the li_at cookie. */
+/** The secret a credential authenticates with: accessToken, apiKeySecret or the lf_session cookie. */
 export function tokenOf(credential: any): string {
   if (!credential || typeof credential !== "object") return "";
   if (credential.method === "oauth") return String(credential.accessToken);
   if (credential.method === "api_key") return String(credential.apiKeySecret);
-  if (credential.method === "session") return String(credential.cookies?.li_at);
+  if (credential.method === "session") return String(credential.cookies?.lf_session);
   return "";
 }
 
@@ -82,11 +82,11 @@ export function authorizationOf(credential: any): string {
   if (credential?.method === "api_key") {
     return `Basic ${Buffer.from(`${credential.apiKeySid}:${credential.apiKeySecret}`).toString("base64")}`;
   }
-  if (credential?.method === "session") return `li_at=${credential.cookies?.li_at}; JSESSIONID="${credential.cookies?.JSESSIONID}"`;
+  if (credential?.method === "session") return `lf_session=${credential.cookies?.lf_session}; lf_csrf="${credential.cookies?.lf_csrf}"`;
   return "";
 }
 
-const OAUTH: Record<Platform, boolean> = { google: true, meta: true, twilio: false, linkedin: false };
+const OAUTH: Record<Platform, boolean> = { google: true, meta: true, twilio: false, linkfolio: false };
 const PATHS: Record<Method, string> = { probe: "/health", send: "/send", refresh: "/token" };
 
 type QueueEntry = { outcome: Outcome } | { gate: GateState };
@@ -269,7 +269,7 @@ export interface FakePlatforms {
   google: FakeAdapter;
   meta: FakeAdapter;
   twilio: FakeAdapter;
-  linkedin: FakeAdapter;
+  linkfolio: FakeAdapter;
   /** Pass as createApp({ platforms }). */
   registry: Record<Platform, FakeAdapter>;
   all: FakeAdapter[];
@@ -280,7 +280,7 @@ export interface FakePlatforms {
 /** One fake per platform. `only` limits the registry (a platform without an adapter is unreachable). */
 export function createFakePlatforms(app: Module, options: FakeOptions & { only?: Platform[] } = {}): FakePlatforms {
   const make = (platform: Platform) => new FakeAdapter(app, platform, options);
-  const fakes = { google: make("google"), meta: make("meta"), twilio: make("twilio"), linkedin: make("linkedin") };
+  const fakes = { google: make("google"), meta: make("meta"), twilio: make("twilio"), linkfolio: make("linkfolio") };
   const all = Object.values(fakes);
   const registry = Object.fromEntries(
     all.filter((f) => !options.only || options.only.includes(f.platform)).map((f) => [f.platform, f]),

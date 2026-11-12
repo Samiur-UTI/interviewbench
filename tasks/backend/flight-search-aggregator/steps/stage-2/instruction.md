@@ -36,7 +36,9 @@ Changes (export the new types and errors from `src/index.ts`):
 Persisting:
 - Write one `searches` row and one `supplier_results` row per supplier. For each offer, write
   an `offers` row with its sort columns, plus its `offer_segments` and `offer_prices` rows.
-  Column formats are in `README.md` (`trip_key`, UTC times).
+  Column formats are in `README.md` (`trip_key`, UTC times). A `supplier_results` row holds
+  that supplier's `SupplierStatus` (`status`, and `offers` as `offer_count`).
+  `offer_segments.leg_no` and `seg_no` count from 0, in journey and segment order.
 - `searches.status` is `complete`, or `failed` when every supplier failed. A failed search
   still answers 503 and stores no offers; its pages are empty.
 - Only offers that would be shown are stored: seat-filtered and de-duplicated.
@@ -60,10 +62,15 @@ Paging:
 - `getPage` and `searchWithStatus` reject with `ValidationError` for:
   - a bad `limit`;
   - a cursor that doesn't decode to that shape, or that belongs to another search or another
-    sort;
+    sort. A cursor must be a string that is exactly the base64url encoding (no padding) of its
+    JSON: one with `=` padding or any other characters added is invalid, even if a lenient
+    decoder accepts it;
+  - a `sort` that isn't one of the four above;
   - `preferred_airline` on a search without `preferredCarrier`.
 - `getPage` rejects with a new `SearchNotFoundError` for an unknown `searchId`.
 - Pages are read from the database: a new service on the same `dbPath` must serve them.
+- An `Offer` has exactly the fields and values of the `Itinerary` that was stored, and no
+  others.
 
 HTTP (`src/http/search-handler.ts`):
 - `handleSearch` returns 200 `{ searchId, partial, suppliers, total, page }`, or 400/503 as

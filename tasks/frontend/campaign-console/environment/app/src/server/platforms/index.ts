@@ -1,12 +1,12 @@
 import { createGoogleAdapter } from "./google.ts";
-import { createLinkedInAdapter } from "./linkedin.ts";
+import { createLinkfolioAdapter } from "./linkfolio.ts";
 import { createMetaAdapter } from "./meta.ts";
 import { createSandboxPlatforms } from "./sandbox.ts";
 import { createTwilioAdapter } from "./twilio.ts";
 import type { PlatformRegistry } from "./types.ts";
 
 export type { PlatformAdapter, PlatformRegistry } from "./types.ts";
-export { createGoogleAdapter, createLinkedInAdapter, createMetaAdapter, createSandboxPlatforms, createTwilioAdapter };
+export { createGoogleAdapter, createLinkfolioAdapter, createMetaAdapter, createSandboxPlatforms, createTwilioAdapter };
 
 type Env = Record<string, string | undefined>;
 
@@ -37,7 +37,7 @@ export function createLivePlatforms(env: Env, now: () => number = Date.now): Pla
       apiBaseUrl: env.TWILIO_BASE_URL ?? "https://api.twilio.com",
       messagingServiceSid: required(env, "TWILIO_MESSAGING_SERVICE_SID"),
     }),
-    linkedin: createLinkedInAdapter({ baseUrl: env.LINKEDIN_BASE_URL ?? "https://www.linkedin.com" }),
+    linkfolio: createLinkfolioAdapter({ baseUrl: env.LINKFOLIO_BASE_URL ?? "https://app.linkfolio.example" }),
   };
 }
 

@@ -52,6 +52,8 @@ indexes. Nothing in the service writes to the database yet.
      duplicates are merged, so a sold-out cheap copy can't hide an available one.
    - The total is what the customer pays: base + taxes + the supplier's fees.
    - An amount or reference we can't resolve exactly is a supplier error. Never guess or round.
+     So is an amount not written exactly as its supplier's notes in `docs/suppliers/` say: the
+     whole response is a `SupplierPayloadError`.
 2. **Prices are integer US cents** inside the service (1 USD = 100 cents).
 3. **Same trip** means the same journeys and, per segment, the same marketing flight number,
    departure time (UTC), origin and destination, booking code and cabin.

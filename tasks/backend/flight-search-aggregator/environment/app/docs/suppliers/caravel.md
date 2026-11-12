@@ -14,7 +14,9 @@ its developer portal; these are the parts we rely on).
   `segmentFares[]`, joined to the segment by `segRef`. A `segRef` is unique within its offer only,
   and `segmentFares` are not guaranteed to be in segment order.
 - Branded fares send `amenities[]` per segment fare (baggage, seats, meals...). We don't use them.
-- Amounts are USD decimal strings with exactly 2 decimals (`"1406.80"`).
+- Amounts are USD decimal strings with exactly 2 decimals (`"1406.80"`, `"0.29"`): digits, a
+  point, then 2 digits. Nothing else is a Caravel amount: no sign, spaces, thousands separators
+  or exponent, and not 1 or 3 decimals (`"12.5"`, `"12.345"`).
   - `fare.total`: base + taxes for all travellers. `fare.base`: base fares only.
   - `fare.fees[]`: ticketing and payment fees, charged on top of `total`.
   - `fare.grandTotal` = `total` + fees: what the customer is charged.

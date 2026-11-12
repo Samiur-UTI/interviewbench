@@ -9,17 +9,25 @@ service freezes while it parses: health checks time out and other users wait.
 Requirements:
 - Results, order, statuses and stored rows stay exactly as they are today.
 - Durability stays as it is: same `openDatabase` settings, a real database file, rows
-  committed before the response.
-- **Writes are batched.** A search's rows must not be committed row by row (however the SQL
-  is sent), and no statement may be prepared per row.
+  committed before the response. Every connection the service opens, in any thread, is to
+  `dbPath` and keeps those settings.
+- **Writes are batched.** A search commits at most 3 times, however the SQL is sent: each
+  transaction counts once, and so does each write statement run outside a transaction (at most
+  2 of those). One transaction per search is enough, and committing a large search in chunks
+  breaks this limit.
+- **Statements are reused.** The statements compiled during a search (each `prepare()`, and
+  each statement of an `exec()` script, in any thread) are at most 40, and their number doesn't
+  grow with the number of offers.
 - **Paging uses the database properly.** For every sort, a page must be read through an index
   in that order. A page after the first must **seek to the cursor position**: no sorting step,
-  no full scan, no `OFFSET`, no reading the whole search and filtering in JS or SQL. Each page
-  reads only about the rows it returns. Add the indexes you need; don't rename tables or
+  no full scan, no `OFFSET`, no reading the whole search and filtering in JS or SQL. This holds
+  for every query a `getPage` call runs on `offers`. Each page reads only about the rows it
+  returns. Add the indexes you need; don't rename tables or
   columns.
 - **Parsing stays off the event loop.** Supplier payloads can be tens of MB. Our test runs a
-  5 ms heartbeat during a search with one very large payload. Until the search starts writing
-  to the database, the heartbeat's longest gap must be under half the time `JSON.parse` of that
+  5 ms heartbeat during a search with one very large payload. Until the search first writes an
+  `offers`, `offer_segments` or `offer_prices` row on the main thread (or for the whole search,
+  if it never does), the heartbeat's longest gap must be under half the time `JSON.parse` of that
   payload alone takes on the same machine (and at least 50 ms). `worker_threads` are available
   (start workers from a file, not with `eval`). Writing on the main thread is allowed.
 - The supplier deadline still covers waiting only: a supplier that answered in time is not a

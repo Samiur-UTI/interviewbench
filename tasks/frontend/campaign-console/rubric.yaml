@@ -19,7 +19,7 @@ focus: |
     an hour Google probes send an expired token while the campaign keeps sending. The fix is to
     probe through getFresh (shared refresh, no second refresh path). Moving confirmation into the
     server, or refreshing inside the adapter, is the wrong layer.
-  - T4/T5 (stage 1): stripping accessToken/refreshToken only (apiKeySecret and the LinkedIn cookies
+  - T4/T5 (stage 1): stripping accessToken/refreshToken only (apiKeySecret and the Linkfolio cookies
     remain); stripping credentials but not event `detail` and `message` (PlatformError details
     carry the authorization header and Google/Twilio messages quote the token); fixing only the
     real adapters (the hidden tests' fakes attach the same); redacting by known secret values (the
@@ -37,7 +37,7 @@ focus: |
   - T8 (stage 2): resuming runs paused by an operator (pausedReason "user") or runs of other
     connections; expiresIn seconds stored as ms (or vice versa); accepting a different Twilio
     accountSid; dropping the stored Google refresh token when none is sent (or storing one for
-    Meta, which has none); spreading the body into the stored credential (overwrites LinkedIn's
+    Meta, which has none); spreading the body into the stored credential (overwrites Linkfolio's
     profileUrl, the method, adds unknown fields); not calling tokens.invalidate and breakers.reset,
     so the check after the reconnect goes out with the cached, rejected token or is answered
     circuit_open without a platform call, and nothing resumes (or the run pauses again at once);
@@ -77,7 +77,7 @@ focus: |
 business: |
   The client is Relay, a SaaS console for outbound marketing. Agencies and growth teams keep the
   dashboard open all day to watch their customers' connections (Google Ads, Meta, Twilio,
-  LinkedIn) and campaign runs; agencies with 40+ connections keep it open on many screens.
+  Linkfolio) and campaign runs; agencies with 40+ connections keep it open on many screens.
 
   Connectivity (README, "Connectivity"): the browser's monitor decides what a card shows; the
   server answers each probe request with one platform call and keeps no per-viewer state.
@@ -87,7 +87,7 @@ business: |
 
   Rules (README, "Rules"):
   1. Never make users reconnect for nothing. Reconnecting rotates the credential, drops cached
-     tokens and (before stage 2) aborts the run; for LinkedIn a re-login can get the customer's
+     tokens and (before stage 2) aborts the run; for Linkfolio a re-login can get the customer's
      account restricted.
   2. Secrets never reach the browser: access/refresh tokens, API key secrets and session cookies
      are not in the page, any API response, WebSocket messages, run events, error details or error
@@ -97,7 +97,7 @@ business: |
      never as markup, and never dropped. No message a browser can send may take the console down.
   4. A paused run resumes where it stopped and never sends an item twice (stage 2).
   5. Our own health checks must not eat the platforms' quotas (Meta's debug_token budget,
-     LinkedIn's challenge threshold) or lose events (stage 3).
+     Linkfolio's challenge threshold) or lose events (stage 3).
 
   Priorities when they conflict: secrets and server availability > never-reconnect-for-nothing >
   resume-without-duplicates > honest live status > quota and bandwidth. Showing "checking" a

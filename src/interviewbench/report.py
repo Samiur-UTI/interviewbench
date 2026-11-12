@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 
 from .grader import CriterionScore, GradeResult
@@ -55,8 +56,8 @@ def summary_line(result: GradeResult) -> str:
 
 def render(result: GradeResult, console: Console, revealed: int | None = None) -> None:
     console.print(
-        f"\n[bold]{result.task.title}[/bold]  ({result.task.category}/{result.task.id}, "
-        f"{result.runner} runner)"
+        f"\n[bold]{escape(result.task.title)}[/bold]  ({escape(f'{result.task.category}/{result.task.id}')}, "
+        f"{escape(result.runner)} runner)"
     )
     table = Table(show_lines=False)
     table.add_column("Criterion")
@@ -67,8 +68,8 @@ def render(result: GradeResult, console: Console, revealed: int | None = None) -
     for s in result.scores:
         color = "dim" if s.score is None else ("green" if s.score == 1 else "yellow" if s.score > 0 else "red")
         table.add_row(
-            s.criterion.id, s.criterion.type, f"{s.criterion.weight:.0f}",
-            f"[{color}]{_pct(s.score)}[/{color}]", _evidence(result, s, revealed),
+            escape(s.criterion.id), escape(s.criterion.type), f"{s.criterion.weight:.0f}",
+            f"[{color}]{_pct(s.score)}[/{color}]", escape(_evidence(result, s, revealed)),
         )
     console.print(table)
     for stage in result.stages:
@@ -79,14 +80,14 @@ def render(result: GradeResult, console: Console, revealed: int | None = None) -
                 console.print(f"[dim]{_withheld_line(stage.stage, len(stage.failures))}[/dim]")
             continue
         if stage.error:
-            console.print(f"[red]Stage {stage.stage} could not run:[/red]\n{stage.error}")
+            console.print(f"[red]Stage {stage.stage} could not run:[/red]\n{escape(stage.error)}")
         for f in stage.failures[:MAX_FAILURES_SHOWN]:
-            console.print(f"[red]FAIL[/red] stage {stage.stage} - {f.name}: {f.message}")
+            console.print(f"[red]FAIL[/red] stage {stage.stage} - {escape(f.name)}: {escape(f.message)}")
         hidden = len(stage.failures) - MAX_FAILURES_SHOWN
         if hidden > 0:
             console.print(f"[dim]...and {hidden} more failing tests in stage {stage.stage}[/dim]")
     if result.review:
-        console.print(f"\n[bold]AI review[/bold] ({result.review.model})")
+        console.print(f"\n[bold]AI review[/bold] ({escape(result.review.model)})")
         for line in _review_lines(result):
             console.print(line, markup=False)
     console.print(f"\n[bold]{summary_line(result)}[/bold]\n")

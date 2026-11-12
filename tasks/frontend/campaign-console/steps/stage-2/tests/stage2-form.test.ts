@@ -31,13 +31,13 @@ const CONNECTIONS: Record<string, any> = {
     accountName: "Test SMS",
     public: { method: "api_key", accountSid: PUBLIC.twilioAccountSid, apiKeySid: PUBLIC.twilioApiKeySid },
   },
-  linkedin: {
-    id: "conn_linkedin",
-    platform: "linkedin",
+  linkfolio: {
+    id: "conn_linkfolio",
+    platform: "linkfolio",
     method: "session",
-    label: "LinkedIn",
+    label: "Linkfolio",
     accountName: "Test Sender",
-    public: { method: "session", userAgent: PUBLIC.linkedinUserAgent, profileUrl: PUBLIC.linkedinProfileUrl },
+    public: { method: "session", userAgent: PUBLIC.linkfolioUserAgent, profileUrl: PUBLIC.linkfolioProfileUrl },
   },
 };
 
@@ -46,7 +46,7 @@ const EXPECTED: Record<string, Record<string, "password" | "text" | "number">> =
   google: { accessToken: "password", refreshToken: "password", expiresIn: "number" },
   meta: { accessToken: "password", expiresIn: "number" },
   twilio: { accountSid: "text", apiKeySid: "text", apiKeySecret: "password" },
-  linkedin: { "cookies.li_at": "password", "cookies.JSESSIONID": "password", userAgent: "text" },
+  linkfolio: { "cookies.lf_session": "password", "cookies.lf_csrf": "password", userAgent: "text" },
 };
 
 async function render(platform: string, props: Record<string, unknown> = {}): Promise<string> {
@@ -118,8 +118,8 @@ test("secrets are typed into password fields and never prefilled; public identif
   const apiKeySid = field(twilio, "apiKeySid");
   assert.equal(apiKeySid?.attrs.value, PUBLIC.twilioApiKeySid, "the API key SID is prefilled");
   assert.ok(!hasFlag(apiKeySid, "readonly") && !hasFlag(apiKeySid, "disabled"), "a new key pair is normal: the key SID can change");
-  const linkedin = await render("linkedin");
-  assert.equal(field(linkedin, "userAgent")?.attrs.value, PUBLIC.linkedinUserAgent, "the user agent is prefilled");
+  const linkfolio = await render("linkfolio");
+  assert.equal(field(linkfolio, "userAgent")?.attrs.value, PUBLIC.linkfolioUserAgent, "the user agent is prefilled");
 });
 
 test("Google offers an optional refresh token and the expiry in seconds (3600); Meta, which has no refresh token, doesn't ask for one", async () => {
@@ -138,7 +138,7 @@ test("a field the server refused is marked invalid and described by its message,
   const cases: [string, string][] = [
     ["twilio", "apiKeySecret"],
     ["google", "expiresIn"],
-    ["linkedin", "cookies.JSESSIONID"],
+    ["linkfolio", "cookies.lf_csrf"],
   ];
   for (const [platform, name] of cases) {
     const markup = await render(platform, { error: { error: "invalid_credential", field: name } });

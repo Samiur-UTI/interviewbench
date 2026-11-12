@@ -9,6 +9,7 @@ from typing import NoReturn, Optional
 import typer
 from rich.console import Console
 from rich.markdown import Markdown
+from rich.markup import escape
 from rich.table import Table
 
 from . import __version__, rounds
@@ -54,7 +55,7 @@ def _utf8_output() -> None:
 
 
 def _fail(message: str) -> NoReturn:
-    console.print(f"[red]Error:[/red] {message}")
+    console.print(f"[red]Error:[/red] {escape(message)}")
     raise typer.Exit(1)
 
 
@@ -110,7 +111,8 @@ def list_tasks(
         table.add_column(col)
     for t in tasks:
         table.add_row(
-            t.id, t.category, t.title, t.level, ", ".join(t.tags), f"{t.time_limit_minutes} min"
+            escape(t.id), escape(t.category), escape(t.title), escape(t.level), escape(", ".join(t.tags)),
+            f"{t.time_limit_minutes} min",
         )
     console.print(table)
 
@@ -131,12 +133,13 @@ def start(
     except rounds.RoundError as exc:
         _fail(str(exc))
     editor = started.editor
-    console.print(f"[bold]{task.title}[/bold] — {task.time_limit_minutes} min, {len(task.stages)} stages")
-    console.print(f"Workspace: [green]{dest}[/green]" + (f" (opened in {editor})" if editor else ""))
+    shown = escape(str(dest))
+    console.print(f"[bold]{escape(task.title)}[/bold] — {task.time_limit_minutes} min, {len(task.stages)} stages")
+    console.print(f"Workspace: [green]{shown}[/green]" + (f" (opened in {escape(editor)})" if editor else ""))
     if not editor:
         console.print(
             "Open [bold]only this folder[/bold] in your editor, so your AI assistant can't see the "
-            f"hidden tests:  [bold]cd \"{dest}\"[/bold] then e.g. [bold]code .[/bold]"
+            f"hidden tests:  [bold]cd \"{shown}\"[/bold] then e.g. [bold]code .[/bold]"
         )
     if git and not started.git:
         console.print("[dim]git isn't available, so the workspace is not a git repo.[/dim]")
@@ -166,7 +169,7 @@ def next_stage(
     except rounds.RoundError as exc:
         _fail(str(exc))
     if revealed.tagged:
-        console.print(f"Committed your work and tagged it [bold]{revealed.tagged}[/bold].")
+        console.print(f"Committed your work and tagged it [bold]{escape(revealed.tagged)}[/bold].")
     _print_stage(task, revealed.number)
     console.print(f"Added to {BRIEF}.")
 
@@ -198,7 +201,7 @@ def own_tests(
     if result.error:
         _fail(f"Your tests could not run:\n{result.error}")
     for failure in result.failures:
-        console.print(f"[red]FAIL[/red] {failure.name}: {failure.message}", highlight=False)
+        console.print(f"[red]FAIL[/red] {escape(failure.name)}: {escape(failure.message)}", highlight=False)
     color = "green" if result.passed == result.total and result.total else "red"
     console.print(f"[{color}]{result.passed}/{result.total} of your tests passed[/{color}]")
     if result.passed != result.total or not result.total:
@@ -251,7 +254,7 @@ def grade(
                 task, dir, backend, judge=mode, settings=rounds.JudgeSettings(judge_backend, judge_model),
                 reply=judge_reply.read_text(encoding="utf-8") if judge_reply is not None else None,
                 reply_label=f"pasted reply ({judge_reply.name})" if judge_reply is not None else "",
-                timeout=timeout, report_path=output, progress=lambda phase: status.update(f"{phase}..."),
+                timeout=timeout, report_path=output, progress=lambda phase: status.update(f"{escape(phase)}..."),
                 all_stages=all_stages,
             )
         except (RunnerError, rounds.RoundError) as exc:
@@ -266,13 +269,13 @@ def grade(
     used = rounds.time_used_minutes(ws.read_marker(dir))
     if used is not None:
         console.print(f"Time used: {used} min of {task.time_limit_minutes}\n")
-    console.print(f"Report written to [green]{output or dir / REPORT}[/green]")
+    console.print(f"Report written to [green]{escape(str(output or dir / REPORT))}[/green]")
     if outcome.judge_error:
         _fail(f"AI judge failed, so only auto criteria were scored: {outcome.judge_error}")
     if exported:
-        reply_path = exported.path.parent / JUDGE_REPLY
+        prompt_path, reply_path = escape(str(exported.path)), escape(str(exported.path.parent / JUDGE_REPLY))
         console.print(
-            f"\nJudge prompt written to [green]{exported.path}[/green] (~{exported.tokens:,} tokens), outside the "
+            f"\nJudge prompt written to [green]{prompt_path}[/green] (~{exported.tokens:,} tokens), outside the "
             "workspace: it contains the hidden tests and the reference solution, so don't share it or copy it into "
             "the workspace. Paste all of it into any chatbot (ChatGPT, Gemini, Claude.ai, DeepSeek...), save its "
             f"reply as [bold]{reply_path}[/bold], then run [bold]ib grade --judge-reply \"{reply_path}\"[/bold].",
@@ -293,7 +296,7 @@ def break_code(
     """Try to break your code: run attack tests on it and on the reference; only real breaks count."""
     task, marker = _workspace_or_exit(dir)
     if write_prompt:
-        path = rounds.write_attack_prompt(task, dir, marker)
+        path = escape(str(rounds.write_attack_prompt(task, dir, marker)))
         console.print(
             f"Wrote [green]{path}[/green]. Give it to any chatbot or coding agent, save the test file it writes "
             f"[bold]outside[/bold] this folder (e.g. ../attack_test.py), then run [bold]ib break ../attack_test.py[/bold]."
@@ -313,7 +316,7 @@ def break_code(
     style = {REAL_BREAK: "red", BAD_TEST: "dim"}
     for a in outcome.attacks:
         color = style.get(a.verdict, "green")
-        table.add_row(f"[{color}]{a.verdict}[/{color}]", a.name, a.detail)
+        table.add_row(f"[{color}]{a.verdict}[/{color}]", escape(a.name), escape(a.detail))
     console.print(table)
     counts = outcome.counts
     console.print(
@@ -333,8 +336,10 @@ def new(
         created = rounds.new_task(task_id, category, template)
     except rounds.RoundError as exc:
         _fail(str(exc))
-    console.print(f"Created [green]{created.path}[/green] from templates/{created.template}.")
-    console.print(f"Fill in every TODO, then run [bold]ib validate {task_id} --run[/bold]. See docs/TASK_FORMAT.md.")
+    console.print(f"Created [green]{escape(str(created.path))}[/green] from templates/{escape(created.template)}.")
+    console.print(
+        f"Fill in every TODO, then run [bold]ib validate {escape(task_id)} --run[/bold]. See docs/TASK_FORMAT.md."
+    )
 
 
 @app.command()
@@ -352,7 +357,8 @@ def validate(
     failed = False
     for task in tasks:
         errors = check_task(task, backend) if backend else []
-        console.print(f"{'[green]ok[/green]' if not errors else '[red]FAIL[/red]'} {task.category}/{task.id}")
+        verdict = "[green]ok[/green]" if not errors else "[red]FAIL[/red]"
+        console.print(f"{verdict} {escape(f'{task.category}/{task.id}')}")
         for error in errors:
             console.print(f"   - {error}", markup=False)
         failed = failed or bool(errors)

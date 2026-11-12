@@ -18,9 +18,9 @@ export const NEW = {
   metaRefreshToken: "fakemNR4hJ7kL0zX3cV6bN9mQ2wE5rT8yU1iO4pA7sD0fG3hJ6kL",
   twilioApiKeySid: "SK00112233445566778899aabbccddeeff",
   twilioApiKeySecret: "faketNS6yU9iO2pA5sD8fG1hJ4kL7zX0cV3bN6mQ9wE2rT5yU8iO",
-  linkedinLiAt: "fakelNA3eR6tY9uI2oP5aS8dF1gH4jK7lZ0xC3vB6nM9qW2eR5tY",
-  linkedinJsessionId: "fakelNJ7bN0mQ3wE6rT9yU2iO5pA8sD1fG4hJ7kL0zX3cV6bN9mQ",
-  linkedinUserAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15",
+  linkfolioSession: "fakelNA3eR6tY9uI2oP5aS8dF1gH4jK7lZ0xC3vB6nM9qW2eR5tY",
+  linkfolioCsrf: "fakelNJ7bN0mQ3wE6rT9yU2iO5pA8sD1fG4hJ7kL0zX3cV6bN9mQ",
+  linkfolioUserAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15",
 } as const;
 
 /** The new secrets, plus Twilio's basic auth of the new key (what a leaked authorization header carries). */
@@ -30,8 +30,8 @@ export const NEW_SECRETS: string[] = [
   NEW.metaAccessToken,
   NEW.metaRefreshToken,
   NEW.twilioApiKeySecret,
-  NEW.linkedinLiAt,
-  NEW.linkedinJsessionId,
+  NEW.linkfolioSession,
+  NEW.linkfolioCsrf,
   Buffer.from(`${NEW.twilioApiKeySid}:${NEW.twilioApiKeySecret}`).toString("base64"),
 ];
 
@@ -42,9 +42,9 @@ export const twilioBody = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
-export const linkedinBody = (overrides: Record<string, unknown> = {}) => ({
-  cookies: { li_at: NEW.linkedinLiAt, JSESSIONID: NEW.linkedinJsessionId },
-  userAgent: NEW.linkedinUserAgent,
+export const linkfolioBody = (overrides: Record<string, unknown> = {}) => ({
+  cookies: { lf_session: NEW.linkfolioSession, lf_csrf: NEW.linkfolioCsrf },
+  userAgent: NEW.linkfolioUserAgent,
   ...overrides,
 });
 
@@ -82,7 +82,7 @@ export interface Sends {
 
 /**
  * The fake accepts probes and sends only with these tokens (its tokenOf: accessToken, apiKeySecret
- * or li_at); anything else is rejected as unauthorized, shaped like the real adapters' errors.
+ * or lf_session); anything else is rejected as unauthorized, shaped like the real adapters' errors.
  * With revokeAfter, the original tokens stop working right after that many accepted sends (the
  * customer deleted the key mid-campaign).
  */

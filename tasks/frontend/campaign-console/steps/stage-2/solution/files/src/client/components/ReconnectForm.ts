@@ -79,8 +79,8 @@ export function reconnectFields(connection: PublicConnection): ReconnectField[] 
       ];
     case "session":
       return [
-        { name: "cookies.li_at", label: "li_at cookie", type: "password" },
-        { name: "cookies.JSESSIONID", label: "JSESSIONID cookie", type: "password" },
+        { name: "cookies.lf_session", label: "lf_session cookie", type: "password" },
+        { name: "cookies.lf_csrf", label: "lf_csrf cookie", type: "password" },
         { name: "userAgent", label: "User agent", type: "text", value: pub.userAgent, hint: "The browser you logged in with, exactly." },
       ];
   }
@@ -102,7 +102,7 @@ export function reconnectBody(connection: PublicConnection, read: (name: string)
     case "api_key":
       return { accountSid: read("accountSid"), apiKeySid: read("apiKeySid"), apiKeySecret: read("apiKeySecret") };
     case "session":
-      return { cookies: { li_at: read("cookies.li_at"), JSESSIONID: read("cookies.JSESSIONID") }, userAgent: read("userAgent") };
+      return { cookies: { lf_session: read("cookies.lf_session"), lf_csrf: read("cookies.lf_csrf") }, userAgent: read("userAgent") };
   }
 }
 
@@ -113,8 +113,8 @@ const FIELD_MESSAGES: Record<string, string> = {
   accountSid: "This must be the connection's own account SID: a different Twilio account is a new connection.",
   apiKeySid: "Paste the API key SID (it starts with SK).",
   apiKeySecret: "Paste the API key's secret.",
-  "cookies.li_at": "Paste the li_at cookie.",
-  "cookies.JSESSIONID": "Paste the JSESSIONID cookie.",
+  "cookies.lf_session": "Paste the lf_session cookie.",
+  "cookies.lf_csrf": "Paste the lf_csrf cookie.",
   userAgent: "Paste the user agent of the browser you logged in with.",
 };
 
@@ -126,7 +126,7 @@ const GENERAL_MESSAGES: Record<string, string> = {
 
 /** The input a server-reported field belongs to (a missing `cookies` object is the first cookie). */
 function inputFor(field: string | undefined): string | undefined {
-  return field === "cookies" ? "cookies.li_at" : field;
+  return field === "cookies" ? "cookies.lf_session" : field;
 }
 
 function idFor(connection: PublicConnection, name: string): string {
@@ -160,8 +160,8 @@ export function ReconnectForm({ connection, error, pending = false, onSubmit, on
   return html`
     <form class="reconnect" id=${formId} aria-labelledby=${titleId} aria-busy=${pending ? "true" : undefined} onSubmit=${submit} onKeyDown=${keydown} novalidate>
       <h4 id=${titleId}>Reconnect ${platform}</h4>
-      ${connection.platform === "linkedin" &&
-      html`<p class="note">Log in to LinkedIn once, in your own browser, then paste that session here. Repeated logins can get the account challenged.</p>`}
+      ${connection.platform === "linkfolio" &&
+      html`<p class="note">Log in to Linkfolio once, in your own browser, then paste that session here. Repeated logins can get the account challenged.</p>`}
       ${fields.map((field) => {
         const id = idFor(connection, field.name);
         const isInvalid = fieldError && field.name === invalid;

@@ -6,7 +6,7 @@ keep open all day: one card per connection with its live status, and every campa
 progress and activity.
 
 - A **connection** is a customer's credential for one platform (Google Ads, Meta, Twilio,
-  LinkedIn). Agencies have dozens.
+  Linkfolio). Agencies have dozens.
 - A **campaign** targets one platform through one connection.
 - A **run** executes a campaign: it sends one **item** per target (an ad, an ad-set update, an
   SMS, a connection request) and records an **event** for what happened.
@@ -21,7 +21,7 @@ by an operator has `pausedReason: "user"`.
 | `google` (Google Ads) | `oauth` | `src/server/platforms/google.ts` | `docs/platforms/google.md` |
 | `meta` (Meta Marketing) | `oauth` | `src/server/platforms/meta.ts` | `docs/platforms/meta.md` |
 | `twilio` | `api_key` | `src/server/platforms/twilio.ts` | `docs/platforms/twilio.md` |
-| `linkedin` | `session` | `src/server/platforms/linkedin.ts` | `docs/platforms/linkedin.md` |
+| `linkfolio` | `session` | `src/server/platforms/linkfolio.ts` | `docs/platforms/linkfolio.md` |
 
 Every platform authenticates differently, expires differently and limits us differently. The notes
 in `docs/platforms/` are where the team writes down what each one does; read them before touching
@@ -106,7 +106,7 @@ Rules the monitor follows (`src/client/connectivity.ts`):
 ## Rules
 
 1. **Never make users reconnect for nothing.** Reconnecting rotates the credential, drops cached
-   tokens and today aborts the run on that connection; for LinkedIn a re-login can get the
+   tokens and today aborts the run on that connection; for Linkfolio a re-login can get the
    customer's account restricted. Hence the connectivity rules above.
 2. **Secrets never reach the browser.** Access and refresh tokens, API key secrets, session
    cookies: not in the page, not in any API response, not in WebSocket messages, not in run events

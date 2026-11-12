@@ -1,7 +1,7 @@
 # Phantom disconnects and a pentest finding
 
 You've joined the team behind Relay, a SaaS console for outbound marketing. Agencies and growth
-teams connect their customers' Google Ads, Meta, Twilio and LinkedIn accounts and run campaigns
+teams connect their customers' Google Ads, Meta, Twilio and Linkfolio accounts and run campaigns
 from one dashboard, which they keep open all day: a card per connection with its live status, and
 every campaign run with its progress and activity. This repo is the console: a Node.js server and
 a Preact dashboard that is rendered on the server, hydrated in the browser and kept live over a
@@ -13,9 +13,9 @@ Two tickets landed this week.
 1. **Support:** "Google campaigns keep sending, yet after about an hour the Google card flips to
    Disconnected / Reconnect and stays there until someone reconnects. Meta and Twilio cards flip
    to Disconnected for a few seconds when those platforms are slow or throttle us. Users click
-   Reconnect, which aborts the run. Two LinkedIn customers who reconnected repeatedly got a
+   Reconnect, which aborts the run. Two Linkfolio customers who reconnected repeatedly got a
    security challenge."
-2. **Security:** "A pentester created a LinkedIn lead whose name contained a script tag. Opening
+2. **Security:** "A pentester created a Linkfolio lead whose name contained a script tag. Opening
    the dashboard ran it: it read a Twilio API key secret out of the page and posted it to their
    server (we send no Content-Security-Policy), then opened a WebSocket, sent one message, and the
    console went down for every user. The report also lists lead headlines rendering as HTML,
