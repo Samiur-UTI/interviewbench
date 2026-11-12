@@ -69,7 +69,8 @@ ib start rate-limiter                 # your round starts here
 
 - Copies the starter code to `~/ib-workspaces/<task>` (or `$IB_WORKSPACES/<task>`, or `--dir`).
   It refuses folders inside this repo, because the repo holds the hidden tests and reference
-  solutions, which an AI assistant working there could read.
+  solutions, which an AI assistant working there could read. The folder must be new or empty;
+  `--force` replaces only an earlier round's workspace, never any other folder.
 - Opens that folder in your editor: `$IB_EDITOR` if set, else VS Code, Cursor or Windsurf
   (`--no-open` to skip). Point `IB_EDITOR` at any other editor.
 - Writes the stage 1 brief, the time limit and the commands to `TASK.md`, and starts the clock.
@@ -139,7 +140,7 @@ model to score them and lists any other issues it finds. Three ways to run it:
 
 ```bash
 ib grade --judge-export                    # writes a prompt file (~10-15k tokens) and prints its path
-# paste it into a chat and save the reply to a file
+# paste it into a chat and save the reply to a file next to the prompt
 ib grade --judge-reply reply.txt
 ```
 
@@ -167,7 +168,10 @@ ib grade --judge                                 # model: claude-opus-5-5, or --
 
 Prefer a judge from a different model family than the one that helped you solve the task: LLM
 judges tend to favour their own family's work. The judge prompt contains the hidden tests and
-the reference solution, so don't share it.
+the reference solution, so don't share it. That's why `--judge-export` writes it outside the
+workspace, to ib's data folder (`%LOCALAPPDATA%\interviewbench` on Windows,
+`~/Library/Application Support/interviewbench` on macOS, `~/.local/state/interviewbench` on Linux,
+or `$IB_DATA_DIR`).
 
 ## Try to break your code
 
