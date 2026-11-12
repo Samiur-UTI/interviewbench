@@ -85,7 +85,7 @@ README's orders. It is also the obvious place to optimise next (each autocommit 
 `synchronous=FULL`, and a page costs as much as the whole search).
 
 
-## Stage 3: the 1-second budget (where the time went, what I changed, what it costs)
+## Stage 3
 
 ## How I used AI assistance (and what I checked myself)
 

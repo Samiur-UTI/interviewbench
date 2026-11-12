@@ -140,9 +140,9 @@ separate crash paths:
   as text; client-message validation; an unmasked frame closes the connection with 1002 instead
   of throwing.
 
-## Stage 2: reconnect and resume (design and trade-offs)
+## Stage 2
 
-## Stage 3: many open dashboards (what cost what, what I changed, what it costs)
+## Stage 3
 
 ## How I used AI assistance (and what I checked myself)
 

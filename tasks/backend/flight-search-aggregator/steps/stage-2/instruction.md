@@ -81,4 +81,4 @@ HTTP (`src/http/search-handler.ts`):
   - 404 for `SearchNotFoundError`.
 
 Keep it correct and simple; making it fast is next. Run the tests with `npm test`, and explain
-your design in `NOTES.md`.
+your design and its trade-offs in `NOTES.md`.

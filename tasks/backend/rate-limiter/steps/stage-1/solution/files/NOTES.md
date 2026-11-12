@@ -9,8 +9,8 @@ huge and the bucket held thousands of tokens, which allowed a matching burst.
 Fix: cap the refill at `capacity` inside `TokenBucket` (the root cause), not in `RateLimiter`.
 Added a regression test that idles for an hour and checks the burst is exactly `capacity`.
 
-## Stage 2: design of retry_after
+## Stage 2
 
-## Stage 3: how eviction works and its cost
+## Stage 3
 
 ## How I used AI assistance (and what I checked myself)
