@@ -27,7 +27,7 @@ what each platform hands over is in `docs/platforms/`, "Reconnecting"):
 |---|---|---|
 | `oauth` | `{ accessToken, refreshToken?, expiresIn }`; `expiresIn` in **seconds** (finite, > 0) | `expiresAt = now + expiresIn * 1000` (ms). Google: a `refreshToken` replaces ours, none keeps ours. Meta has no refresh tokens: one sent anyway is ignored. Scope kept. |
 | `api_key` | `{ accountSid, apiKeySid, apiKeySecret }` | `accountSid` must be the connection's own (a different account is a new connection); the key pair is replaced |
-| `session` | `{ cookies: { li_at, JSESSIONID }, userAgent }` | cookies and user agent replaced; `profileUrl` kept |
+| `session` | `{ cookies: { lf_session, lf_csrf }, userAgent }` | cookies and user agent replaced; `profileUrl` kept |
 
 Fields a method doesn't have are ignored. Strings must be non-empty.
 
@@ -37,7 +37,7 @@ Answers:
 - 400 `{ "error": "invalid_json" }`: the body is not JSON, or not a JSON object. 413
   `{ "error": "too_large" }` over 64 KiB.
 - 400 `{ "error": "invalid_credential", "field" }`: the first field, in the order of the table
-  (`session`: `cookies`, `cookies.li_at`, `cookies.JSESSIONID`, `userAgent`), that is missing, of
+  (`session`: `cookies`, `cookies.lf_session`, `cookies.lf_csrf`, `userAgent`), that is missing, of
   the wrong type or not allowed. Nothing is stored and no platform is called.
 - 200 `{ connection: PublicConnection, probe: ProbeResult, resumed: string[] }`, after these
   effects, in order:

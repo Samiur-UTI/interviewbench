@@ -5,7 +5,7 @@ export const PLATFORM_NAMES: Record<Platform, string> = {
   google: "Google Ads",
   meta: "Meta",
   twilio: "Twilio",
-  linkedin: "LinkedIn",
+  linkfolio: "Linkfolio",
 };
 
 export function formatTime(ms: number): string {

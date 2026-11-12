@@ -59,22 +59,22 @@
       "createdAt": 1770800400000
     },
     {
-      "id": "conn_linkedin",
-      "platform": "linkedin",
+      "id": "conn_linkfolio",
+      "platform": "linkfolio",
       "method": "session",
-      "label": "LinkedIn",
+      "label": "Linkfolio",
       "accountName": "Maya Okafor",
       "credential": {
         "method": "session",
         "cookies": {
-          "li_at": "fakeMt9UXg9Lhk7YmhAdISxGVcQ9YRroJ0I1iqe3BrIMDKrmJmDV",
-          "JSESSIONID": "fakebT3bBXwGE82xpSQXzGm3sUr8Rrp8nvCmAjQUwmzq"
+          "lf_session": "fakeMt9UXg9Lhk7YmhAdISxGVcQ9YRroJ0I1iqe3BrIMDKrmJmDV",
+          "lf_csrf": "fakebT3bBXwGE82xpSQXzGm3sUr8Rrp8nvCmAjQUwmzq"
         },
         "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
-        "profileUrl": "https://www.linkedin.com/in/maya-okafor-growth"
+        "profileUrl": "https://app.linkfolio.example/in/test-sender"
       },
       "lastProbe": {
-        "connectionId": "conn_linkedin",
+        "connectionId": "conn_linkfolio",
         "ok": true,
         "checkedAt": 1794297840000
       },
@@ -93,8 +93,8 @@
     {
       "id": "camp_2",
       "name": "Founders outreach",
-      "platform": "linkedin",
-      "connectionId": "conn_linkedin",
+      "platform": "linkfolio",
+      "connectionId": "conn_linkfolio",
       "itemLabel": "Connection request",
       "createdAt": 1794241800000
     },
@@ -156,7 +156,7 @@
     {
       "id": "run_2",
       "campaignId": "camp_2",
-      "connectionId": "conn_linkedin",
+      "connectionId": "conn_linkfolio",
       "status": "running",
       "progress": {
         "nextIndex": 2,
@@ -389,12 +389,12 @@
       "runId": "run_2",
       "at": 1794297612000,
       "type": "retry",
-      "message": "Attempt 1 for Jonas Weber failed (linkedin: HTTP 999); retrying in 412 ms",
+      "message": "Attempt 1 for Jonas Weber failed (linkfolio: HTTP 999); retrying in 412 ms",
       "detail": {
         "request": {
-          "url": "https://www.linkedin.com/voyager/api/growth/normInvitations",
+          "url": "https://app.linkfolio.example/api/v1/invitations",
           "method": "POST",
-          "authorization": "li_at=fakeMt9UXg9Lhk7YmhAdISxGVcQ9YRroJ0I1iqe3BrIMDKrmJmDV; JSESSIONID=\"fakebT3bBXwGE82xpSQXzGm3sUr8Rrp8nvCmAjQUwmzq\""
+          "authorization": "lf_session=fakeMt9UXg9Lhk7YmhAdISxGVcQ9YRroJ0I1iqe3BrIMDKrmJmDV; lf_csrf=\"fakebT3bBXwGE82xpSQXzGm3sUr8Rrp8nvCmAjQUwmzq\""
         },
         "status": 999,
         "body": ""

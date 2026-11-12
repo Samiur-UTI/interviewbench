@@ -39,7 +39,7 @@ shares one refresh between concurrent callers. Google access tokens live 3600 s
 token, got a 401, and reported `unauthorized`, while the campaign, refreshing on its own path,
 kept sending. Three such results in a row are a "confirmed" dead credential, which is why only
 the Google card stuck at Disconnected until someone reconnected. Meta tokens last 60 days and
-Twilio/LinkedIn credentials don't expire, so they never hit this. The monitor fix alone doesn't
+Twilio/Linkfolio credentials don't expire, so they never hit this. The monitor fix alone doesn't
 help Google: three honest `unauthorized` answers are a dead credential as far as the browser can
 tell. The checks have to send the token a campaign would send.
 
@@ -49,10 +49,10 @@ which matters because Google rate-limits refresh bursts). A refresh that fails i
 its cause (`unauthorized` for a dead refresh token is a real dead credential). An unknown id now
 rejects `NotFoundError` before anything else.
 
-Why LinkedIn customers got challenged: every false Disconnected invited a Reconnect, which for
-LinkedIn is a fresh login in the customer's browser plus a new session on our side; a few of
-those in a day is exactly what `docs/platforms/linkedin.md` says triggers a challenge. Fixing the
-false Disconnected fixes that; the monitor's confirm checks for LinkedIn are three cheap
+Why Linkfolio customers got challenged: every false Disconnected invited a Reconnect, which for
+Linkfolio is a fresh login in the customer's browser plus a new session on our side; a few of
+those in a day is exactly what `docs/platforms/linkfolio.md` says triggers a challenge. Fixing the
+false Disconnected fixes that; the monitor's confirm checks for Linkfolio are three cheap
 `HEAD /feed/` calls 2 s apart, only after a failure.
 
 ### Ticket B: the pentest finding
@@ -62,10 +62,10 @@ messages), so that is where the boundary belongs. The leaks:
 
 - `toPublicConnection` spread the whole `Connection` (credential included) and cast it, so the
   page, `/api/dashboard`, `/api/connections/:id` and every WebSocket snapshot carried access and
-  refresh tokens, the Twilio API key secret and the LinkedIn cookies.
+  refresh tokens, the Twilio API key secret and the Linkfolio cookies.
 - `toPublicEvent` spread the event, `detail` included: the adapters put the failed request,
   with its `authorization` header, in `PlatformError.details` for support, and the runner stored
-  that as `detail`. The seed already has a LinkedIn retry event with both cookies in it.
+  that as `detail`. The seed already has a Linkfolio retry event with both cookies in it.
 - Event **messages** quoted `error.message`, and the Google and Twilio adapters name the rejected
   token or key in their messages. Worse, the quoted token is often one that was just rotated by a
   forced refresh, so redacting "the connection's current secrets" would miss it.
@@ -89,7 +89,7 @@ Fixes:
   named `</script><script>...` closed the state element and ran its own script; `<!--` can also
   change where the element ends. The escapes only occur inside JSON strings, so
   `JSON.parse(textContent)` gives back the same state and `main.ts` is unchanged.
-- `RunList` rendered `target.headline` with `dangerouslySetInnerHTML` ("keep LinkedIn's <em>
+- `RunList` rendered `target.headline` with `dangerouslySetInnerHTML` ("keep Linkfolio's <em>
   highlighting"), which README rule 3 forbids; it is now a text child, so `<em>` shows as the
   characters `<em>` and nothing is dropped.
 
@@ -171,7 +171,7 @@ could send for one run. `resume` itself doesn't decide which runs deserve it; th
   refresh tokens at all, so I never store one there, even if a client sends one.
 - Twilio's account SID is the connection (numbers, opt-outs, history). A different SID is
   `invalid_credential` on `accountSid`, not a silent re-point; a new key pair is normal.
-- LinkedIn's profile URL stays. The new credential is built field by field from the method's
+- Linkfolio's profile URL stays. The new credential is built field by field from the method's
   fields, so `profileUrl` (or anything else) in the body can't overwrite what is stored.
 
 Validation runs before any effect, field by field in the documented order, so the form can point
@@ -199,7 +199,7 @@ JSON object, so a browser can't make the server buffer without limit or throw.
   on the button; a successful reconnect moves focus to the status line, which now says Connected.
   If another viewer reconnects first, the card leaves Disconnected and the form closes.
 - `ReconnectForm`: fields per method, in the server's order, each named as the server names it in
-  errors (`cookies.li_at`...), so a 400 marks exactly that input (`aria-invalid`, its message
+  errors (`cookies.lf_session`...), so a 400 marks exactly that input (`aria-invalid`, its message
   linked with `aria-describedby`). Secrets are password inputs and never prefilled; public
   identifiers are prefilled; the account SID is read-only. The inputs are uncontrolled: a re-render
   while the request is in flight (the submit button is disabled then) keeps what was typed. Meta's
@@ -227,7 +227,7 @@ JSON object, so a browser can't make the server buffer without limit or throw.
 
 - `tests/reconnect.test.ts`: pause at the checkpoint and resume without duplicates; validation order
   per method and invalid JSON; seconds vs ms; the Google refresh token kept, Meta's never stored;
-  Twilio account and LinkedIn profile kept, extra fields dropped; cache and circuit reset; only the
+  Twilio account and Linkfolio profile kept, extra fields dropped; cache and circuit reset; only the
   right runs resume; nothing resumes on a failed check.
 - `tests/reconnect-ui.test.ts`: the form per platform (labels, password fields, read-only account
   SID, Meta without a refresh token), field errors and the disabled submit, the Reconnect button's
@@ -357,7 +357,7 @@ I used an assistant to read the code base alongside me and to draft tests. Its f
 for Ticket A was to make the server confirm failures (probe three times before reporting), which
 contradicts README ("the server keeps no confirmation state; the browser's monitor decides") and
 would triple platform calls; and it initially proposed fixing the leak by deleting
-`accessToken`/`refreshToken` from connections, which misses the Twilio secret, the LinkedIn cookies
+`accessToken`/`refreshToken` from connections, which misses the Twilio secret, the Linkfolio cookies
 and the tokens in event messages and details. I checked each secret field against
 `docs/platforms/*.md` and the `Credential` union myself, ran the hostile-name page through
 `JSON.parse` the way a browser delimits the script, and reproduced every crash path against

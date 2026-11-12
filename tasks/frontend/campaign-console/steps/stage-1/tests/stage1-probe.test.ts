@@ -56,19 +56,19 @@ test("a check and a campaign send that both find the Google token expired share 
   assert.equal(fakes.google.calls.find((c) => c.method === "send")?.token, fakes.google.issued[0]);
 });
 
-test("Twilio and LinkedIn checks send the stored credential unchanged", async () => {
+test("Twilio and Linkfolio checks send the stored credential unchanged", async () => {
   const { server, fakes } = await backend(buildSeed());
   assert.equal((await server.probes.probe("conn_twilio")).ok, true);
-  assert.equal((await server.probes.probe("conn_linkedin")).ok, true);
+  assert.equal((await server.probes.probe("conn_linkfolio")).ok, true);
   assert.deepEqual(fakes.twilio.credentials("probe"), [
     { method: "api_key", accountSid: PUBLIC.twilioAccountSid, apiKeySid: PUBLIC.twilioApiKeySid, apiKeySecret: SECRETS.twilioApiKeySecret },
   ]);
-  assert.deepEqual(fakes.linkedin.credentials("probe"), [
+  assert.deepEqual(fakes.linkfolio.credentials("probe"), [
     {
       method: "session",
-      cookies: { li_at: SECRETS.linkedinLiAt, JSESSIONID: SECRETS.linkedinJsessionId },
-      userAgent: PUBLIC.linkedinUserAgent,
-      profileUrl: PUBLIC.linkedinProfileUrl,
+      cookies: { lf_session: SECRETS.linkfolioSession, lf_csrf: SECRETS.linkfolioCsrf },
+      userAgent: PUBLIC.linkfolioUserAgent,
+      profileUrl: PUBLIC.linkfolioProfileUrl,
     },
   ]);
 });

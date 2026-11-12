@@ -30,8 +30,8 @@ function gate() {
   return { released, release };
 }
 
-async function setup(adapters: Partial<Record<"google" | "meta" | "twilio" | "linkedin", FakeAdapter>> = {}) {
-  const platforms = { google: fakeAdapter("google"), meta: fakeAdapter("meta"), twilio: fakeAdapter("twilio"), linkedin: fakeAdapter("linkedin"), ...adapters };
+async function setup(adapters: Partial<Record<"google" | "meta" | "twilio" | "linkfolio", FakeAdapter>> = {}) {
+  const platforms = { google: fakeAdapter("google"), meta: fakeAdapter("meta"), twilio: fakeAdapter("twilio"), linkfolio: fakeAdapter("linkfolio"), ...adapters };
   const scheduler = new FakeScheduler();
   const store = createStore(seed());
   const app = createApp({ store, platforms: platforms as PlatformRegistry, scheduler, random: () => 0 });

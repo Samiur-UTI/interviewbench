@@ -10,8 +10,8 @@ export const SECRETS = {
   googleRefreshToken: "fakegRT3vBn8Mq1Lz6Xc4Wk9Pj2Hf7Ds5Ga0Ry8Tu3Ei6Ow1Qp",
   metaAccessToken: "fakemAT9sDf2Gh5Jk8Lz1Xc4Vb7Nm0Qw3Er6Ty9Ui2Op5As8Df1",
   twilioApiKeySecret: "faketKS4hJ7kL0zX3cV6bN9mQ2wE5rT8yU1iO4pA7sD0fG3hJ6kL",
-  linkedinLiAt: "fakelLA1qW4eR7tY0uI3oP6aS9dF2gH5jK8lZ1xC4vB7nM0qW3eR6",
-  linkedinJsessionId: "fakelJS8mN5bV2cX9zL6kJ3hG0fD7sA4pO1iU8yT5rE2wQ9mN6bV3",
+  linkfolioSession: "fakelLA1qW4eR7tY0uI3oP6aS9dF2gH5jK8lZ1xC4vB7nM0qW3eR6",
+  linkfolioCsrf: "fakelJS8mN5bV2cX9zL6kJ3hG0fD7sA4pO1iU8yT5rE2wQ9mN6bV3",
 } as const;
 
 /** Every secret value in the seed. */
@@ -22,8 +22,8 @@ export const PUBLIC = {
   metaScope: "ads_management,ads_read",
   twilioAccountSid: "AC0123456789abcdef0123456789abcdef",
   twilioApiKeySid: "SKfedcba9876543210fedcba9876543210",
-  linkedinUserAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
-  linkedinProfileUrl: "https://www.linkedin.com/in/test-sender",
+  linkfolioUserAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+  linkfolioProfileUrl: "https://app.linkfolio.example/in/test-sender",
 } as const;
 
 /**
@@ -40,8 +40,8 @@ export const HOSTILE = {
   headline: '<img src=x onerror="window.__pwned=2"> Head of <em>Growth</em>    </SCRIPT> & co',
 };
 
-export type Platform = "google" | "meta" | "twilio" | "linkedin";
-export const PLATFORMS: Platform[] = ["google", "meta", "twilio", "linkedin"];
+export type Platform = "google" | "meta" | "twilio" | "linkfolio";
+export const PLATFORMS: Platform[] = ["google", "meta", "twilio", "linkfolio"];
 
 export interface SeedOptions {
   now?: number;
@@ -112,26 +112,26 @@ export function connections(options: SeedOptions = {}): any[] {
       createdAt: now - 30 * 24 * HOUR,
     },
     {
-      id: "conn_linkedin",
-      platform: "linkedin",
+      id: "conn_linkfolio",
+      platform: "linkfolio",
       method: "session",
-      label: "LinkedIn",
+      label: "Linkfolio",
       accountName: "Test Sender",
       credential: {
         method: "session",
-        cookies: { li_at: SECRETS.linkedinLiAt, JSESSIONID: SECRETS.linkedinJsessionId },
-        userAgent: PUBLIC.linkedinUserAgent,
-        profileUrl: PUBLIC.linkedinProfileUrl,
+        cookies: { lf_session: SECRETS.linkfolioSession, lf_csrf: SECRETS.linkfolioCsrf },
+        userAgent: PUBLIC.linkfolioUserAgent,
+        profileUrl: PUBLIC.linkfolioProfileUrl,
       },
-      ...lastProbe("conn_linkedin"),
+      ...lastProbe("conn_linkfolio"),
       createdAt: now - 20 * 24 * HOUR,
     },
   ];
 }
 
-/** One campaign per platform: camp_google, camp_meta, camp_twilio, camp_linkedin. */
+/** One campaign per platform: camp_google, camp_meta, camp_twilio, camp_linkfolio. */
 export function campaigns(now = NOW): any[] {
-  const label: Record<Platform, string> = { google: "Ad", meta: "Ad set update", twilio: "SMS", linkedin: "Connection request" };
+  const label: Record<Platform, string> = { google: "Ad", meta: "Ad set update", twilio: "SMS", linkfolio: "Connection request" };
   return PLATFORMS.map((platform) => ({
     id: `camp_${platform}`,
     name: `${platform} campaign`,
@@ -171,7 +171,7 @@ export function makeRun(spec: RunSpec): any {
 }
 
 /** A run whose first target has HOSTILE's name and headline, followed by `plain` ordinary targets. */
-export function hostileRun(id: string, platform: Platform = "linkedin", options: Partial<RunSpec> & { plain?: number } = {}): any {
+export function hostileRun(id: string, platform: Platform = "linkfolio", options: Partial<RunSpec> & { plain?: number } = {}): any {
   const plain = Array.from({ length: options.plain ?? 2 }, (_, i) => ({ name: `Target ${i + 2}`, headline: `Headline ${i + 2}` }));
   return makeRun({ status: "running", ...options, id, platform, items: [{ name: HOSTILE.name, headline: HOSTILE.headline }, ...plain] });
 }
@@ -202,7 +202,7 @@ export function storedDiagnosticsEvent(runId: string, id: number, now = NOW): an
       },
       status: 401,
       body: `{"code":20003,"message":"Authenticate","key":"${SECRETS.twilioApiKeySecret}"}`,
-      session: `li_at=${SECRETS.linkedinLiAt}; JSESSIONID="${SECRETS.linkedinJsessionId}"`,
+      session: `lf_session=${SECRETS.linkfolioSession}; lf_csrf="${SECRETS.linkfolioCsrf}"`,
     },
     target: { name: "Target 1" },
   };

@@ -56,7 +56,7 @@ test("the page and the JSON API carry no secret, and each connection shows its m
   const dashboard = await getText(`${s.url}/api/dashboard`);
   assert.equal(dashboard.status, 200);
   const one: Record<string, any> = {};
-  for (const id of ["conn_google", "conn_meta", "conn_twilio", "conn_linkedin"]) {
+  for (const id of ["conn_google", "conn_meta", "conn_twilio", "conn_linkfolio"]) {
     const r = await getText(`${s.url}/api/connections/${id}`);
     assert.equal(r.status, 200, id);
     one[id] = JSON.parse(r.text);
@@ -73,7 +73,7 @@ test("the page and the JSON API carry no secret, and each connection shows its m
     conn_google: { method: "oauth", scope: PUBLIC.googleScope, expiresAt: NOW + 3_600_000 },
     conn_meta: { method: "oauth", scope: PUBLIC.metaScope, expiresAt: NOW + 40 * 24 * 3_600_000 },
     conn_twilio: { method: "api_key", accountSid: PUBLIC.twilioAccountSid, apiKeySid: PUBLIC.twilioApiKeySid },
-    conn_linkedin: { method: "session", userAgent: PUBLIC.linkedinUserAgent, profileUrl: PUBLIC.linkedinProfileUrl },
+    conn_linkfolio: { method: "session", userAgent: PUBLIC.linkfolioUserAgent, profileUrl: PUBLIC.linkfolioProfileUrl },
   };
   const state = JSON.parse(dashboard.text);
   for (const [id, fields] of Object.entries(expected)) {
