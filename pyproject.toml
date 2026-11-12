@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "interviewbench"
 version = "0.1.0"
-description = "Realistic AI-era coding interview tasks with rubrics, a grader, and an LLM leaderboard."
+description = "Realistic AI-era coding interview tasks with hidden tests, rubrics and a grader; they also run as Harbor tasks."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
@@ -19,7 +19,7 @@ dependencies = [
 
 [project.optional-dependencies]
 judge = ["anthropic>=1.13,<2"]
-# Harbor runs the LLM leaderboard (`harbor run -p tasks/<category>`); the tests use it to check
+# Harbor scores AI agents on the tasks (`harbor run -p tasks/<category>`); the tests use it to check
 # every task is a valid Harbor task.
 harbor = ["harbor>=0.24"]
 

@@ -4,7 +4,7 @@ Every interviewbench task is a [Harbor](https://harborframework.com/docs/tasks/m
 multi-step task with a few interviewbench-only files. The same folder works with:
 
 - `ib` (candidates grading themselves, and the AI judge)
-- `harbor run -p tasks/<category> -a <agent>` (the LLM leaderboard)
+- `harbor run -p tasks/<category> -a <agent>` (scoring AI agents and models)
 - `harbor run -p tasks/<category> -a oracle` (the reference solutions should score 1.0)
 
 `ib validate` checks every rule below. `ib validate --run` also runs the tests. The package's
@@ -48,7 +48,7 @@ create both. Today: `backend`, `frontend`, `devops`.
 
 - `metadata.category` in `task.toml` must equal the folder name.
 - Task ids (folder names) must be unique across all categories. Pick the category once; moving
-  a task later changes its path and breaks links and leaderboard history. Use `tags` for
+  a task later changes its path and breaks links and past Harbor results. Use `tags` for
   everything else (`ib list --tag nestjs`).
 - Harbor looks exactly one folder down, so `harbor run -p tasks/backend` runs one category.
 
@@ -167,5 +167,8 @@ ib validate order-api --run --runner docker  # the same check in the task contai
 harbor run -p tasks/backend -a oracle        # optional: Harbor's own check
 ```
 
-A new stack (e.g. TypeScript) needs a new template in `templates/` with a Dockerfile, a
-`test.sh` that produces JUnit XML, and a `candidate_tests` command. Nothing in `ib` changes.
+`templates/backend-python` is the only template today, so `ib new` in another category needs
+`--template backend-python` (then replace the stack). A new stack (e.g. TypeScript) needs a new
+template in `templates/` with a Dockerfile, a `test.sh` that produces JUnit XML, and a
+`candidate_tests` command; `tasks/backend/flight-search-aggregator` shows a TypeScript setup.
+Nothing in `ib` changes.
