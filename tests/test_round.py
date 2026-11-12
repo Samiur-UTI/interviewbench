@@ -132,6 +132,22 @@ def test_ib_test_shows_your_failures_but_no_hidden_tests(tmp_path):
     assert "test_burst_after_idle_is_capped_at_capacity" not in out  # a hidden stage 1 test
 
 
+def test_ib_test_prints_brackets_in_your_tests_as_text(tmp_path):
+    dest = tmp_path / "ws"
+    start(dest)
+    (dest / "tests" / "test_extra.py").write_text(
+        "import pytest\n\n\ndef test_route():\n    assert '[/api]' == 'x'\n\n\n"
+        "@pytest.mark.parametrize('plan', ['x'], ids=['cheap-plan'])\n"
+        "def test_plan(plan):\n    assert '[object Object]' == plan\n",
+        encoding="utf-8",
+    )
+    result = cli.invoke(app, ["test", "--dir", str(dest), "--runner", RUNNER_KIND])
+    assert result.exit_code == 1 and isinstance(result.exception, SystemExit), result.exception  # no MarkupError
+    out = flat(result.output)
+    assert "[/api]" in out and "test_plan[cheap-plan]" in out and "[object Object]" in out
+    assert "4/6 of your tests passed" in out
+
+
 def test_ib_test_outside_a_workspace_errors(tmp_path):
     result = cli.invoke(app, ["test", "--dir", str(tmp_path)])
     assert result.exit_code == 1 and "not an interviewbench workspace" in flat(result.output)
