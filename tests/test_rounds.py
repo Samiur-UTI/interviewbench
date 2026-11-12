@@ -285,6 +285,15 @@ def test_write_attack_prompt_stops_at_the_revealed_stage(tmp_path, task):
     assert "## Stage 1/3" in text and "## Stage 2/3" not in text
 
 
+def test_attack_prompt_ends_with_the_request(tmp_path, task):
+    """Ollama and other local runners drop the START of a prompt longer than their context window.
+    The request must also come after the code, or a truncated prompt is just code to summarise."""
+    dest = rounds.start_round(task, tmp_path / "ws", open_editor=False).path
+    text = rounds.write_attack_prompt(task, dest, ws.read_marker(dest)).read_text(encoding="utf-8")
+    tail = text.rsplit("</file>", 1)[1]
+    assert "write ONE test file" in tail and "Reply with only the contents of the test file" in tail
+
+
 def test_new_task_rejects_what_it_cannot_create():
     with pytest.raises(rounds.RoundError, match="Unknown category"):
         rounds.new_task("x", "mobile")
