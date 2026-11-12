@@ -105,6 +105,7 @@ def run_stage_tests(
             app=_copy_app(workspace, tmp_path / "app"),
             tests=_stage_tests(task, task.stage(stage), tmp_path / "tests"),
             logs=tmp_path / "logs",
+            temp=tmp_path / "temp",
         )
         done = runner.run(task, 'bash "$TESTS_DIR/test.sh"', sandbox, timeout or task.verifier_timeout)
         return _result(stage, done, sandbox.logs / "junit.xml", timeout or task.verifier_timeout)
@@ -116,7 +117,9 @@ def run_candidate_tests(task: Task, workspace: Path, runner: Runner, timeout: in
         return StageResult(CANDIDATE_TESTS, 0, 0, error="This task does not define candidate_tests")
     with tempfile.TemporaryDirectory(prefix="ib-", ignore_cleanup_errors=True) as tmp:
         tmp_path = Path(tmp)
-        sandbox = Sandbox(app=_copy_app(workspace, tmp_path / "app"), logs=tmp_path / "logs")
+        sandbox = Sandbox(
+            app=_copy_app(workspace, tmp_path / "app"), logs=tmp_path / "logs", temp=tmp_path / "temp"
+        )
         done = runner.run(task, task.candidate_tests, sandbox, timeout or task.verifier_timeout)
         return _result(CANDIDATE_TESTS, done, sandbox.logs / "junit.xml", timeout or task.verifier_timeout)
 
@@ -131,7 +134,9 @@ def build_reference(task: Task, dest: Path, runner: Runner, upto: int | None = N
     with tempfile.TemporaryDirectory(prefix="ib-", ignore_cleanup_errors=True) as tmp:
         app = _copy_app(task.starter_dir, Path(tmp) / "app")
         for stage in task.stages[:upto]:
-            sandbox = Sandbox(app=app, solution=stage.solution_dir, logs=Path(tmp) / "logs")
+            sandbox = Sandbox(
+                app=app, solution=stage.solution_dir, logs=Path(tmp) / "logs", temp=Path(tmp) / "temp"
+            )
             done = runner.run(task, 'bash "$SOLUTION_DIR/solve.sh"', sandbox, task.verifier_timeout)
             if done.returncode != 0:
                 raise RunnerError(f"{stage.name}/solution/solve.sh failed:\n{_tail(done.output)}")
