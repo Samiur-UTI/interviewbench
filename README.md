@@ -55,9 +55,22 @@ clone with an editable install.
 ## Practise a round
 
 ```bash
+ib
+```
+
+That's it: `ib` on its own opens the GUI in your browser. Pick a task, read the brief, run the
+tests, grade, and try to break your code. It listens on 127.0.0.1 only and needs no extra install
+(`ib ui --port <n> --no-open` if you want control over that). See [docs/GUI.md](docs/GUI.md).
+
+Prefer the terminal? Every step is also a command (`ib --help` lists them all):
+
+```bash
 ib list                               # or: ib list --category backend --tag python
 ib start rate-limiter                 # your round starts here
 ```
+
+Both front ends share the same rounds: one started in the GUI shows up for `ib` in its folder, and
+one started with `ib start` (without `--dir`) appears in the GUI's *Rounds* screen.
 
 | Task | Category | Language | Level | Time |
 |---|---|---|---|---|
@@ -91,10 +104,6 @@ ib break ../attack_test.py   # check tests an LLM wrote to break your code (see 
 
 `ib test`, `ib grade` and `ib break` take `--runner docker` or `--runner local`; the default uses
 Docker when it's running, else bash on your machine.
-
-Prefer a browser? `ib ui` does all of this in a local web app: pick a task, read the brief, run the
-tests, grade, and try to break your code. It listens on 127.0.0.1 only and needs no extra install.
-See [docs/GUI.md](docs/GUI.md).
 
 ## How a task works
 
