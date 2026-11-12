@@ -19,7 +19,8 @@ from .report import render
 from .rounds import check_task
 from .runner import Runner, RunnerError, get_runner
 from .tasks import (
-    ATTACK_PROMPT, BRIEF, JUDGE_PROMPT, JUDGE_REPLY, MARKER, REPORT, Task, TaskError, get_task, load_all,
+    ATTACK_PROMPT, BRIEF, FULL_REPORT, JUDGE_PROMPT, JUDGE_REPLY, MARKER, REPORT, Task, TaskError, get_task,
+    load_all,
 )
 from .ui.server import serve
 
@@ -216,8 +217,13 @@ def grade(
     judge_model: Optional[str] = typer.Option(None, help="Model for --judge (default: $IB_JUDGE_MODEL, else claude-opus-5-5 for claude)"),
     judge_export: bool = typer.Option(False, "--judge-export", help="Write the judge prompt, to paste into any chatbot. It goes outside the workspace (in $IB_DATA_DIR, else your app data folder), since it holds the hidden tests; the path is printed"),
     judge_reply: Optional[Path] = typer.Option(None, "--judge-reply", help="Score the judge criteria from a chatbot's reply to the exported prompt"),
+    all_stages: bool = typer.Option(False, "--all-stages", help="Show which hidden tests fail in every stage, including stages the round hasn't reached (for an interviewer grading a hand-back). The report then goes to --output, else outside the workspace"),
 ) -> None:
-    """Grade a workspace against the task's hidden tests and rubric, optionally with an AI judge."""
+    """Grade a workspace against the task's hidden tests and rubric, optionally with an AI judge.
+
+    Every stage's hidden tests run, but inside a round only the stages you've reached show which tests
+    fail; later stages show a count.
+    """
     if sum((judge, judge_export, judge_reply is not None)) > 1:
         _fail("Use only one of --judge, --judge-export and --judge-reply.")
     if not dir.is_dir():
@@ -226,6 +232,12 @@ def grade(
         _fail(f"{judge_reply} doesn't exist. Save the chatbot's reply there first.")
     task = _task_from_workspace(dir, task_id)
     backend = _runner_or_exit(runner)
+    revealed = rounds.revealed_stages(task, ws.read_marker(dir))
+    if all_stages and output is None and revealed is not None and revealed < len(task.stages):
+        try:  # the full report would spoil the round for an AI assistant reading the workspace
+            output = rounds.private_folder(dir) / FULL_REPORT
+        except rounds.RoundError as exc:
+            _fail(str(exc))
     mode = "api" if judge else "prepare" if judge_export else "reply" if judge_reply is not None else "none"
     with console.status(f"Running hidden tests ({backend.name} runner)...") as status:
         try:
@@ -234,8 +246,9 @@ def grade(
                 reply=judge_reply.read_text(encoding="utf-8") if judge_reply is not None else None,
                 reply_label=f"pasted reply ({judge_reply.name})" if judge_reply is not None else "",
                 timeout=timeout, report_path=output, progress=lambda phase: status.update(f"{phase}..."),
+                all_stages=all_stages,
             )
-        except RunnerError as exc:
+        except (RunnerError, rounds.RoundError) as exc:
             _fail(str(exc))
     exported = None
     if judge_export and outcome.request:
@@ -243,7 +256,7 @@ def grade(
             exported = rounds.export_judge_prompt(dir, outcome.request)
         except (rounds.RoundError, OSError) as exc:
             _fail(f"Couldn't write the judge prompt: {exc}")
-    render(outcome.result, console)
+    render(outcome.result, console, outcome.revealed)
     used = rounds.time_used_minutes(ws.read_marker(dir))
     if used is not None:
         console.print(f"Time used: {used} min of {task.time_limit_minutes}\n")

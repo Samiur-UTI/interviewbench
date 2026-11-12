@@ -600,6 +600,9 @@ def test_grading_withholds_unrevealed_stages_until_they_are_revealed(api, rounds
     assert second["revealed"] is False and second["title"] is None and second["failures"] == []
     assert second["withheld_failures"] == len(stage2)
     assert third["revealed"] is False and third["title"] is None
+    files = [p for p in workspace.rglob("*") if p.is_file() and ".git" not in p.parts]
+    on_disk = "\n".join(p.read_text(encoding="utf-8", errors="replace") for p in files)
+    assert not [name for name in stage2 if name in on_disk]  # ib-report.md, and no ib-ui.json in the workspace
     for text in (json.dumps(view), api.get("/api/rounds/rate-limiter").text):
         assert not [name for name in stage2 if name in text]
         assert task.stages[1].title not in text and "retry_after" not in text
@@ -654,7 +657,7 @@ def test_a_key_quoted_by_a_provider_error_is_scrubbed(api, provider, rounds_dir,
     provider.response = (401, {"error": "bad key sk-secret"})
     view = api.succeeded(api.post("/api/rounds/rate-limiter/grade", {"runner": RUNNER_KIND, "judge": "api"}))
     assert "HTTP 401" in view["judge_error"] and "sk-secret" not in view["judge_error"]
-    assert b"sk-secret" not in (rounds_dir / "rate-limiter" / UI_STATE).read_bytes()
+    assert b"sk-secret" not in (ws.private_dir(rounds_dir / "rate-limiter") / UI_STATE).read_bytes()
 
 
 def test_the_judge_prompt_stays_in_memory(api, rounds_dir):
@@ -667,7 +670,7 @@ def test_the_judge_prompt_stays_in_memory(api, rounds_dir):
     prompt = api.get("/api/rounds/rate-limiter/judge-prompt").json
     assert "<hidden_tests>" in prompt["prompt"] and prompt["tokens_estimate"] > 0
     assert not (workspace / JUDGE_PROMPT).exists()
-    stored = (workspace / UI_STATE).read_text(encoding="utf-8")
+    stored = (ws.private_dir(workspace) / UI_STATE).read_text(encoding="utf-8")
     assert "<hidden_tests>" not in stored and "reference_solution" not in stored
 
 
@@ -819,9 +822,11 @@ def test_an_attack_file_with_no_tests_is_a_friendly_failure(api):
 
 def test_a_damaged_results_file_is_just_no_results(api, rounds_dir):
     api.start()
-    (rounds_dir / "rate-limiter" / UI_STATE).write_text("{not json", encoding="utf-8")
+    stored = ws.private_dir(rounds_dir / "rate-limiter") / UI_STATE
+    stored.parent.mkdir(parents=True)
+    stored.write_text("{not json", encoding="utf-8")
     assert api.get("/api/rounds/rate-limiter").json["last"]["grade"] is None
-    (rounds_dir / "rate-limiter" / UI_STATE).write_text('{"grade": {"percent": 5}}', encoding="utf-8")
+    stored.write_text('{"grade": {"percent": 5}}', encoding="utf-8")
     assert api.get("/api/rounds/rate-limiter").json["last"]["grade"] is None
 
 

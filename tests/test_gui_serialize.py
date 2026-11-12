@@ -3,6 +3,9 @@
 import pytest
 
 from interviewbench import grader
+from interviewbench import workspace as ws
+from interviewbench.report import WITHHELD_ERROR
+from interviewbench.rounds import RoundError
 from interviewbench.grader import StageResult, score
 from interviewbench.ui import serialize
 from interviewbench.ui.serialize import grade_record, grade_view, prior_result, task_view
@@ -52,7 +55,7 @@ def test_auto_criteria_dont_describe_unrevealed_stages(task, stored):
     by_id = {c["id"]: c for c in view["criteria"]}
     assert "bursts" in by_id["stage1-bug-fixed"]["description"]
     assert by_id["stage2-feature"]["description"] == "Hidden tests for stage 2."
-    assert by_id["stage3-scales"]["evidence"] == serialize._WITHHELD_ERROR
+    assert by_id["stage3-scales"]["evidence"] == WITHHELD_ERROR
     assert by_id["stage2-feature"]["evidence"] == "0/2 hidden tests passed"
     assert by_id["root-cause"]["score"] is None
 
@@ -88,8 +91,22 @@ def test_prior_result_is_only_for_the_same_code_and_runner(task, stored):
 
 
 def test_state_round_trips_and_tolerates_damage(tmp_path):
-    assert serialize.read_state(tmp_path) == {}
-    serialize.write_state(tmp_path, {"test": {"passed": 1}})
-    assert serialize.read_state(tmp_path) == {"test": {"passed": 1}}
-    (tmp_path / "ib-ui.json").write_text("[1]", encoding="utf-8")
-    assert serialize.read_state(tmp_path) == {}
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    assert serialize.read_state(workspace) == {}
+    serialize.write_state(workspace, {"test": {"passed": 1}})
+    assert serialize.read_state(workspace) == {"test": {"passed": 1}}
+    (ws.private_dir(workspace) / "ib-ui.json").write_text("[1]", encoding="utf-8")
+    assert serialize.read_state(workspace) == {}
+
+
+def test_state_stays_out_of_the_workspace(tmp_path, monkeypatch):
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    (workspace / "ib-ui.json").write_text('{"grade": "spoilers"}', encoding="utf-8")  # where ib kept it before
+    assert serialize.read_state(workspace) == {}
+    serialize.write_state(workspace, {"test": {"passed": 1}})
+    assert list(workspace.iterdir()) == []  # written privately, and the old copy is gone
+    monkeypatch.setenv("IB_DATA_DIR", str(workspace / "data"))
+    with pytest.raises(RoundError, match="inside the workspace"):
+        serialize.write_state(workspace, {})

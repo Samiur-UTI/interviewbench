@@ -138,6 +138,60 @@ def test_grade_round_writes_the_report(tmp_path, task, runner, solution_dir):
     assert "45.0/45" in (dest / REPORT).read_text(encoding="utf-8")
 
 
+def workspace_text(workspace: Path) -> str:
+    """Everything an AI assistant working in the workspace could read, git history aside."""
+    files = [p for p in workspace.rglob("*") if p.is_file() and ".git" not in p.parts]
+    return "\n".join(p.read_text(encoding="utf-8", errors="replace") for p in files)
+
+
+def later_stage_spoilers(task, outcome, revealed: int) -> list[str]:
+    names = [f.name for st in outcome.result.stages if st.stage > revealed for f in st.failures]
+    rubric = [c.description for c in task.criteria if c.type == "auto" and c.stage > revealed]
+    return names + rubric
+
+
+def test_grading_mid_round_keeps_later_stages_out_of_the_workspace(tmp_path, task, runner):
+    dest = rounds.start_round(task, tmp_path / "ws", open_editor=False).path
+    outcome = rounds.grade_round(task, dest, runner)
+    spoilers = later_stage_spoilers(task, outcome, 1)
+    assert outcome.revealed == 1 and len(spoilers) > 2
+    assert not [s for s in spoilers if s in workspace_text(dest)]
+    report = (dest / REPORT).read_text(encoding="utf-8")
+    assert "You'll see which once you reach stage 2" in report and "Hidden tests for stage 3." in report
+    assert outcome.result.stages[0].failures[0].name in report  # the stage you're on is shown in full
+
+    assert not ws.is_inside(outcome.full_report, dest)
+    full = outcome.full_report.read_text(encoding="utf-8")
+    assert all(s in full for s in spoilers)
+
+    rounds.next_stage(task, dest, ws.read_marker(dest))
+    again = rounds.grade_round(task, dest, runner)
+    report = (dest / REPORT).read_text(encoding="utf-8")
+    assert again.revealed == 2 and all(f.name in report for f in again.result.stages[1].failures)
+    assert not [s for s in later_stage_spoilers(task, again, 2) if s in workspace_text(dest)]
+
+
+def test_grading_a_hand_back_or_all_stages_shows_everything(tmp_path, task, runner):
+    handback = shutil.copytree(task.starter_dir, tmp_path / "handback")  # no round marker: not a round
+    outcome = rounds.grade_round(task, handback, runner)
+    assert outcome.revealed is None and outcome.full_report is None
+    assert all(s in (handback / REPORT).read_text(encoding="utf-8") for s in later_stage_spoilers(task, outcome, 1))
+
+    dest = rounds.start_round(task, tmp_path / "ws", open_editor=False).path
+    review = tmp_path / "review.md"
+    outcome = rounds.grade_round(task, dest, runner, all_stages=True, report_path=review)
+    assert outcome.revealed is None and outcome.full_report is None and not (dest / REPORT).exists()
+    assert all(s in review.read_text(encoding="utf-8") for s in later_stage_spoilers(task, outcome, 1))
+
+
+def test_grading_refuses_a_private_folder_inside_the_workspace(tmp_path, task, runner, monkeypatch):
+    dest = rounds.start_round(task, tmp_path / "ws", open_editor=False).path
+    monkeypatch.setenv("IB_DATA_DIR", str(dest / "data"))
+    with pytest.raises(rounds.RoundError, match="inside the workspace"):
+        rounds.grade_round(task, dest, runner)
+    assert not (dest / REPORT).exists()
+
+
 def test_grade_round_keeps_scores_when_the_judge_fails(tmp_path, task, runner, solution_dir, monkeypatch):
     def boom(*args, **kwargs):
         raise JudgeError("no credentials")

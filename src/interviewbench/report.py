@@ -3,9 +3,37 @@ from __future__ import annotations
 from rich.console import Console
 from rich.table import Table
 
-from .grader import GradeResult
+from .grader import CriterionScore, GradeResult
+from .tasks import Criterion
 
 MAX_FAILURES_SHOWN = 5
+# Spoiler rules, shared with the GUI: a stage the round hasn't reached shows how many of its hidden
+# tests failed, never which ones or why, and its auto criterion doesn't say what the stage is about.
+WITHHELD_ERROR = "This stage's hidden tests could not run. The details stay hidden until it's revealed."
+
+
+def is_hidden(stage: int | None, revealed: int | None) -> bool:
+    """revealed: the stages the round has reached, or None to show everything."""
+    return revealed is not None and stage is not None and stage > revealed
+
+
+def criterion_description(criterion: Criterion, revealed: int | None) -> str:
+    """An auto criterion says what its stage is about, so it counts as part of that stage's brief."""
+    if criterion.type == "auto" and is_hidden(criterion.stage, revealed):
+        return f"Hidden tests for stage {criterion.stage}."
+    return criterion.description
+
+
+def _evidence(result: GradeResult, s: CriterionScore, revealed: int | None) -> str:
+    stage = next((st for st in result.stages if st.stage == s.criterion.stage), None)
+    if s.criterion.type == "auto" and is_hidden(s.criterion.stage, revealed) and stage and stage.error:
+        return WITHHELD_ERROR  # the evidence is the stage's error, which quotes test output
+    return s.evidence
+
+
+def _withheld_line(stage: int, failures: int) -> str:
+    noun = "test fails" if failures == 1 else "tests fail"
+    return f"Stage {stage}: {failures} hidden {noun}. You'll see which once you reach stage {stage}."
 
 
 def _pct(score: float | None) -> str:
@@ -25,7 +53,7 @@ def summary_line(result: GradeResult) -> str:
     )
 
 
-def render(result: GradeResult, console: Console) -> None:
+def render(result: GradeResult, console: Console, revealed: int | None = None) -> None:
     console.print(
         f"\n[bold]{result.task.title}[/bold]  ({result.task.category}/{result.task.id}, "
         f"{result.runner} runner)"
@@ -40,10 +68,16 @@ def render(result: GradeResult, console: Console) -> None:
         color = "dim" if s.score is None else ("green" if s.score == 1 else "yellow" if s.score > 0 else "red")
         table.add_row(
             s.criterion.id, s.criterion.type, f"{s.criterion.weight:.0f}",
-            f"[{color}]{_pct(s.score)}[/{color}]", s.evidence,
+            f"[{color}]{_pct(s.score)}[/{color}]", _evidence(result, s, revealed),
         )
     console.print(table)
     for stage in result.stages:
+        if is_hidden(stage.stage, revealed):
+            if stage.error:
+                console.print(f"[dim]Stage {stage.stage}: {WITHHELD_ERROR}[/dim]")
+            elif stage.failures:
+                console.print(f"[dim]{_withheld_line(stage.stage, len(stage.failures))}[/dim]")
+            continue
         if stage.error:
             console.print(f"[red]Stage {stage.stage} could not run:[/red]\n{stage.error}")
         for f in stage.failures[:MAX_FAILURES_SHOWN]:
@@ -58,7 +92,8 @@ def render(result: GradeResult, console: Console) -> None:
     console.print(f"\n[bold]{summary_line(result)}[/bold]\n")
 
 
-def to_markdown(result: GradeResult) -> str:
+def to_markdown(result: GradeResult, revealed: int | None = None) -> str:
+    """The report. With `revealed`, stages past it keep only their failure counts (see is_hidden)."""
     lines = [
         f"# interviewbench report: {result.task.title}",
         "",
@@ -71,21 +106,30 @@ def to_markdown(result: GradeResult) -> str:
     ]
     for s in result.scores:
         lines.append(
-            f"| {s.criterion.id} | {s.criterion.type} | {s.criterion.weight:.0f} | {_pct(s.score)} | {s.evidence} |"
+            f"| {s.criterion.id} | {s.criterion.type} | {s.criterion.weight:.0f} | {_pct(s.score)} "
+            f"| {_evidence(result, s, revealed)} |"
         )
-    failing = [(st.stage, f) for st in result.stages for f in st.failures]
-    errors = [st for st in result.stages if st.error]
-    if failing or errors:
+    shown = [st for st in result.stages if not is_hidden(st.stage, revealed)]
+    hidden = [st for st in result.stages if is_hidden(st.stage, revealed) and (st.error or st.failures)]
+    failing = [(st.stage, f) for st in shown for f in st.failures]
+    errors = [st for st in shown if st.error]
+    if failing or errors or hidden:
         lines += ["", "## Failing hidden tests", ""]
         for st in errors:
             lines += [f"- Stage {st.stage} could not run:", "", "```", st.error or "", "```"]
         for stage, f in failing:
             lines.append(f"- Stage {stage} `{f.name}`: {f.message}")
+        for st in hidden:
+            lines.append(
+                f"- Stage {st.stage}: {WITHHELD_ERROR}" if st.error else f"- {_withheld_line(st.stage, len(st.failures))}"
+            )
     if result.review:
         lines += ["", f"## AI review ({result.review.model})", "", *_review_lines(result)]
     lines += ["", "## Rubric", ""]
     for s in result.scores:
-        lines.append(f"- **{s.criterion.id}** ({s.criterion.weight:.0f} pts): {s.criterion.description}")
+        lines.append(
+            f"- **{s.criterion.id}** ({s.criterion.weight:.0f} pts): {criterion_description(s.criterion, revealed)}"
+        )
     return "\n".join(lines) + "\n"
 
 
