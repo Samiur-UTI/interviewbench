@@ -34,7 +34,8 @@ business: |
   - Never show a fare the supplier can't honour. The total equals the supplier's total for the
     whole party, to the cent, and includes the supplier's fees. Offers with fewer seats than
     adults + children are hidden, before duplicates are merged. An amount or reference that
-    can't be resolved exactly makes that supplier's response an error, never a guess (README).
+    can't be resolved exactly, or an amount not in its supplier's documented format, makes that
+    supplier's response an error, never a guess (README, docs/suppliers/).
   - Prices are integer US cents (README).
   - Same trip means the same journeys and, per segment, the same marketing flight number, UTC
     departure, airports, booking code and cabin. Codeshares under different flight numbers and
