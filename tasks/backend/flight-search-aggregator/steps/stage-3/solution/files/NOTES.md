@@ -118,8 +118,8 @@ payload took.
 **What it costs.** Each payload is copied once into a thread and its offers once back (structured
 clone): a few ms for normal payloads, ~20 ms for a 50 MB one with few offers. The four indexes add
 about 40 % to the insert time and some disk per search. The write itself stays on the main thread
-(about 100-200 ms for 15k offers); it is one transaction, so it could be chunked or moved to a
-thread later if health checks need it. Memory peaks while a big payload exists in both threads.
+(about 100-200 ms for 15k offers). It is one transaction; if health checks need it, it could move
+to a thread later (chunking it into many commits would break the commit limit). Memory peaks while a big payload exists in both threads.
 
 **Results.** Walks of all four orders and the stored rows are identical to stage 2 (checked on
 generated data with dense ties). The first page is ready ~400 ms after the last supplier answers

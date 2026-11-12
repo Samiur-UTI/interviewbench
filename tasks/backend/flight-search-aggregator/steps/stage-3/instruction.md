@@ -10,8 +10,13 @@ Requirements:
 - Results, order, statuses and stored rows stay exactly as they are today.
 - Durability stays as it is: same `openDatabase` settings, a real database file, rows
   committed before the response.
-- **Writes are batched.** A search's rows must not be committed row by row (however the SQL
-  is sent), and no statement may be prepared per row.
+- **Writes are batched.** A search commits at most 3 times, however the SQL is sent: each
+  transaction counts once, and so does each write statement run outside a transaction (at most
+  2 of those). One transaction per search is enough, and committing a large search in chunks
+  breaks this limit.
+- **Statements are reused.** The statements compiled during a search (each `prepare()`, and
+  each statement of an `exec()` script, in any thread) are at most 40, and their number doesn't
+  grow with the number of offers.
 - **Paging uses the database properly.** For every sort, a page must be read through an index
   in that order. A page after the first must **seek to the cursor position**: no sorting step,
   no full scan, no `OFFSET`, no reading the whole search and filtering in JS or SQL. Each page
