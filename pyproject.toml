@@ -21,7 +21,7 @@ dependencies = [
 judge = ["anthropic>=1.13,<2"]
 # Harbor scores AI agents on the tasks (`harbor run -p tasks/<category>`); the tests use it to check
 # every task is a valid Harbor task.
-harbor = ["harbor>=0.24"]
+harbor = ["harbor>=0.24; python_version >= '3.12'"]
 
 [project.scripts]
 interviewbench = "interviewbench.cli:app"
