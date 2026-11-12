@@ -22,7 +22,14 @@ cd "$TESTS_DIR"
 # files are still there; each stage's tests/ carries a STAGE file with its number, and the
 # latest upload overwrites it.
 STAGE="$(tr -d '[:space:]' < "$TESTS_DIR/STAGE")"
-node --no-warnings=ExperimentalWarning --test --test-force-exit --test-concurrency=1 --test-timeout=20000 \
+
+# Hangs. No --test-force-exit: it loses results at random (see helpers/exit-guard.mjs, which takes
+# its place). --test-timeout turns a test that never settles into a failed testcase, and
+# exit-guard.mjs ends a file whose code under test leaks a timer or socket. `timeout -k 5 690s`
+# is only a last resort, below [verifier].timeout_sec (720) so the reward below is still written.
+# (Relative to the cd above: on Windows, --import reads "C:/..." as a URL and refuses it.)
+timeout -k 5 690s node --import ./helpers/exit-guard.mjs \
+  --no-warnings=ExperimentalWarning --test --test-concurrency=1 --test-timeout=20000 \
   --test-reporter=junit --test-reporter-destination="$LOGS_DIR/junit.xml" \
   --test-reporter=spec --test-reporter-destination=stdout \
   "$TESTS_DIR"/stage"$STAGE"*.test.ts

@@ -31,6 +31,78 @@ def test_start_round_reports_what_it_set_up(tmp_path, task):
         rounds.start_round(task, tmp_path / "ws", open_editor=False)
 
 
+def test_force_never_deletes_a_folder_that_isnt_a_round(tmp_path, task):
+    project = tmp_path / "my-project"
+    (project / ".git").mkdir(parents=True)
+    (project / "main.py").write_text("print('mine')\n", encoding="utf-8")
+    for force in (False, True):
+        with pytest.raises(rounds.RoundError, match="isn't an interviewbench workspace") as caught:
+            rounds.start_round(task, project, force=force, open_editor=False)
+        assert "Use --force" not in str(caught.value)
+    assert (project / "main.py").read_text(encoding="utf-8") == "print('mine')\n"
+    assert (project / ".git").is_dir() and not (project / MARKER).exists()
+
+
+def test_force_replaces_an_earlier_round(tmp_path, task):
+    dest = rounds.start_round(task, tmp_path / "ws", open_editor=False).path
+    (dest / "scratch.txt").write_text("old work", encoding="utf-8")
+    with pytest.raises(rounds.RoundError, match="Use --force"):
+        rounds.start_round(task, dest, open_editor=False)
+    rounds.start_round(task, dest, force=True, open_editor=False)
+    assert not (dest / "scratch.txt").exists() and ws.read_marker(dest)["stage"] == 1
+
+
+@pytest.mark.parametrize("force", [False, True])
+def test_an_empty_folder_takes_the_round(tmp_path, task, force):
+    (tmp_path / "empty").mkdir()
+    started = rounds.start_round(task, tmp_path / "empty", force=force, git=False, open_editor=False)
+    assert (started.path / BRIEF).is_file() and ws.read_marker(started.path)["task"] == task.id
+
+
+def test_a_folder_holding_interviewbench_is_refused(tmp_path, task, monkeypatch):
+    outer = tmp_path / "code"
+    bench = outer / "interviewbench"
+    shutil.copytree(task.path.parents[2] / "rubrics", bench / "rubrics")
+    (outer / MARKER).write_text('{"task": "rate-limiter"}', encoding="utf-8")  # even if it looks like a round
+    monkeypatch.setenv("IB_ROOT", str(bench))
+    with pytest.raises(rounds.RoundError, match="contains"):
+        rounds.start_round(task, outer, force=True, open_editor=False)
+    assert (bench / "rubrics" / "base.yaml").is_file()
+    with pytest.raises(rounds.RoundError, match="hidden tests"):
+        rounds.start_round(task, bench / "ws", open_editor=False)
+
+
+def test_the_home_folder_and_files_are_refused(tmp_path, task, monkeypatch):
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / MARKER).write_text('{"task": "rate-limiter"}', encoding="utf-8")
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    with pytest.raises(rounds.RoundError, match="home folder"):
+        rounds.start_round(task, home, force=True, open_editor=False)
+    assert (home / MARKER).is_file()
+    (tmp_path / "notes.txt").write_text("keep", encoding="utf-8")
+    with pytest.raises(rounds.RoundError, match="isn't a plain folder"):
+        rounds.start_round(task, tmp_path / "notes.txt", force=True, open_editor=False)
+    assert (tmp_path / "notes.txt").read_text(encoding="utf-8") == "keep"
+
+
+def test_export_judge_prompt_goes_outside_the_workspace(tmp_path, task, runner, solution_dir, monkeypatch):
+    monkeypatch.setenv("IB_DATA_DIR", str(tmp_path / "data"))
+    dest = shutil.copytree(solution_dir, tmp_path / "ws")
+    (dest / JUDGE_PROMPT).write_text("stale", encoding="utf-8")
+    outcome = rounds.grade_round(task, dest, runner, judge="prepare")
+    exported = rounds.export_judge_prompt(dest, outcome.request)
+    assert exported.path == ws.private_dir(dest) / JUDGE_PROMPT
+    assert not exported.path.resolve().is_relative_to(dest.resolve())
+    assert "<hidden_tests>" in exported.path.read_text(encoding="utf-8")
+    assert exported.removed_stale and not (dest / JUDGE_PROMPT).exists()
+    assert ws.private_dir(tmp_path / "other" / "ws") != ws.private_dir(dest)  # same name, other round
+    monkeypatch.setenv("IB_DATA_DIR", str(dest / "data"))
+    with pytest.raises(rounds.RoundError, match="inside the workspace"):
+        rounds.export_judge_prompt(dest, outcome.request)
+
+
 def test_next_stage_reports_the_tag_and_stops_at_the_last_stage(tmp_path, task):
     dest = rounds.start_round(task, tmp_path / "ws", open_editor=False).path
     marker = ws.read_marker(dest)

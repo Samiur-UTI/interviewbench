@@ -24,7 +24,7 @@ from .judge import (
 from .report import to_markdown
 from .runner import Runner, RunnerError
 from .tasks import (
-    ATTACK_PROMPT, BRIEF, REPORT, Task, TaskError, _task_dirs, bench_root, categories, get_task, load_task,
+    ATTACK_PROMPT, BRIEF, JUDGE_PROMPT, REPORT, Task, TaskError, _task_dirs, bench_root, categories, get_task, load_task,
     tasks_root, templates_root,
 )
 
@@ -136,21 +136,74 @@ class Changes:
     truncated: bool
 
 
+def _holds_a_round(folder: Path) -> bool:
+    """Whether `folder` is a workspace `ib start` made: it has a readable marker naming a task."""
+    try:
+        marker = ws.read_marker(folder)
+    except (OSError, ValueError):
+        return False
+    return isinstance(marker, dict) and isinstance(marker.get("task"), str)
+
+
+def _protected_roots() -> list[Path]:
+    """Folders a round may never go inside, nor replace: the tasks (hidden tests) and ib's own code."""
+    return [bench_root(), Path(__file__).resolve().parent]
+
+
+def _elsewhere(task: Task) -> str:
+    default = ws.default_workspace(task.id)
+    if any(ws.is_inside(default, root) or ws.is_inside(root, default) for root in _protected_roots()):
+        return f"Set IB_WORKSPACES to a folder of its own, away from {bench_root()}."
+    return f"Pick a new or empty folder, or leave out --dir to use {default}."
+
+
+def _check_destination(task: Task, dest: Path, force: bool) -> bool:
+    """Refuse a destination that would expose the hidden tests or delete someone's files.
+
+    Returns whether `dest` is an earlier round that `force` allows replacing. Only such a round is
+    ever deleted: any other folder must be new or empty.
+    """
+    for root in _protected_roots():
+        if ws.is_inside(dest, root):
+            raise RoundError(
+                f"{dest} is inside {root}, which holds the hidden tests and reference solutions, "
+                f"so an AI assistant working there could read them. {_elsewhere(task)}"
+            )
+        if ws.is_inside(root, dest):
+            raise RoundError(f"{dest} contains {root}, the interviewbench install, so ib won't use it. {_elsewhere(task)}")
+    if not dest.exists() and not dest.is_symlink():
+        return False
+    resolved = dest.resolve()
+    special = "a drive root" if resolved == Path(resolved.anchor) else "your home folder" if resolved == Path.home().resolve() else None
+    if special:
+        raise RoundError(f"{dest} is {special}, so ib won't start a round there. {_elsewhere(task)}")
+    if dest.is_symlink() or not dest.is_dir():
+        raise RoundError(f"{dest} already exists and isn't a plain folder, so ib won't touch it. {_elsewhere(task)}")
+    if not any(dest.iterdir()):
+        return False  # an empty folder: the round goes into it, nothing is deleted
+    if not _holds_a_round(dest):
+        raise RoundError(
+            f"{dest} already exists, isn't empty and isn't an interviewbench workspace, so ib won't touch "
+            f"it (not even with --force). {_elsewhere(task)}"
+        )
+    if not force:
+        raise RoundError(
+            f"{dest} already exists and holds an earlier interviewbench round. Use --force to replace it "
+            f"(your work there will be lost), or pick another folder."
+        )
+    return True
+
+
 def start_round(
     task: Task, dest: Path, *, force: bool = False, git: bool = True, open_editor: bool = True
 ) -> StartedRound:
-    """Set up a workspace: starter code, editor tasks, git, the marker and TASK.md. Starts the clock."""
-    if ws.is_inside(dest, bench_root()):
-        raise RoundError(
-            f"{dest} is inside {bench_root()}, which holds the hidden tests and reference solutions, "
-            f"so an AI assistant working there could read them. Pick a folder outside it, or leave out "
-            f"--dir to use {ws.default_workspace(task.id)}."
-        )
-    if dest.exists():
-        if not force:
-            raise RoundError(f"{dest} already exists. Use --force to overwrite it (your changes there will be lost).")
+    """Set up a workspace: starter code, editor tasks, git, the marker and TASK.md. Starts the clock.
+
+    `dest` must be new, empty, or (with `force`) an earlier round, which is deleted first.
+    """
+    if _check_destination(task, dest, force):
         ws.remove_tree(dest)
-    shutil.copytree(task.starter_dir, dest)
+    shutil.copytree(task.starter_dir, dest, dirs_exist_ok=True)
     wrote_tasks = ws.write_editor_tasks(dest)
     git_ok = git and ws.git_init(dest, ignored=[ws.EDITOR_TASKS.as_posix()] if wrote_tasks else [])
     started = datetime.now(timezone.utc)
@@ -310,6 +363,33 @@ def grade_round(
             judge_error = judge_error.replace(settings.api_key, "[API key]")
     (report_path or workspace / REPORT).write_text(to_markdown(result), encoding="utf-8")
     return GradeOutcome(result, request, judge_error)
+
+
+@dataclass
+class ExportedPrompt:
+    path: Path
+    tokens: int
+    removed_stale: bool  # an older ib wrote the prompt into the workspace, and that copy is gone now
+
+
+def export_judge_prompt(workspace: Path, request: JudgeRequest) -> ExportedPrompt:
+    """Write the judge prompt for pasting into a chatbot, outside the workspace.
+
+    It holds the hidden tests and the reference solution, so it goes to ib's own data folder (see
+    `ws.private_dir`), where an AI assistant working in the workspace doesn't look.
+    """
+    folder = ws.private_dir(workspace)
+    if ws.is_inside(folder, workspace):
+        raise RoundError(f"IB_DATA_DIR ({ws.data_root()}) is inside the workspace. Point it somewhere else.")
+    folder.mkdir(parents=True, exist_ok=True)
+    text = request.as_paste()
+    path = folder / JUDGE_PROMPT
+    path.write_text(text, encoding="utf-8")
+    stale = workspace / JUDGE_PROMPT
+    removed = stale.is_file()
+    if removed:
+        stale.unlink()
+    return ExportedPrompt(path, tokens_estimate(text), removed)
 
 
 def time_used_minutes(marker: dict | None) -> int | None:
