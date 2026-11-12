@@ -24,14 +24,23 @@ from .tasks import (
 from .ui.server import serve
 
 app = typer.Typer(
-    help="Realistic AI-era coding interview tasks with rubrics and a grader.",
-    no_args_is_help=True,
+    help="Realistic AI-era coding interview tasks with rubrics and a grader.\n\n"
+    "Run `ib` alone to open the GUI in your browser, or use the commands below.",
+    invoke_without_command=True,
     add_completion=False,
 )
 console = Console()
 
 
 @app.callback()
+def _root(ctx: typer.Context) -> None:
+    _utf8_output()
+    if ctx.invoked_subcommand is None:
+        # The GUI is the front door; `ib --help` lists the commands for people who prefer a terminal.
+        console.print("[dim]Prefer the terminal? `ib --help` lists the commands.[/dim]")
+        ui(port=7473, open_browser=True)
+
+
 def _utf8_output() -> None:
     """On Windows, Python writes pipes and files in the ANSI code page (cp1252), which can't encode
     characters the briefs use (U+2212, Rich's spinner), so `ib prompt ... | more` or
