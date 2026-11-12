@@ -19,4 +19,7 @@ Keystone's API is XML. Their JSON gateway converts it mechanically, which shows 
   option, and points at the segment and the fare.
 - `pricingInfo` is per passenger type. Its amounts cover **all** passengers of that type; there is
   one `passengerType` entry per passenger. `platingCarrier` is the validating carrier.
-- Amounts are strings prefixed with their currency: `"USD1406.80"`.
+- Amounts are strings prefixed with their currency: `"USD1406.80"`. Every amount we accept is
+  exactly `USD` followed by a Caravel-style amount (digits, a point, then 2 digits). Anything
+  else is not a Keystone amount: another currency (`"EUR1406.80"`), a missing or lowercase prefix
+  (`"1406.80"`, `"usd1406.80"`), or other decimals (`"USD1.234"`).

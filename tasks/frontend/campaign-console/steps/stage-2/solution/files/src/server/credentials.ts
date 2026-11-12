@@ -11,7 +11,7 @@ type Body = Record<string, unknown>;
 export const RECONNECT_FIELDS = {
   oauth: ["accessToken", "refreshToken", "expiresIn"],
   api_key: ["accountSid", "apiKeySid", "apiKeySecret"],
-  session: ["cookies", "cookies.li_at", "cookies.JSESSIONID", "userAgent"],
+  session: ["cookies", "cookies.lf_session", "cookies.lf_csrf", "userAgent"],
 } as const;
 
 function isObject(value: unknown): value is Body {
@@ -67,13 +67,13 @@ function apiKey(stored: ApiKeyCredential, body: Body): ApiKeyCredential {
   };
 }
 
-/** A new login gives new cookies and that browser's user agent; the profile stays (docs/platforms/linkedin.md). */
+/** A new login gives new cookies and that browser's user agent; the profile stays (docs/platforms/linkfolio.md). */
 function session(stored: SessionCredential, body: Body): SessionCredential {
   const { cookies } = body;
-  if (!isObject(cookies)) throw new ValidationError("cookies must be an object with li_at and JSESSIONID", "cookies");
-  const li_at = requireString(cookies, "li_at", "cookies.li_at");
-  const JSESSIONID = requireString(cookies, "JSESSIONID", "cookies.JSESSIONID");
-  return { method: "session", cookies: { li_at, JSESSIONID }, userAgent: requireString(body, "userAgent"), profileUrl: stored.profileUrl };
+  if (!isObject(cookies)) throw new ValidationError("cookies must be an object with lf_session and lf_csrf", "cookies");
+  const lf_session = requireString(cookies, "lf_session", "cookies.lf_session");
+  const lf_csrf = requireString(cookies, "lf_csrf", "cookies.lf_csrf");
+  return { method: "session", cookies: { lf_session, lf_csrf }, userAgent: requireString(body, "userAgent"), profileUrl: stored.profileUrl };
 }
 
 /**

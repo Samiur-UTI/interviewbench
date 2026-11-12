@@ -14,7 +14,7 @@ function embeddedState(page: string): unknown {
 
 test("renders every connection and campaign of the seed", () => {
   const page = renderDashboardPage(toDashboardState(createStore(seed())));
-  for (const text of ["Google Ads", "Meta", "Twilio", "LinkedIn", "Spring reactivation", "Founders outreach", "Winter search refresh"]) {
+  for (const text of ["Google Ads", "Meta", "Twilio", "Linkfolio", "Spring reactivation", "Founders outreach", "Winter search refresh"]) {
     assert.ok(page.includes(text), text);
   }
 });

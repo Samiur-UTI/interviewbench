@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { leaks } from "./helpers/browser.ts";
 import { PUBLIC, SECRETS, buildSeed, makeRun } from "./helpers/seed.ts";
-import { NEW, NEW_SECRETS, acceptOnly, linkedinBody, postCredentials, twilioBody, until } from "./helpers/reconnect.ts";
+import { NEW, NEW_SECRETS, acceptOnly, linkfolioBody, postCredentials, twilioBody, until } from "./helpers/reconnect.ts";
 import { createStack, runUntilSettled } from "./helpers/stack.ts";
 import type { Stack } from "./helpers/stack.ts";
 
@@ -85,16 +85,16 @@ test("Twilio: the first missing or invalid field is named, in the order accountS
   ]);
 });
 
-test("LinkedIn: the first missing or invalid field is named, in the order cookies, cookies.li_at, cookies.JSESSIONID, userAgent", async () => {
+test("Linkfolio: the first missing or invalid field is named, in the order cookies, cookies.lf_session, cookies.lf_csrf, userAgent", async () => {
   const s = await stack();
-  await expectRefused(s, "conn_linkedin", [
+  await expectRefused(s, "conn_linkfolio", [
     [{}, "cookies"],
-    [{ cookies: "li_at=abc", userAgent: NEW.linkedinUserAgent }, "cookies"],
-    [{ cookies: {}, userAgent: 5 }, "cookies.li_at"],
-    [linkedinBody({ cookies: { li_at: 7, JSESSIONID: NEW.linkedinJsessionId } }), "cookies.li_at"],
-    [linkedinBody({ cookies: { li_at: NEW.linkedinLiAt } }), "cookies.JSESSIONID"],
-    [linkedinBody({ userAgent: undefined }), "userAgent"],
-    [linkedinBody({ userAgent: "" }), "userAgent"],
+    [{ cookies: "lf_session=abc", userAgent: NEW.linkfolioUserAgent }, "cookies"],
+    [{ cookies: {}, userAgent: 5 }, "cookies.lf_session"],
+    [linkfolioBody({ cookies: { lf_session: 7, lf_csrf: NEW.linkfolioCsrf } }), "cookies.lf_session"],
+    [linkfolioBody({ cookies: { lf_session: NEW.linkfolioSession } }), "cookies.lf_csrf"],
+    [linkfolioBody({ userAgent: undefined }), "userAgent"],
+    [linkfolioBody({ userAgent: "" }), "userAgent"],
   ]);
 });
 
@@ -149,7 +149,7 @@ test("Google: a refresh token in the reconnect replaces the stored one; Meta nev
   assert.deepEqual(leaks([google.text, meta.text, withOne.text], [...s.secrets(), ...NEW_SECRETS]), []);
 });
 
-test("a reconnect keeps what can't change (the Twilio account, the LinkedIn profile) and stores only the credential's own fields", async () => {
+test("a reconnect keeps what can't change (the Twilio account, the Linkfolio profile) and stores only the credential's own fields", async () => {
   const s = await stack();
   const twilio = await post(s, "conn_twilio", twilioBody({ method: "session", profileUrl: "https://evil.example", isAdmin: true }));
   assert.equal(twilio.status, 200, twilio.text);
@@ -161,20 +161,20 @@ test("a reconnect keeps what can't change (the Twilio account, the LinkedIn prof
   });
   assert.deepEqual(twilio.body.connection?.public, { method: "api_key", accountSid: PUBLIC.twilioAccountSid, apiKeySid: NEW.twilioApiKeySid });
 
-  const linkedin = await post(
+  const linkfolio = await post(
     s,
-    "conn_linkedin",
-    linkedinBody({ cookies: { li_at: NEW.linkedinLiAt, JSESSIONID: NEW.linkedinJsessionId, bscookie: "x" }, profileUrl: "https://www.linkedin.com/in/someone-else" }),
+    "conn_linkfolio",
+    linkfolioBody({ cookies: { lf_session: NEW.linkfolioSession, lf_csrf: NEW.linkfolioCsrf, lf_device: "x" }, profileUrl: "https://app.linkfolio.example/in/someone-else" }),
   );
-  assert.equal(linkedin.status, 200, linkedin.text);
-  assert.deepEqual(stored(s, "conn_linkedin"), {
+  assert.equal(linkfolio.status, 200, linkfolio.text);
+  assert.deepEqual(stored(s, "conn_linkfolio"), {
     method: "session",
-    cookies: { li_at: NEW.linkedinLiAt, JSESSIONID: NEW.linkedinJsessionId },
-    userAgent: NEW.linkedinUserAgent,
-    profileUrl: PUBLIC.linkedinProfileUrl,
+    cookies: { lf_session: NEW.linkfolioSession, lf_csrf: NEW.linkfolioCsrf },
+    userAgent: NEW.linkfolioUserAgent,
+    profileUrl: PUBLIC.linkfolioProfileUrl,
   });
-  assert.deepEqual(linkedin.body.connection?.public, { method: "session", userAgent: NEW.linkedinUserAgent, profileUrl: PUBLIC.linkedinProfileUrl });
-  assert.deepEqual(leaks([twilio.text, linkedin.text], [...s.secrets(), ...NEW_SECRETS]), []);
+  assert.deepEqual(linkfolio.body.connection?.public, { method: "session", userAgent: NEW.linkfolioUserAgent, profileUrl: PUBLIC.linkfolioProfileUrl });
+  assert.deepEqual(leaks([twilio.text, linkfolio.text], [...s.secrets(), ...NEW_SECRETS]), []);
 });
 
 test("only this connection's runs paused for a rejected credential resume: an operator's pause and other connections' runs stay as they are", async () => {

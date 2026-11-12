@@ -25,7 +25,7 @@ export interface RunnerOptions {
   random: () => number;
 }
 
-const PLATFORM_NAMES: Record<string, string> = { google: "Google Ads", meta: "Meta", twilio: "Twilio", linkedin: "LinkedIn" };
+const PLATFORM_NAMES: Record<string, string> = { google: "Google Ads", meta: "Meta", twilio: "Twilio", linkfolio: "Linkfolio" };
 
 function describe(error: unknown): string {
   return error instanceof Error ? error.message : String(error);

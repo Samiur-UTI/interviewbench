@@ -30,7 +30,7 @@ export function createSandboxPlatforms(options: SandboxOptions): PlatformRegistr
       case "api_key":
         return `Basic ${Buffer.from(`${credential.apiKeySid}:${credential.apiKeySecret}`).toString("base64")}`;
       case "session":
-        return `li_at=${credential.cookies.li_at}; JSESSIONID="${credential.cookies.JSESSIONID}"`;
+        return `lf_session=${credential.cookies.lf_session}; lf_csrf="${credential.cookies.lf_csrf}"`;
     }
   }
 
@@ -72,6 +72,6 @@ export function createSandboxPlatforms(options: SandboxOptions): PlatformRegistr
     google: adapter("google", true),
     meta: adapter("meta", true),
     twilio: adapter("twilio", false),
-    linkedin: adapter("linkedin", false),
+    linkfolio: adapter("linkfolio", false),
   };
 }

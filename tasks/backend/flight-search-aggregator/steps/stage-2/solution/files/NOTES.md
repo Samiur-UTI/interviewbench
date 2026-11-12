@@ -74,8 +74,9 @@ never changes. An offset cursor would not have that property if rows were ever d
 job) and it costs more the deeper you page.
 
 **Validation.** `limit` is 1..200 (default 50) on both entry points. A cursor that doesn't decode
-to exactly the agreed shape, or that was issued for another search or another sort, is a
-`ValidationError`, as is `preferred_airline` on a search without a carrier (it would silently be
+to exactly the agreed shape, isn't exactly the encoding we issue (`Buffer.from` would also accept
+it with padding), or was issued for another search or another sort, is a `ValidationError`, as
+is an unknown sort or `preferred_airline` on a search without a carrier (it would silently be
 "cheapest" otherwise). An unknown id is `SearchNotFoundError` (HTTP 404).
 
 **Deliberately simple for now.** Every row is its own statement and its own commit, and a page

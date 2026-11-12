@@ -10,8 +10,8 @@ they moved over, three things keep coming back.
   about 1,800 `debug_token` calls per hour, and nothing but the console's health checks calls it.
   Mornings are the worst: when 30 screens open the dashboard within a few minutes, every
   connection is checked about 30 times in a row.
-- **LinkedIn challenged two of their senders again**, the same week, with no reconnect involved.
-  LinkedIn reacts to bursts of requests from one session (`docs/platforms/linkedin.md`).
+- **Linkfolio challenged two of their senders again**, the same week, with no reconnect involved.
+  Linkfolio reacts to bursts of requests from one session (`docs/platforms/linkfolio.md`).
 - **The dashboard is heavy and sometimes wrong.** One of their accounts has a run with 5,000
   events. The page is 1.4 MB, and while any campaign sends, each open dashboard downloads about
   650 KB per sent item: a 100-item campaign costs every screen about 68 MB, and 30 screens fill

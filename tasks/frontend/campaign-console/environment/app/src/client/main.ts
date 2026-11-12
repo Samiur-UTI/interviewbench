@@ -20,7 +20,7 @@ function send(message: ClientMessage): void {
 
 const client = createDashboardClient({ config, scheduler: realScheduler, send, onState: () => paint() });
 
-// Connect flows (OAuth consent, Twilio keys, the LinkedIn login helper) live in the onboarding
+// Connect flows (OAuth consent, Twilio keys, the Linkfolio login helper) live in the onboarding
 // app, served on the same origin.
 function reconnect(connection: PublicConnection): void {
   location.assign(`/connect/${connection.platform}?connection=${encodeURIComponent(connection.id)}`);

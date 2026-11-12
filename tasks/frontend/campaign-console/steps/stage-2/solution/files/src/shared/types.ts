@@ -1,9 +1,9 @@
 // Domain types shared by the server and the browser. The per-platform details (what each
 // credential holds, what is secret, what is public) are in docs/platforms/.
 
-export type Platform = "google" | "meta" | "twilio" | "linkedin";
+export type Platform = "google" | "meta" | "twilio" | "linkfolio";
 
-/** How we authenticate against a platform. google and meta use oauth, twilio api_key, linkedin session. */
+/** How we authenticate against a platform. google and meta use oauth, twilio api_key, linkfolio session. */
 export type Method = "oauth" | "api_key" | "session";
 
 /**
@@ -26,10 +26,10 @@ export interface ApiKeyCredential {
   apiKeySecret: string;
 }
 
-/** linkedin. The two cookies are the session; the user agent must match the browser that logged in. */
+/** linkfolio. The two cookies are the session; the user agent must match the browser that logged in. */
 export interface SessionCredential {
   method: "session";
-  cookies: { li_at: string; JSESSIONID: string };
+  cookies: { lf_session: string; lf_csrf: string };
   userAgent: string;
   profileUrl: string;
 }
@@ -155,7 +155,7 @@ export interface ApiKeyReconnect {
 }
 
 export interface SessionReconnect {
-  cookies: { li_at: string; JSESSIONID: string };
+  cookies: { lf_session: string; lf_csrf: string };
   userAgent: string;
 }
 

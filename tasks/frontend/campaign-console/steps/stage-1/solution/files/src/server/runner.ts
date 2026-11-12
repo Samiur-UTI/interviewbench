@@ -26,7 +26,7 @@ export interface RunnerOptions {
   random: () => number;
 }
 
-const PLATFORM_NAMES: Record<string, string> = { google: "Google Ads", meta: "Meta", twilio: "Twilio", linkedin: "LinkedIn" };
+const PLATFORM_NAMES: Record<string, string> = { google: "Google Ads", meta: "Meta", twilio: "Twilio", linkfolio: "Linkfolio" };
 
 /**
  * Why a call failed, in our words. Event messages are shown on the dashboard, so they never quote

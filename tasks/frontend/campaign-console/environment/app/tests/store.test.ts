@@ -10,7 +10,7 @@ test("loads the seed: one connection per platform, campaigns, runs and their eve
   const store = createStore(seed());
   assert.deepEqual(
     store.listConnections().map((c) => c.platform),
-    ["google", "meta", "twilio", "linkedin"],
+    ["google", "meta", "twilio", "linkfolio"],
   );
   assert.equal(store.listCampaigns().length, 3);
   assert.deepEqual(
