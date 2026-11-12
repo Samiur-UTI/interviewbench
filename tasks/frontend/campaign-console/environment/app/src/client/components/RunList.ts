@@ -17,7 +17,7 @@ const RUN_STATUS_TEXT: Record<RunStatus, string> = {
 };
 
 function EventItem({ event }: { event: PublicEvent }) {
-  // LinkedIn marks the keywords that matched the search with <em>; keep the highlighting.
+  // Linkfolio marks the keywords that matched the search with <em>; keep the highlighting.
   const headline = event.target?.headline;
   return html`
     <li class=${`event event-${event.type}`}>

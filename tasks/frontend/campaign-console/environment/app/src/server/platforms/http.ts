@@ -21,7 +21,7 @@ const DEFAULT_TIMEOUT_MS = 10_000;
 
 export function causeForStatus(status: number): PlatformErrorCause {
   if (status === 401 || status === 403) return "unauthorized";
-  if (status === 429 || status === 999) return "rate_limited"; // 999 is LinkedIn's "slow down"
+  if (status === 429 || status === 999) return "rate_limited"; // 999 is Linkfolio's "slow down"
   // A redirect on an API call means the session was bounced to a login or challenge page.
   if (status >= 300 && status < 400) return "unauthorized";
   return "unreachable";

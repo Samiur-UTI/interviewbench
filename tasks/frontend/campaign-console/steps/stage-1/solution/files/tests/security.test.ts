@@ -33,7 +33,7 @@ function secretsOf(data: Seed): string[] {
       case "api_key":
         return [c.apiKeySecret];
       case "session":
-        return [c.cookies.li_at, c.cookies.JSESSIONID];
+        return [c.cookies.lf_session, c.cookies.lf_csrf];
     }
   });
 }
@@ -55,7 +55,7 @@ test("connections expose their method's public identifiers only", () => {
   const views = Object.fromEntries(data.connections.map((c) => [c.platform, toPublicConnection(c)]));
   assert.deepEqual(views.twilio.public, { method: "api_key", accountSid: "AC55007027a397e5a48045d45d15141bbe", apiKeySid: "SK460546b9c026d8f781d28782da382dc7" });
   assert.deepEqual(Object.keys(views.google.public).sort(), ["expiresAt", "method", "scope"]);
-  assert.deepEqual(Object.keys(views.linkedin.public).sort(), ["method", "profileUrl", "userAgent"]);
+  assert.deepEqual(Object.keys(views.linkfolio.public).sort(), ["method", "profileUrl", "userAgent"]);
   assert.ok(!("credential" in views.meta));
 });
 

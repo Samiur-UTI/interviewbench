@@ -109,8 +109,8 @@ test("a reconnect validates the body for the connection's method, in order, befo
 
   const google = await post("conn_google", { accessToken: "x".repeat(40), refreshToken: 7, expiresIn: "3600" });
   assert.equal(google.body.field, "refreshToken");
-  const linkedin = await post("conn_linkedin", { cookies: { li_at: "a" }, userAgent: "UA" });
-  assert.equal(linkedin.body.field, "cookies.JSESSIONID");
+  const linkfolio = await post("conn_linkfolio", { cookies: { lf_session: "a" }, userAgent: "UA" });
+  assert.equal(linkfolio.body.field, "cookies.lf_csrf");
 });
 
 test("Google: expiresIn is seconds, a reconnect without a refresh token keeps ours, Meta never stores one", async () => {
@@ -129,10 +129,10 @@ test("Google: expiresIn is seconds, a reconnect without a refresh token keeps ou
   assert.equal((store.getConnection("conn_meta")!.credential as OAuthCredential).refreshToken, undefined);
 });
 
-test("a reconnect keeps the LinkedIn profile and the Twilio account, and drops fields the credential doesn't have", async () => {
-  const { post, store } = await setup(seed(), { twilio: twilio(new Set([NEW_KEY.apiKeySecret])), linkedin: fakeAdapter("linkedin") });
-  const profileUrl = (seed().connections.find((c) => c.id === "conn_linkedin")!.credential as { profileUrl: string }).profileUrl;
-  const li = await post("conn_linkedin", { cookies: { li_at: "liAt".repeat(10), JSESSIONID: "ajax".repeat(10) }, userAgent: "UA/1", profileUrl: "https://example.com/x" });
+test("a reconnect keeps the Linkfolio profile and the Twilio account, and drops fields the credential doesn't have", async () => {
+  const { post, store } = await setup(seed(), { twilio: twilio(new Set([NEW_KEY.apiKeySecret])), linkfolio: fakeAdapter("linkfolio") });
+  const profileUrl = (seed().connections.find((c) => c.id === "conn_linkfolio")!.credential as { profileUrl: string }).profileUrl;
+  const li = await post("conn_linkfolio", { cookies: { lf_session: "sess".repeat(10), lf_csrf: "ajax".repeat(10) }, userAgent: "UA/1", profileUrl: "https://example.com/x" });
   assert.equal(li.status, 200, li.text);
   assert.deepEqual(li.body.connection.public, { method: "session", userAgent: "UA/1", profileUrl });
   await post("conn_twilio", { accountSid: ACCOUNT(), ...NEW_KEY, admin: true });

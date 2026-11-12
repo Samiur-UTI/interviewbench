@@ -104,26 +104,26 @@ test("20 dashboards ask to check the same connection at once: one platform call,
 test("a round doesn't call a platform again while that connection's check is still in flight: it joins the check, and the next round calls again", async () => {
   const s = await stack();
   const dash = await s.dashboard();
-  const others = IDS.filter((id) => id !== "conn_linkedin");
-  const gate = s.fakes.linkedin.defer("probe");
+  const others = IDS.filter((id) => id !== "conn_linkfolio");
+  const gate = s.fakes.linkfolio.defer("probe");
 
-  await s.scheduler.advance(INTERVAL); // round 2: LinkedIn's check hangs
-  await within(gate.started, 2_000, "round 2's LinkedIn check");
+  await s.scheduler.advance(INTERVAL); // round 2: Linkfolio's check hangs
+  await within(gate.started, 2_000, "round 2's Linkfolio check");
   for (const id of others) await dash.nextProbe(id);
-  assert.equal(s.fakes.linkedin.count("probe"), 2);
+  assert.equal(s.fakes.linkfolio.count("probe"), 2);
 
   await s.scheduler.advance(INTERVAL); // round 3: still in flight
   for (const id of others) await dash.nextProbe(id); // the round did happen for the others
-  assert.equal(s.fakes.linkedin.count("probe"), 2, "no second call while the first is unanswered");
-  for (const p of PLATFORMS.filter((p) => p !== "linkedin")) assert.equal(s.fakes[p].count("probe"), 3, `${p}: a hanging check elsewhere doesn't hold up its rounds`);
+  assert.equal(s.fakes.linkfolio.count("probe"), 2, "no second call while the first is unanswered");
+  for (const p of PLATFORMS.filter((p) => p !== "linkfolio")) assert.equal(s.fakes[p].count("probe"), 3, `${p}: a hanging check elsewhere doesn't hold up its rounds`);
 
   gate.release("ok");
-  assert.equal((await dash.nextProbe("conn_linkedin")).result.ok, true);
+  assert.equal((await dash.nextProbe("conn_linkfolio")).result.ok, true);
   await s.scheduler.advance(INTERVAL); // round 4
-  await dash.nextProbe("conn_linkedin");
-  assert.equal(s.fakes.linkedin.count("probe"), 3, "the next round calls the platform again");
-  const linkedinResults = dash.ws.messages.filter((m) => m?.type === "probe" && m.result?.connectionId === "conn_linkedin");
-  assert.equal(linkedinResults.length, 2, "the joined check's result was pushed once, then round 4's");
+  await dash.nextProbe("conn_linkfolio");
+  assert.equal(s.fakes.linkfolio.count("probe"), 3, "the next round calls the platform again");
+  const linkfolioResults = dash.ws.messages.filter((m) => m?.type === "probe" && m.result?.connectionId === "conn_linkfolio");
+  assert.equal(linkfolioResults.length, 2, "the joined check's result was pushed once, then round 4's");
 });
 
 test("close() stops the schedule for good, even with a check in flight: no platform call and no timer afterwards", async () => {

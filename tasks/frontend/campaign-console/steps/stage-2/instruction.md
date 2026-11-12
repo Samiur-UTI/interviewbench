@@ -32,7 +32,7 @@ The user pastes what the platform's own flow gave them. JSON body, by the connec
 |---|---|
 | `oauth` (Google, Meta) | `{ accessToken: string, refreshToken?: string, expiresIn: number }`, `expiresIn` being the token's lifetime as the platform's token response states it (`expires_in`) |
 | `api_key` (Twilio) | `{ accountSid: string, apiKeySid: string, apiKeySecret: string }` |
-| `session` (LinkedIn) | `{ cookies: { li_at: string, JSESSIONID: string }, userAgent: string }` |
+| `session` (Linkfolio) | `{ cookies: { lf_session: string, lf_csrf: string }, userAgent: string }` |
 
 What each platform hands over on a reconnect, in which units, and what must not change, is in
 `docs/platforms/` (each note's "Reconnecting" section, and the rest of the note). The credential you
@@ -47,8 +47,8 @@ Answers:
 - 400 `{ "error": "invalid_credential", "field": <name> }` for the first field that is missing, of
   the wrong type, or not allowed by the platform's rules, checked in this order: `oauth`
   `accessToken`, `refreshToken`, `expiresIn` (a finite number > 0); `api_key` `accountSid`,
-  `apiKeySid`, `apiKeySecret`; `session` `cookies` (an object), `cookies.li_at`,
-  `cookies.JSESSIONID`, `userAgent`. Nothing is stored and no platform is called.
+  `apiKeySid`, `apiKeySecret`; `session` `cookies` (an object), `cookies.lf_session`,
+  `cookies.lf_csrf`, `userAgent`. Nothing is stored and no platform is called.
 - 200 `{ connection: PublicConnection, probe: ProbeResult, resumed: string[] }`, after these
   effects, in this order:
   1. The new credential is stored.
@@ -83,7 +83,7 @@ message or any event, and the body is untrusted input.
   - a `<form>` with `aria-labelledby` pointing at its visible title;
   - one `<input>` per field of the body, its `name` the field's name as the endpoint reports it
     (`accessToken`, `refreshToken`, `expiresIn`, `accountSid`, `apiKeySid`, `apiKeySecret`,
-    `cookies.li_at`, `cookies.JSESSIONID`, `userAgent`). A refresh token field only where the
+    `cookies.lf_session`, `cookies.lf_csrf`, `userAgent`). A refresh token field only where the
     platform issues refresh tokens, and optional (not `required`). `expiresIn` is
     `type="number"`, its label names the unit, and it starts at 3600 for Google;
   - every secret field `type="password"` and never prefilled; the public identifiers prefilled from
