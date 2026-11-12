@@ -96,7 +96,7 @@ def list_tasks(
 def start(
     task_id: str = typer.Argument(..., help="Task to start, e.g. rate-limiter"),
     dir: Optional[Path] = typer.Option(None, "--dir", "-d", help="Where to create the workspace (default: ~/ib-workspaces/<task>, or $IB_WORKSPACES/<task>)"),
-    force: bool = typer.Option(False, "--force", help="Overwrite an existing workspace"),
+    force: bool = typer.Option(False, "--force", help="Replace an earlier round in that folder (your work there is lost). Only a folder ib start made is ever deleted"),
     open_editor: bool = typer.Option(True, "--open/--no-open", help="Open the workspace in your editor ($IB_EDITOR, else VS Code, Cursor or Windsurf)"),
     git: bool = typer.Option(True, "--git/--no-git", help="Make the workspace a git repo, with a commit and tag per stage"),
 ) -> None:
@@ -192,7 +192,7 @@ def grade(
     judge: bool = typer.Option(False, "--judge", help="Also score the judge criteria with an AI model (see --judge-backend)"),
     judge_backend: Optional[str] = typer.Option(None, help="claude (needs ANTHROPIC_API_KEY) or openai (any OpenAI-compatible API: set IB_JUDGE_BASE_URL and IB_JUDGE_API_KEY). Default: $IB_JUDGE_BACKEND, else claude"),
     judge_model: Optional[str] = typer.Option(None, help="Model for --judge (default: $IB_JUDGE_MODEL, else claude-opus-5-5 for claude)"),
-    judge_export: bool = typer.Option(False, "--judge-export", help=f"Write the judge prompt to {JUDGE_PROMPT}, to paste into any chatbot"),
+    judge_export: bool = typer.Option(False, "--judge-export", help="Write the judge prompt, to paste into any chatbot. It goes outside the workspace (in $IB_DATA_DIR, else your app data folder), since it holds the hidden tests; the path is printed"),
     judge_reply: Optional[Path] = typer.Option(None, "--judge-reply", help="Score the judge criteria from a chatbot's reply to the exported prompt"),
 ) -> None:
     """Grade a workspace against the task's hidden tests and rubric, optionally with an AI judge."""
@@ -215,8 +215,12 @@ def grade(
             )
         except RunnerError as exc:
             _fail(str(exc))
+    exported = None
     if judge_export and outcome.request:
-        (dir / JUDGE_PROMPT).write_text(outcome.request.as_paste(), encoding="utf-8")
+        try:
+            exported = rounds.export_judge_prompt(dir, outcome.request)
+        except (rounds.RoundError, OSError) as exc:
+            _fail(f"Couldn't write the judge prompt: {exc}")
     render(outcome.result, console)
     used = rounds.time_used_minutes(ws.read_marker(dir))
     if used is not None:
@@ -224,15 +228,17 @@ def grade(
     console.print(f"Report written to [green]{output or dir / REPORT}[/green]")
     if outcome.judge_error:
         _fail(f"AI judge failed, so only auto criteria were scored: {outcome.judge_error}")
-    if judge_export:
-        prompt_path = dir / JUDGE_PROMPT
-        size = rounds.tokens_estimate(prompt_path.read_text(encoding="utf-8"))
+    if exported:
+        reply_path = exported.path.parent / JUDGE_REPLY
         console.print(
-            f"\nJudge prompt written to [green]{prompt_path}[/green] (~{size:,} tokens). Paste all of it into any "
-            f"chatbot (ChatGPT, Gemini, Claude.ai, DeepSeek...), save its reply as [bold]{JUDGE_REPLY}[/bold] in "
-            f"the workspace, then run [bold]ib grade --judge-reply {JUDGE_REPLY}[/bold]. The prompt contains the "
-            "hidden tests and the reference solution, so don't share it."
+            f"\nJudge prompt written to [green]{exported.path}[/green] (~{exported.tokens:,} tokens), outside the "
+            "workspace: it contains the hidden tests and the reference solution, so don't share it or copy it into "
+            "the workspace. Paste all of it into any chatbot (ChatGPT, Gemini, Claude.ai, DeepSeek...), save its "
+            f"reply as [bold]{reply_path}[/bold], then run [bold]ib grade --judge-reply \"{reply_path}\"[/bold].",
+            highlight=False, soft_wrap=True,  # no line breaks inside the paths, so they copy cleanly
         )
+        if exported.removed_stale:
+            console.print(f"[dim]Deleted the old {JUDGE_PROMPT} an earlier ib version left in the workspace.[/dim]")
 
 
 @app.command("break")

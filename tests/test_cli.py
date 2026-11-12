@@ -53,6 +53,16 @@ def test_start_refuses_to_overwrite(tmp_path):
     assert start(dest, "--force").exit_code == 0
 
 
+def test_start_force_leaves_a_project_folder_alone(tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "app.py").write_text("mine\n", encoding="utf-8")
+    result = start(project, "--force")
+    assert result.exit_code == 1
+    assert "isn't an interviewbench workspace" in flat(result.output) and "Use --force" not in flat(result.output)
+    assert [p.name for p in project.iterdir()] == ["app.py"]
+
+
 def test_start_defaults_to_a_folder_outside_the_repo(tmp_path, monkeypatch):
     monkeypatch.setenv("IB_WORKSPACES", str(tmp_path / "rounds"))
     result = runner.invoke(app, ["start", "rate-limiter", "--no-open"])

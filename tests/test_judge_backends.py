@@ -13,6 +13,7 @@ from typer.testing import CliRunner
 
 from conftest import RUNNER_KIND
 from interviewbench import judge
+from interviewbench import workspace as ws
 from interviewbench.cli import app
 from interviewbench.grader import grade
 from interviewbench.judge import JudgeError, parse_reply, run_judge
@@ -54,14 +55,22 @@ def test_parse_reply_handles_chatbot_formatting(task):
         parse_reply("Sorry, I can't help with that.")
 
 
-def test_export_then_pasted_reply_scores_the_rubric(task, workspace):
+def test_export_then_pasted_reply_scores_the_rubric(task, workspace, tmp_path, monkeypatch):
+    monkeypatch.setenv("IB_DATA_DIR", str(tmp_path / "data"))
+    (workspace / JUDGE_PROMPT).write_text("an old export, from when it went into the workspace", encoding="utf-8")
     result = cli.invoke(app, ["grade", "--dir", str(workspace), "--runner", RUNNER_KIND, "--judge-export"])
     assert result.exit_code == 0, result.output
-    prompt = (workspace / JUDGE_PROMPT).read_text(encoding="utf-8")
+    # The prompt holds the hidden tests and the reference solution: never in the workspace.
+    assert not (workspace / JUDGE_PROMPT).exists()
+    exported = ws.private_dir(workspace) / JUDGE_PROMPT
+    assert not exported.resolve().is_relative_to(workspace.resolve())
+    assert exported.resolve().is_relative_to((tmp_path / "data").resolve())
+    assert str(exported) in "".join(result.output.split("\n"))
+    prompt = exported.read_text(encoding="utf-8")
     assert "<hidden_tests>" in prompt and "<candidate_submission>" in prompt
     assert "Reply with ONLY a JSON object" in prompt and '"missed_edge_cases"' in prompt
 
-    reply = workspace / JUDGE_REPLY
+    reply = exported.parent / JUDGE_REPLY
     reply.write_text(f"Here you go:\n```json\n{json.dumps(answer(task))}\n```", encoding="utf-8")
     result = cli.invoke(app, ["grade", "--dir", str(workspace), "--runner", RUNNER_KIND, "--judge-reply", str(reply)])
     assert result.exit_code == 0, result.output

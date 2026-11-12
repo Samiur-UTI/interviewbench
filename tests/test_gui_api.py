@@ -419,6 +419,18 @@ def test_starting_an_unknown_task_is_a_friendly_error(api):
     assert reply.status == 400 and "Unknown task" in reply.json["error"]["message"]
 
 
+def test_a_workspaces_folder_inside_the_repo_is_refused(api, task, tmp_path, monkeypatch):
+    bench = tmp_path / "bench"
+    shutil.copytree(task.path.parents[2] / "rubrics", bench / "rubrics")
+    shutil.copytree(task.path, bench / "tasks" / "backend" / "rate-limiter")
+    monkeypatch.setenv("IB_ROOT", str(bench))
+    monkeypatch.setenv("IB_WORKSPACES", str(bench / "rounds"))
+    reply = api.post("/api/rounds", {"task_id": "rate-limiter"})
+    message = reply.json["error"]["message"]
+    assert reply.status == 400 and "hidden tests" in message and "Set IB_WORKSPACES" in message
+    assert not (bench / "rounds").exists()
+
+
 def test_round_shows_only_revealed_stages(api, task):
     started = api.start()
     assert [s["number"] for s in started["stages"]] == [1] and started["all_revealed"] is False
