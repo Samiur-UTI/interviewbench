@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from interviewbench.grader import run_stage_tests
-from interviewbench.runner import LocalRunner, RunnerError, Sandbox, remove_tree
+from interviewbench.runner import LocalRunner, RunnerError, Sandbox, is_secret_name, remove_tree
 
 
 @pytest.fixture(scope="module")
@@ -75,6 +75,52 @@ def test_a_timeout_ends_the_scripts_children_too(local, tmp_path):
     assert "started" in done.output
     time.sleep(2.5)
     assert not (box.app / "survived").exists()
+
+
+SECRETS = {
+    "ANTHROPIC_API_KEY": "sk-ant-fake", "OPENAI_API_KEY": "sk-fake", "IB_JUDGE_API_KEY": "fake",
+    "GITHUB_TOKEN": "ghp_fake", "GH_TOKEN": "fake", "AWS_SECRET_ACCESS_KEY": "fake", "AWS_ACCESS_KEY_ID": "fake",
+    "AZURE_CLIENT_SECRET": "fake", "GOOGLE_APPLICATION_CREDENTIALS": "fake.json", "NPM_TOKEN": "fake",
+    "DATABASE_URL": "postgres://user:fake@db/x", "SSH_AUTH_SOCK": "/tmp/fake.sock", "My_Db_Password": "fake",
+}
+
+
+def test_scripts_do_not_see_secret_looking_variables(local, tmp_path, monkeypatch):
+    for name, value in SECRETS.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setenv("IB_TEST_HARMLESS", "1")
+    script = """"$PYTHON" - <<'EOF'
+import os
+with open(os.path.join(os.environ["LOGS_DIR"], "env.txt"), "w") as f:
+    f.write("\\n".join(os.environ))
+EOF
+"""
+    box = sandbox(tmp_path)
+    done = local.run(None, script, box, timeout=60)
+    assert done.returncode == 0, done.output
+    seen = {name.upper() for name in (box.logs / "env.txt").read_text().splitlines()}
+    assert not seen & {name.upper() for name in SECRETS}
+    assert {"IB_TEST_HARMLESS", "PATH", "APP_DIR", "LOGS_DIR", "PYTHON"} <= seen
+
+
+@pytest.mark.parametrize("name", [
+    *SECRETS, "anthropic_base_url", "OpenAI_Base_URL", "IB_JUDGE_MODEL", "github_actions", "Azure_OpenAI_Endpoint",
+    "STRIPE_SECRET_KEY", "SLACK_BOT_TOKEN", "node_auth_token", "npm_config__auth", "MY_PRIVATE_KEY", "PGPASSWORD",
+    "MYSQL_PWD", "REDIS_URL", "MongoDB_URI", "SENTRY_DSN", "CLAUDE_CODE_OAUTH_TOKEN", "GIT_ASKPASS",
+    "VSCODE_GIT_IPC_HANDLE", "SomeServiceApiKey", "DB_PASSWD", "AWS_PROFILE",
+])
+def test_secret_names(name):
+    assert is_secret_name(name)
+
+
+@pytest.mark.parametrize("name", [
+    "PATH", "Path", "HOME", "USERPROFILE", "TEMP", "TMP", "TMPDIR", "SystemRoot", "APPDATA", "LOCALAPPDATA", "LANG",
+    "NODE_OPTIONS", "NODE_PATH", "PYTHONIOENCODING", "PYTHONHASHSEED", "PYTHON", "APP_DIR", "TESTS_DIR",
+    "SOLUTION_DIR", "LOGS_DIR", "IB_TEST_HARMLESS", "IB_DATA_DIR", "IB_BASH", "PWD", "OLDPWD", "GIT_AUTHOR_NAME",
+    "JAVA_HOME", "COMSPEC", "PATHEXT", "KEYBOARD_LAYOUT", "CI", "TERM", "PUBLIC_URL",
+])
+def test_harmless_names(name):
+    assert not is_secret_name(name)
 
 
 def test_remove_tree_deletes_read_only_files(tmp_path):
