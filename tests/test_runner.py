@@ -3,12 +3,14 @@
 import os
 import shutil
 import stat
+import subprocess
 import tempfile
 import time
 from pathlib import Path
 
 import pytest
 
+import interviewbench.runner as ib_runner
 from interviewbench.grader import run_stage_tests
 from interviewbench.runner import LocalRunner, RunnerError, Sandbox, is_secret_name, remove_tree
 
@@ -121,6 +123,28 @@ def test_secret_names(name):
 ])
 def test_harmless_names(name):
     assert not is_secret_name(name)
+
+
+def test_scripts_get_no_stdin(local, tmp_path, monkeypatch):
+    # pytest already gives this process an empty stdin, so check what the runner asks for too.
+    real, asked = subprocess.Popen, []
+
+    def spy(*args, **kwargs):
+        asked.append(kwargs.get("stdin"))
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(subprocess, "Popen", spy)
+    done = local.run(None, '"$PYTHON" -c "import sys; print(repr(sys.stdin.read()))"', sandbox(tmp_path), timeout=30)
+    assert not done.timed_out and "''" in done.output, done.output
+    assert asked == [subprocess.DEVNULL]
+
+
+def test_docker_calls_get_no_stdin(monkeypatch):
+    asked = []
+    monkeypatch.setattr(subprocess, "run", lambda args, **kw: asked.append(kw.get("stdin")) or
+                        subprocess.CompletedProcess(args, 0, "", ""))
+    ib_runner._docker("version")
+    assert asked == [subprocess.DEVNULL]
 
 
 def test_remove_tree_deletes_read_only_files(tmp_path):
