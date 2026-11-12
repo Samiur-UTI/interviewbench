@@ -10,13 +10,15 @@ Scripts only see four folders, always through these variables (defaults are Harb
 - LocalRunner runs the script with bash on this machine, pointing the variables at temp folders.
   Fast and needs no Docker, but the task's toolchain (e.g. Python + pytest) must be installed.
   TEMP/TMP/TMPDIR point at a folder of the run's own, deleted afterwards, so temp files the
-  tests forget to remove don't pile up in the user's temp folder.
+  tests forget to remove don't pile up in the user's temp folder. Secret-looking variables
+  (see is_secret_name) are left out of the scripts' environment.
 """
 
 from __future__ import annotations
 
 import hashlib
 import os
+import re
 import shutil
 import signal
 import stat
@@ -80,6 +82,20 @@ class Runner:
 
 # --- Local ----------------------------------------------------------------------------------
 
+_SECRET_NAME = re.compile(
+    r"API_?KEY|TOKEN|SECRET|PASSW(OR)?D|_PWD$|CREDENTIAL|PRIVATE_KEY|_AUTH$|ASKPASS|CONNECTION_STRING|_DSN$"
+    r"|(DATABASE|DB|POSTGRES(QL)?|PG|MYSQL|MONGO|REDIS|AMQP|BROKER)_UR[IL]$"
+    r"|^(AWS|AZURE|ANTHROPIC|OPENAI|IB_JUDGE|GH|GITHUB|VSCODE_GIT)_|^SSH_AUTH_SOCK$",
+    re.IGNORECASE,
+)
+
+
+def is_secret_name(name: str) -> bool:
+    """Whether LocalRunner keeps this environment variable from task scripts, and so from the
+    candidate's code: API keys, tokens, passwords, cloud credentials, connection strings, credential
+    helpers. A denylist by name, because toolchains (Windows ones especially) need much of the rest."""
+    return bool(_SECRET_NAME.search(name))
+
 
 def find_bash() -> str | None:
     """bash, avoiding Windows' System32 bash.exe (WSL), which can't see Windows paths."""
@@ -113,7 +129,7 @@ class LocalRunner(Runner):
             )
 
     def run(self, task: Task, command: str, sandbox: Sandbox, timeout: int) -> Completed:
-        env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+        env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH" and not is_secret_name(k)}
         env.update({_ENV_NAMES[k]: p.resolve().as_posix() for k, p in sandbox.folders().items()})
         # Convenience for Python tasks: use the interpreter running ib (it has pytest installed).
         env.setdefault("PYTHON", Path(sys.executable).as_posix())
