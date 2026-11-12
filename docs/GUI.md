@@ -12,7 +12,8 @@ the CLI: neither contains workflow logic of its own.
 - **One service layer.** `src/interviewbench/rounds.py` owns the workflows (start a round, next stage,
   grade, judge, break, validate, new). `cli.py` and `ui/` only translate input and output.
 - **The GUI never spoils a stage.** Only revealed stages are sent to the browser. Grading runs every
-  stage's hidden tests, but failures for unrevealed stages are withheld and shown as a count.
+  stage's hidden tests, but failures for unrevealed stages are withheld and shown as a count. The
+  same rules (`report.py`) apply to `ib-report.md`, which the candidate's AI assistant can read.
 - **Secrets stay out of the workspace and the environment.** API keys typed into the GUI live in the
   server's memory, are passed to the judge as arguments, and are never written to disk, logged,
   returned by the API, or placed in `os.environ` (`LocalRunner` hands its environment to candidate
@@ -77,12 +78,15 @@ The server can run code, so a web page the candidate visits must not be able to 
 A round is a folder under the workspaces folder (`$IB_WORKSPACES`, else `~/ib-workspaces`) holding
 `.interviewbench.json`, so rounds started with `ib start` show up too. The round id is the folder
 name. Starting a task that already has a folder creates `<task>-2`, `<task>-3`, ... so the GUI never
-overwrites work. Only an explicit delete removes a round.
+overwrites work. Only an explicit delete removes a round, along with its private folder.
 
-`ib-ui.json` in the workspace (a new entry in `WORKSPACE_FILES`) stores the latest `test`, `grade` and
-`break` results as the JSON below, so they survive a restart. It holds nothing `ib-report.md` doesn't
-already expose. A stored grade keeps every stage's failures, plus the workspace fingerprint; the
-spoiler rules are applied each time it is sent, so failures appear once their stage is revealed.
+`ib-ui.json` stores the latest `test`, `grade` and `break` results as the JSON below, so they survive
+a restart. A stored grade keeps every stage's failures, plus the workspace fingerprint; the spoiler
+rules are applied each time it is sent, so failures appear once their stage is revealed. Because it
+holds unrevealed stages' failures, it lives in ib's private folder for the workspace
+(`workspace.private_dir`, under `$IB_DATA_DIR` or the app data folder), never in the workspace; a copy
+an earlier version left there is deleted on the next write. The full `ib-report-full.md` goes there
+too when the workspace report hides a stage.
 
 ## API
 

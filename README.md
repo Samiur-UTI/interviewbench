@@ -98,6 +98,7 @@ Then, in the workspace:
 ib test      # run your own tests (no hidden tests, no spoilers)
 ib next      # commit and tag your work (stage-1, ...), then reveal the next stage in TASK.md
 ib grade     # run the hidden tests, score the rubric, show time used; writes ib-report.md
+             # (stages you haven't reached show only how many hidden tests fail)
 ib grade --judge          # ...and have an AI model review what tests can't measure
 ib break ../attack_test.py   # check tests an LLM wrote to break your code (see below)
 ```
@@ -137,7 +138,8 @@ ib validate my-task --run              # starter fails stage 1, each stage's sol
 The full contract is in [docs/TASK_FORMAT.md](docs/TASK_FORMAT.md). Anyone with the repo (or the
 installed package) can read every task's hidden tests, so keep private tasks off candidates'
 machines: give them the starter code and grade what they hand back with
-`ib grade --dir <their workspace> --task <task-id>`.
+`ib grade --dir <their workspace> --task <task-id>`. If they stopped mid-round, add `--all-stages`
+to see which hidden tests fail in the stages they didn't reach.
 
 ## AI judge
 
