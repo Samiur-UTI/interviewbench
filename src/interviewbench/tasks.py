@@ -44,6 +44,8 @@ JUDGE_REPLY = "ib-judge-reply.txt"
 ATTACK_PROMPT = "ib-attack-prompt.md"
 UI_STATE = "ib-ui.json"
 WORKSPACE_FILES = (MARKER, BRIEF, REPORT, JUDGE_PROMPT, JUDGE_REPLY, ATTACK_PROMPT, UI_STATE)
+# Written to ib's private folder for a workspace (workspace.private_dir), never into the workspace.
+FULL_REPORT = "ib-report-full.md"
 
 
 class TaskError(Exception):

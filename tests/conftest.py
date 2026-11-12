@@ -25,3 +25,11 @@ def task():
 def solution_dir(task, runner, tmp_path_factory):
     """The rate-limiter reference solution: starter + every stage's solve.sh."""
     return build_reference(task, tmp_path_factory.mktemp("ref") / "solution", runner)
+
+
+@pytest.fixture(autouse=True)
+def private_data(tmp_path, monkeypatch):
+    """ib's private folder (results, full reports, judge prompts) goes to a temp dir, never the real one."""
+    data = tmp_path / "ib-data"
+    monkeypatch.setenv("IB_DATA_DIR", str(data))
+    return data
