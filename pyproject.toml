@@ -1,18 +1,35 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
 name = "interviewbench"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Realistic AI-era coding interview tasks with hidden tests, rubrics and a grader; they also run as Harbor tasks."
 readme = "README.md"
 license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "interviewbench contributors" }]
+keywords = ["interview", "coding-interview", "benchmark", "llm", "evaluation", "rubric", "cli"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Testing",
+    "Topic :: Education",
+]
 requires-python = ">=3.10"
 dependencies = [
     "typer>=0.12",
     "rich>=13",
     "pyyaml>=6",
+    # Runtime, not dev-only: the local runner runs Python tasks' hidden tests with this interpreter's pytest.
     "pytest>=8",
     "tomli>=2; python_version < '3.11'",
 ]
@@ -22,10 +39,21 @@ judge = ["anthropic>=1.13,<2"]
 # Harbor scores AI agents on the tasks (`harbor run -p tasks/<category>`); the tests use it to check
 # every task is a valid Harbor task.
 harbor = ["harbor>=0.24; python_version >= '3.12'"]
+# Everything the package's own tests use.
+dev = ["interviewbench[judge,harbor]"]
+
+[project.urls]
+Homepage = "https://github.com/Samiur-UTI/interviewbench"
+Source = "https://github.com/Samiur-UTI/interviewbench"
+Issues = "https://github.com/Samiur-UTI/interviewbench/issues"
+Changelog = "https://github.com/Samiur-UTI/interviewbench/blob/main/CHANGELOG.md"
 
 [project.scripts]
 interviewbench = "interviewbench.cli:app"
 ib = "interviewbench.cli:app"
+
+[tool.hatch.version]
+path = "src/interviewbench/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/interviewbench"]
