@@ -1,9 +1,37 @@
+# Python
 .venv/
 __pycache__/
 *.pyc
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 dist/
 build/
 *.egg-info/
-ib-workspace/
+
+# Secrets and local config
 .env
+.env.*
+!.env.example
+
+# Logs and tooling output
+*.log
+node_modules/
+
+# Editors, OS and agents
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.claude/
+
+# Workspaces, and files ib writes into a round if one is started inside the repo
+ib-workspaces/
+.interviewbench.json
+ib-report.md
+ib-ui.json
+ib-judge-prompt.md
+ib-judge-reply.txt
+ib-attack-prompt.md
