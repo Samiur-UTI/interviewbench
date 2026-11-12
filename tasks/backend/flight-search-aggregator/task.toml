@@ -21,8 +21,9 @@ level = "senior"                           # junior | mid | senior
 language = "typescript"
 time_limit_minutes = 180
 # How the candidate's own tests are run (from $APP_DIR). Needs Node.js >= 24.11 (built-in type
-# stripping); with the local runner that means on the host.
-candidate_tests = 'node --no-warnings=ExperimentalWarning --test --test-force-exit --test-reporter=junit --test-reporter-destination="$LOGS_DIR/junit.xml" --test-reporter=spec --test-reporter-destination=stdout "tests/**/*.test.ts"'
+# stripping); with the local runner that means on the host. tests/exit-guard.mjs replaces
+# --test-force-exit, which drops results at random (see tests/test.sh).
+candidate_tests = 'node --import ./tests/exit-guard.mjs --no-warnings=ExperimentalWarning --test --test-timeout=20000 --test-reporter=junit --test-reporter-destination="$LOGS_DIR/junit.xml" --test-reporter=spec --test-reporter-destination=stdout "tests/**/*.test.ts"'
 
 [[steps]]
 name = "stage-1"
