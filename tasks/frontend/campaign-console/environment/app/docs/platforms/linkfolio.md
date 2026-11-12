@@ -2,25 +2,27 @@
 
 Adapter: `src/server/platforms/linkfolio.ts`. Method `session`.
 
-**Read this before changing anything that talks to Linkfolio.** There is no API for outreach, so we
-act through the customer's own browser session, and Linkfolio restricts accounts that look
-automated. A restricted account is the worst outcome we can cause a customer: their personal
-profile, not just our campaign.
+**Read this before changing anything that talks to Linkfolio.** Linkfolio offers session-based
+partner access for outreach. The customer logs in and authorises Relay's browser helper, and we
+then act on their behalf with that session. Linkfolio's session policy is strict. When an
+integration breaks it, Linkfolio challenges the session and can restrict the account. A
+restricted account is the worst outcome we can cause a customer: it is their personal profile,
+not just our campaign.
 
 ## What we store
 
 The Relay browser helper captures the session after the customer logs in to Linkfolio in their
-own browser:
+own browser and authorises Relay:
 
 | Field | Secret? | Notes |
 |---|---|---|
 | `cookies.lf_session` | **secret** | The session itself. Anyone holding it is logged in as the customer. |
 | `cookies.lf_csrf` | **secret** | Also sent as the `csrf-token` header on every call. |
-| `userAgent` | public | The browser that logged in. Calls must use exactly this user agent; a session that suddenly comes from another browser is a red flag for Linkfolio. |
+| `userAgent` | public | The browser that logged in. Linkfolio binds a session to the user agent that created it, so every call must send exactly this user agent. |
 | `profileUrl` | public | The customer's own profile (`https://app.linkfolio.example/in/...`). |
 
 Sessions last weeks. They end when the customer logs out everywhere, changes their password, or
-Linkfolio decides to challenge the session.
+Linkfolio challenges the session.
 
 ## Health check
 
@@ -31,22 +33,24 @@ csrf-token: <lf_csrf>
 user-agent: <userAgent>
 ```
 
-The feed is what an open Linkfolio tab loads anyway, so a HEAD of it is cheap and unremarkable.
-200 means the session is alive. A dead or challenged session redirects (302) to `/login` or to
-`/checkpoint/...`; the adapter treats any redirect as `unauthorized`. Linkfolio's "slow down"
-answer is the non-standard **HTTP 999**, `rate_limited` for us.
+A HEAD of the feed is the cheapest call Linkfolio offers. 200 means the session is alive. A dead
+or challenged session redirects (302) to `/login` or to `/checkpoint/...`; the adapter treats any
+redirect as `unauthorized`. When a session calls too often, Linkfolio answers with the
+non-standard **HTTP 999**, `rate_limited` for us.
 
-## What gets accounts restricted
+## Linkfolio's session policy
+
+Linkfolio documents two things that get a session challenged:
 
 - **Bursts of checks.** Many requests in a short time from one session, especially from a
   server, trigger a security challenge.
 - **Repeated logins.** Every reconnect is a fresh login from the customer's browser plus a new
-  session appearing on our side. A few in a day is enough for Linkfolio to challenge the account,
-  and a challenged account can be restricted.
+  session on our side. A few in a day is enough for Linkfolio to challenge the account, and a
+  challenged account can be restricted.
 
 So: **we never log in automatically**, and we **never check a session more often than the
 console's schedule**. If a check fails, assume Linkfolio is slow or throttling before assuming the
-session is dead; asking the customer to log in again is the expensive answer.
+session is dead. Asking the customer to log in again is the expensive answer.
 
 ## Sending (an item)
 
@@ -58,9 +62,9 @@ POST https://app.linkfolio.example/api/v1/invitations
 ```
 
 Item payload: `{ profileId, note }`. Linkfolio also caps invitations per week per account (around
-100 to 200); campaigns are sized below that by the ops team.
+100 to 200). The ops team sizes campaigns below that.
 
-Lead data (names, headlines) comes from Linkfolio search results and profiles: it is whatever the
+Lead data (names, headlines) comes from Linkfolio search results and profiles. It is whatever the
 lead typed, including markup-looking text.
 
 ## Reconnecting

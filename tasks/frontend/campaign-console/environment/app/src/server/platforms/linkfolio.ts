@@ -1,6 +1,6 @@
-// Linkfolio, through the customer's browser session (there is no API for outreach). Notes:
-// docs/platforms/linkfolio.md. Read them before changing anything here: Linkfolio restricts
-// accounts that look automated.
+// Linkfolio, through its session-based partner access: the customer authorises Relay's browser
+// helper and we call with that session. Notes: docs/platforms/linkfolio.md. Read them before
+// changing anything here: Linkfolio challenges sessions that break its session policy.
 import { JSON_HEADERS, requestJson } from "./http.ts";
 import type { HttpOptions } from "./http.ts";
 import type { PlatformAdapter } from "./types.ts";
@@ -24,7 +24,7 @@ export function createLinkfolioAdapter(options: LinkfolioOptions): PlatformAdapt
     platform: "linkfolio",
 
     async probe(credential: Credential) {
-      // HEAD of the feed: cheap, and what a browser tab does anyway. A dead session redirects to
+      // HEAD of the feed: the cheapest call Linkfolio offers. A dead session redirects to
       // the login page (or to a checkpoint challenge).
       const headers = sessionHeaders(credential as SessionCredential);
       await requestJson("linkfolio", { method: "HEAD", url: `${options.baseUrl}/feed/`, authorization: headers.cookie, headers }, options);
