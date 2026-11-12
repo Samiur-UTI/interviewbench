@@ -40,6 +40,22 @@ def test_ib_ui_opens_the_browser_on_the_printed_link(monkeypatch):
     assert opened and opened[0] in result.output
 
 
+def test_bare_ib_opens_the_gui(monkeypatch):
+    stop_at_once(monkeypatch)
+    opened = []
+    monkeypatch.setattr(cli.webbrowser, "open", opened.append)
+    result = CliRunner().invoke(cli.app, [])
+    assert result.exit_code == 0, result.output
+    assert opened and opened[0] in result.output and "ib --help" in result.output
+
+
+def test_ib_help_still_lists_the_commands(monkeypatch):
+    monkeypatch.setattr(cli, "ui", lambda **_: pytest.fail("--help must not start the GUI"))
+    result = CliRunner().invoke(cli.app, ["--help"])
+    assert result.exit_code == 0, result.output
+    assert "start" in result.output and "grade" in result.output and "ui" in result.output
+
+
 def test_a_taken_port_falls_to_the_next_free_one(tmp_path):
     first = serve(0, static_dir=tmp_path)
     second = serve(first.port, static_dir=tmp_path)
