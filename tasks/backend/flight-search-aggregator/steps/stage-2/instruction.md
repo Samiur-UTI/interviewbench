@@ -60,7 +60,10 @@ Paging:
 - `getPage` and `searchWithStatus` reject with `ValidationError` for:
   - a bad `limit`;
   - a cursor that doesn't decode to that shape, or that belongs to another search or another
-    sort;
+    sort. A cursor must be a string that is exactly the base64url encoding (no padding) of its
+    JSON: one with `=` padding or any other characters added is invalid, even if a lenient
+    decoder accepts it;
+  - a `sort` that isn't one of the four above;
   - `preferred_airline` on a search without `preferredCarrier`.
 - `getPage` rejects with a new `SearchNotFoundError` for an unknown `searchId`.
 - Pages are read from the database: a new service on the same `dbPath` must serve them.
