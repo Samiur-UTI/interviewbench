@@ -1,8 +1,9 @@
-# Local GUI
+# The local GUI: architecture and API
 
-`ib ui` starts a small web app on this computer and opens it in the browser. Everything a candidate
-does with `ib` in a terminal, they can do there. The GUI is a second front end over the same code as
-the CLI: neither contains workflow logic of its own.
+This document describes how the GUI is built and its HTTP API. It is for people changing the GUI.
+To use it, run `ib` or `ib ui` (see the README). Everything a candidate does with `ib` in a
+terminal, they can do there. The GUI is a second front end over the same code as the CLI: neither
+contains workflow logic of its own.
 
 ## Design rules
 

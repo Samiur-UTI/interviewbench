@@ -7,8 +7,11 @@ multi-step task with a few interviewbench-only files. The same folder works with
 - `harbor run -p tasks/<category> -a <agent>` (scoring AI agents and models)
 - `harbor run -p tasks/<category> -a oracle` (the reference solutions should score 1.0)
 
-`ib validate` checks every rule below. `ib validate --run` also runs the tests. The package's
-own test suite (`pytest`) runs both for every task.
+`ib validate` checks the structural rules: files present, fields, weights, line endings and
+reserved file names. `ib validate --run` also runs the tests, to check that the starter fails
+stage 1 and that each stage's solution passes. The rest is for the author and reviewers to check:
+no network in tests, how the briefs are written, and Harbor's oracle score. The package's own test
+suite (`pytest`) runs `ib validate --run` for every task.
 
 ## Layout
 
@@ -43,8 +46,9 @@ templates/<category>-<stack>/     # skeletons used by `ib new`
 
 ## Categories
 
-A category is a folder under `tasks/` plus a rubric file `rubrics/<category>.yaml`. To add one,
-create both. Today: `backend`, `frontend`, `devops`.
+A category exists when `rubrics/<category>.yaml` exists. Its tasks live in `tasks/<category>/`.
+To add one, create both. Today: `backend`, `frontend` and `devops`. `devops` has a rubric but no
+tasks yet.
 
 - `metadata.category` in `task.toml` must equal the folder name.
 - Task ids (folder names) must be unique across all categories. Pick the category once; moving
@@ -72,6 +76,11 @@ See `tasks/backend/rate-limiter/task.toml` for a full example.
 | `[[steps]]` | One per stage, named `stage-1`, `stage-2`, ... in order |
 | `[verifier].timeout_sec` | Per-stage test timeout, used by both Harbor and `ib` |
 | `[environment].cpus` / `memory_mb` | Container limits, used by both Harbor and `ib --runner docker` |
+
+Required: `[task].name`, `[task].description`, `[metadata].category`,
+`[metadata.interviewbench].language` and at least one `[[steps]]`. Defaults: `difficulty` is
+`medium`, `level` is `mid`, `time_limit_minutes` is 60, `[verifier].timeout_sec` is 120.
+`candidate_tests`, `attack_dir`, `tags` and `[environment]` are optional.
 
 Keep `multi_step_reward_strategy = "mean"` so Harbor's score is the average across stages.
 
@@ -153,7 +162,7 @@ Rules:
 - After applying the solutions of stages 1..N, all of stage N's hidden tests pass.
 - `harbor run -p tasks/<category> -a oracle` scores 1.0.
 - Shell scripts, Dockerfiles and `task.toml` use LF line endings (`.gitattributes` enforces it).
-- `environment/app/` doesn't contain the files `ib` writes (or older versions wrote) into a workspace: `TASK.md`,
+- `environment/app/` doesn't contain the files `ib` writes into a workspace or reserves: `TASK.md`,
   `.interviewbench.json`, `ib-report.md`, `ib-judge-prompt.md`, `ib-judge-reply.txt`,
   `ib-attack-prompt.md` and `ib-ui.json`. The grader and judge ignore them, and `.vscode/`.
 
