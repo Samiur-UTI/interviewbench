@@ -65,6 +65,23 @@ def test_break_command_summary_and_workspace_untouched(stage1_done, attack):
     assert not (stage1_done / "tests" / attack.name).exists()
 
 
+def test_break_command_prints_brackets_in_attack_tests_as_text(tmp_path, stage1_done):
+    path = tmp_path / "attack_test.py"
+    path.write_text(
+        "import pytest\nfrom ratelimiter import FakeClock, TokenBucket\n\n\n"
+        "@pytest.mark.parametrize('capacity', [3], ids=['cheap-plan'])\n"
+        "def test_cap(capacity):\n"
+        "    assert TokenBucket(capacity=capacity, refill_rate=1, clock=FakeClock()).allow()\n\n\n"
+        "def test_route():\n    assert '[/api]' == 'x'\n",
+        encoding="utf-8",
+    )
+    result = cli.invoke(
+        app, ["break", str(path), "--dir", str(stage1_done), "--runner", RUNNER_KIND], env={"COLUMNS": "200"}
+    )
+    assert result.exit_code == 0, result.output
+    assert "test_cap[cheap-plan]" in result.output and "[/api]" in result.output
+
+
 def test_break_prompt_shows_revealed_stages_and_code_but_no_hidden_tests(stage1_done):
     result = cli.invoke(app, ["break", "--prompt", "--dir", str(stage1_done)])
     assert result.exit_code == 0, result.output

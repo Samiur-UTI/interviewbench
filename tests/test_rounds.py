@@ -222,6 +222,19 @@ def test_a_stage_that_could_not_run_keeps_its_error_hidden(task):
     assert "secret_stage_two_detail" in to_markdown(result) and "test_secret_three" in to_markdown(result)
 
 
+def test_render_prints_brackets_in_test_output_as_text(task):
+    stages = [
+        StageResult(1, 0, 1, [grader.TestFailure("test_plan[cheap-plan]", "expected [object Object]")]),
+        StageResult(2, 0, 0, error="AssertionError: '[/x]' != 'C:\\Users\\x\\[dev]\\'"),
+        StageResult(3, 1, 1),
+    ]
+    console = Console(record=True, width=200)
+    render(score(task, stages, "local"), console)
+    text = console.export_text()
+    assert "test_plan[cheap-plan]: expected [object Object]" in text
+    assert "'[/x]' != 'C:\\Users\\x\\[dev]\\'" in text
+
+
 def test_grade_round_keeps_scores_when_the_judge_fails(tmp_path, task, runner, solution_dir, monkeypatch):
     def boom(*args, **kwargs):
         raise JudgeError("no credentials")

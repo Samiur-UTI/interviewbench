@@ -4,9 +4,11 @@ import shutil
 from typer.testing import CliRunner
 
 from conftest import RUNNER_KIND
+from interviewbench import judge
 from interviewbench import workspace as ws
 from interviewbench.cli import app
 from interviewbench.grader import _IGNORE
+from interviewbench.judge import JudgeError
 from interviewbench.tasks import BRIEF, FULL_REPORT, MARKER, REPORT, bench_root
 
 runner = CliRunner()
@@ -164,6 +166,24 @@ def test_grade_mid_round_hides_later_stages_unless_asked(tmp_path):
     result = runner.invoke(app, ["grade", "--dir", str(dest), "--runner", RUNNER_KIND, "--all-stages", "-o", str(outside)])
     assert result.exit_code == 0, result.output
     assert "- Stage 2 `" in outside.read_text(encoding="utf-8")
+
+
+def test_errors_print_brackets_as_text(tmp_path, solution_dir, monkeypatch):
+    def no_sdk(*args, **kwargs):
+        raise JudgeError('The AI judge needs the Anthropic SDK: pip install "interviewbench[judge]"')
+
+    monkeypatch.setattr(judge, "_call_claude", no_sdk)
+    ws = shutil.copytree(solution_dir, tmp_path / "ws")
+    result = runner.invoke(app, ["grade", "--dir", str(ws), "--task", "rate-limiter", "--runner", RUNNER_KIND, "--judge"])
+    assert result.exit_code == 1
+    assert 'pip install "interviewbench[judge]"' in flat(result.output)
+
+
+def test_start_prints_a_bracketed_path_intact(tmp_path):
+    dest = tmp_path / "[dev]" / "ws"
+    result = start(dest)
+    assert result.exit_code == 0, result.output
+    assert f'cd "{dest}"'.replace(" ", "") in flat(result.output).replace(" ", "")  # Rich may wrap the path
 
 
 def test_grade_rejects_non_workspace(tmp_path):
