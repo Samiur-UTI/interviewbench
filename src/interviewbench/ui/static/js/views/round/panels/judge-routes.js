@@ -89,6 +89,7 @@ function ChatbotRoute({ grade }) {
         <li>
           <p class="step-title-text">Paste it into a chatbot</p>
           <p class="muted">Ask in a new chat, and paste all of it.</p>
+          <p class="muted">A model on this computer (Ollama, LM Studio) needs a context length above the prompt's size, or it silently drops the start of the prompt. In <code>ollama run</code>: <code>/set parameter num_ctx 32768</code>.</p>
         </li>
         <li>
           <p class="step-title-text" id="reply-label">Paste the JSON reply here</p>
