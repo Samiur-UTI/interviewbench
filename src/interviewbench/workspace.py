@@ -7,8 +7,10 @@ editor opened on it, a git repo with one commit per stage, and buttons for the i
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import re
 import shlex
 import shutil
 import stat
@@ -38,6 +40,29 @@ def workspaces_root() -> Path:
 
 def default_workspace(task_id: str) -> Path:
     return workspaces_root() / task_id
+
+
+def data_root() -> Path:
+    """$IB_DATA_DIR, else the per-user app data folder: files ib keeps out of every workspace."""
+    base = os.environ.get("IB_DATA_DIR")
+    if base:
+        return Path(base).expanduser()
+    if os.name == "nt":
+        return Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local") / "interviewbench"
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "interviewbench"
+    return Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state") / "interviewbench"
+
+
+def private_dir(workspace: Path) -> Path:
+    """Where ib keeps a workspace's files the candidate's AI assistant mustn't read, e.g. the judge prompt.
+
+    One folder per workspace, named after it plus a hash of its full path, outside the workspace.
+    """
+    resolved = workspace.resolve()
+    digest = hashlib.sha256(str(resolved).encode("utf-8")).hexdigest()[:10]
+    name = re.sub(r"[^A-Za-z0-9._-]+", "-", resolved.name).strip(".-") or "workspace"
+    return data_root() / "judge" / f"{name}-{digest}"
 
 
 def is_inside(path: Path, root: Path) -> bool:
@@ -169,7 +194,7 @@ def write_editor_tasks(workspace: Path) -> bool:
         task("next stage", "next"),
         task("grade", "grade"),
         task("grade with the AI judge", "grade", "--judge"),
-        task("export the judge prompt (paste into any chatbot)", "grade", "--judge-export"),
+        task("export the judge prompt (saved outside this folder; paste into any chatbot)", "grade", "--judge-export"),
     ]
     path.parent.mkdir(exist_ok=True)
     path.write_text(json.dumps({"version": "2.0.0", "tasks": tasks}, indent=2) + "\n", encoding="utf-8")
