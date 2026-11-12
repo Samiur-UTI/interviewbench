@@ -20,6 +20,6 @@ for a cost of 1, so `allow` and `time_until` both accept a 1e-9 tolerance.
 
 Cost validation lives in `TokenBucket._check_cost`, so both methods raise the same `ValueError`.
 
-## Stage 3: how eviction works and its cost
+## Stage 3
 
 ## How I used AI assistance (and what I checked myself)

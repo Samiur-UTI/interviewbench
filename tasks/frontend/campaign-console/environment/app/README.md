@@ -106,7 +106,7 @@ Rules the monitor follows (`src/client/connectivity.ts`):
 ## Rules
 
 1. **Never make users reconnect for nothing.** Reconnecting rotates the credential, drops cached
-   tokens and today aborts the run on that connection; for Linkfolio a re-login can get the
+   tokens and aborts the run on that connection; for Linkfolio a re-login can get the
    customer's account restricted. Hence the connectivity rules above.
 2. **Secrets never reach the browser.** Access and refresh tokens, API key secrets, session
    cookies: not in the page, not in any API response, not in WebSocket messages, not in run events
