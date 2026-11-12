@@ -151,9 +151,19 @@ def test_grade_mid_round_hides_later_stages_unless_asked(tmp_path):
     result = runner.invoke(app, ["grade", "--dir", str(dest), "--runner", RUNNER_KIND, "--all-stages"])
     assert result.exit_code == 0, result.output
     full = ws.private_dir(dest) / FULL_REPORT
-    assert "FAIL stage 2" in flat(result.output) and str(full) in flat(result.output).replace(" ", "")
+    assert "FAIL stage 2" in flat(result.output)
+    assert str(full).replace(" ", "") in flat(result.output).replace(" ", "")  # Rich may wrap the path
     assert "- Stage 2 `" in full.read_text(encoding="utf-8")
     assert "- Stage 2 `" not in (dest / REPORT).read_text(encoding="utf-8")  # the workspace copy is untouched
+
+    inside = dest / "review.md"
+    result = runner.invoke(app, ["grade", "--dir", str(dest), "--runner", RUNNER_KIND, "--all-stages", "-o", str(inside)])
+    assert result.exit_code == 1 and "can't go inside the workspace" in flat(result.output)
+    assert not inside.exists()
+    outside = tmp_path / "review.md"
+    result = runner.invoke(app, ["grade", "--dir", str(dest), "--runner", RUNNER_KIND, "--all-stages", "-o", str(outside)])
+    assert result.exit_code == 0, result.output
+    assert "- Stage 2 `" in outside.read_text(encoding="utf-8")
 
 
 def test_grade_rejects_non_workspace(tmp_path):

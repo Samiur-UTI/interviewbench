@@ -233,9 +233,15 @@ def grade(
     task = _task_from_workspace(dir, task_id)
     backend = _runner_or_exit(runner)
     revealed = rounds.revealed_stages(task, ws.read_marker(dir))
-    if all_stages and output is None and revealed is not None and revealed < len(task.stages):
-        try:  # the full report would spoil the round for an AI assistant reading the workspace
-            output = rounds.private_folder(dir) / FULL_REPORT
+    if all_stages and revealed is not None and revealed < len(task.stages):
+        # The full report would spoil the round for an AI assistant reading the workspace.
+        if output is not None and ws.is_inside(output, dir):
+            _fail(
+                f"--all-stages reports stages this round hasn't reached, so its report can't go inside the "
+                f"workspace. Pass an --output outside {dir}."
+            )
+        try:
+            output = output or rounds.private_folder(dir) / FULL_REPORT
         except rounds.RoundError as exc:
             _fail(str(exc))
     mode = "api" if judge else "prepare" if judge_export else "reply" if judge_reply is not None else "none"
