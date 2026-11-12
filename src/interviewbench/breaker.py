@@ -96,7 +96,13 @@ def attack_prompt(task: Task, workspace: Path, revealed: int) -> str:
         "- No sleeping and no network. Use the fakes the codebase already provides.\n"
         "- Reply with only the contents of the test file.\n\n"
         f"## The brief\n\n{briefs}\n\n"
-        f"## The code\n\n{_files_block(files)}\n"
+        f"## The code\n\n{_files_block(files)}\n\n"
+        # Repeated last on purpose: a local model whose context window is smaller than this prompt
+        # (Ollama defaults to 2048-4096 tokens) keeps only the end, and without this it sees bare code.
+        "## Your task\n\n"
+        "Try to break the code above: write ONE test file of new tests that a correct solution to the "
+        f"brief passes and this code might fail. It will be saved in `{task.attack_dir}/`. Don't explain "
+        "or summarise the code. Reply with only the contents of the test file.\n"
     )
 
 

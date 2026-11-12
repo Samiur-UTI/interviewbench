@@ -168,6 +168,14 @@ Set `IB_JUDGE_BACKEND=openai` and `IB_JUDGE_MODEL` to make that the default for 
 Other OpenAI-compatible base URLs: `https://generativelanguage.googleapis.com/v1beta/openai`
 (Gemini), `https://api.groq.com/openai/v1` (Groq).
 
+**Local models need a bigger context window.** The judge prompt is ~10-15k tokens and an attack
+prompt can pass 8k, but Ollama runs models with 2048-4096 tokens by default (it depends on the
+version and your memory) and silently drops the *start* of a longer prompt, so the model never sees
+the rules or the brief. Raise it to 32768:
+start the server with `OLLAMA_CONTEXT_LENGTH=32768 ollama serve` (or use the context length
+setting in the Ollama app), or type `/set parameter num_ctx 32768` in `ollama run` when pasting.
+In LM Studio, set the context length when you load the model.
+
 **Claude API** (the default backend; the API enforces the answer's JSON schema):
 
 ```bash
@@ -197,7 +205,8 @@ ib break ../attack_test.py     # real break / survived / bad test, for each atta
 ```
 
 Your workspace isn't changed. The attack file runs with the task's own test command, so this
-works for any language.
+works for any language. If a local model only describes your code instead of writing tests, its
+context window is too small for the prompt: see the note on local models under [AI judge](#ai-judge).
 
 ## Evaluate AI agents with Harbor
 
