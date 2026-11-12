@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 import time
 import webbrowser
 from pathlib import Path
@@ -28,6 +29,18 @@ app = typer.Typer(
     add_completion=False,
 )
 console = Console()
+
+
+@app.callback()
+def _utf8_output() -> None:
+    """On Windows, Python writes pipes and files in the ANSI code page (cp1252), which can't encode
+    characters the briefs use (U+2212, Rich's spinner), so `ib prompt ... | more` or
+    `ib start ... > log` crashed with UnicodeEncodeError. Write UTF-8 whatever stdout is."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError, OSError):
+            pass  # not a TextIOWrapper (e.g. replaced by a test harness): leave it
 
 
 def _fail(message: str) -> NoReturn:
