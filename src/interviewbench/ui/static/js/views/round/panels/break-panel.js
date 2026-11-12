@@ -63,6 +63,7 @@ export function BreakPanel() {
         <li>
           <p class="step-title-text">Get an LLM to write the tests</p>
           <p class="muted">Paste the prompt into any chatbot or coding agent. It writes one test file that tries to break your code.</p>
+          <p class="muted">A model on this computer (Ollama, LM Studio) needs a context length above the prompt's size, or it silently drops the start of the prompt and only describes your code. In <code>ollama run</code>: <code>/set parameter num_ctx 32768</code>.</p>
         </li>
         <li>
           <p class="step-title-text">Paste the file here</p>
