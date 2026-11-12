@@ -65,6 +65,13 @@ def private_dir(workspace: Path) -> Path:
     return data_root() / "judge" / f"{name}-{digest}"
 
 
+def clear_private_dir(workspace: Path) -> None:
+    """Forget a round's private files, so a new round in the same folder doesn't inherit them."""
+    folder = private_dir(workspace)
+    if folder.is_dir():
+        remove_tree(folder)
+
+
 def is_inside(path: Path, root: Path) -> bool:
     return path.resolve().is_relative_to(root.resolve())
 

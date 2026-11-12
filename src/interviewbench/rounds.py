@@ -24,7 +24,7 @@ from .judge import (
 from .report import to_markdown
 from .runner import Runner, RunnerError
 from .tasks import (
-    ATTACK_PROMPT, BRIEF, JUDGE_PROMPT, REPORT, Task, TaskError, _task_dirs, bench_root, categories, get_task, load_task,
+    ATTACK_PROMPT, BRIEF, FULL_REPORT, JUDGE_PROMPT, REPORT, UI_STATE, Task, TaskError, _task_dirs, bench_root, categories, get_task, load_task,
     tasks_root, templates_root,
 )
 
@@ -76,6 +76,8 @@ class GradeOutcome:
     result: GradeResult
     request: JudgeRequest | None = None  # the prompt, when the judge is a chatbot
     judge_error: str | None = None
+    revealed: int | None = None  # the stages the report shows in full; None for all of them
+    full_report: Path | None = None  # every stage's details, outside the workspace, when the report hides some
 
 
 @dataclass
@@ -203,6 +205,7 @@ def start_round(
     """
     if _check_destination(task, dest, force):
         ws.remove_tree(dest)
+    ws.clear_private_dir(dest)  # results of an earlier round in this folder
     shutil.copytree(task.starter_dir, dest, dirs_exist_ok=True)
     wrote_tasks = ws.write_editor_tasks(dest)
     git_ok = git and ws.git_init(dest, ignored=[ws.EDITOR_TASKS.as_posix()] if wrote_tasks else [])
@@ -266,7 +269,9 @@ def list_rounds() -> list[RoundInfo]:
 
 
 def delete_round(round_id: str) -> None:
-    ws.remove_tree(load_round(round_id).path)
+    path = load_round(round_id).path
+    ws.remove_tree(path)
+    ws.clear_private_dir(path)
 
 
 def changes(task: Task, workspace: Path) -> Changes:
@@ -336,14 +341,22 @@ def grade_round(
     prior: GradeResult | None = None,
     request: JudgeRequest | None = None,
     progress: Progress = no_progress,
+    all_stages: bool = False,
 ) -> GradeOutcome:
-    """Run the hidden tests, optionally the judge, and write the report. Raises RunnerError.
+    """Run the hidden tests, optionally the judge, and write the report. Raises RunnerError, RoundError.
 
     judge: "none", "api" (a model, through `settings`), "prepare" (only build the prompt) or "reply"
     (score a chatbot's `reply`). A judge failure keeps the hidden-test scores and sets `judge_error`.
     `prior` and `request` are earlier results for this same code, which save running the tests again.
+
+    Every stage's hidden tests run, but the report only names the failures of stages the round has
+    reached: the candidate's AI assistant reads the workspace. The full report goes to ib's private
+    folder instead. `all_stages` reports everything, for an interviewer grading a hand-back.
     """
     settings = settings or JudgeSettings()
+    revealed = None if all_stages else revealed_stages(task, ws.read_marker(workspace))
+    hides = revealed is not None and revealed < len(task.stages)
+    full_report = private_folder(workspace) / FULL_REPORT if hides else None  # fail before the slow part
     result = prior or grade(task, workspace, runner, timeout=timeout, progress=progress)
     judge_error = None
     try:
@@ -361,8 +374,31 @@ def grade_round(
         judge_error = str(exc)
         if settings.api_key:  # a provider's error can quote the key it was given
             judge_error = judge_error.replace(settings.api_key, "[API key]")
-    (report_path or workspace / REPORT).write_text(to_markdown(result), encoding="utf-8")
-    return GradeOutcome(result, request, judge_error)
+    (report_path or workspace / REPORT).write_text(to_markdown(result, revealed), encoding="utf-8")
+    if full_report:
+        full_report.write_text(to_markdown(result), encoding="utf-8")
+    (workspace / UI_STATE).unlink(missing_ok=True)  # an earlier ib kept the GUI's results here, spoilers and all
+    return GradeOutcome(result, request, judge_error, revealed, full_report)
+
+
+def revealed_stages(task: Task, marker: dict | None) -> int | None:
+    """How many stages a round has revealed, or None for a folder that isn't a round (a hand-back)."""
+    if marker is None:
+        return None
+    try:
+        stage = int(marker.get("stage", 1))
+    except (AttributeError, TypeError, ValueError):  # a damaged marker: assume the least is revealed
+        stage = 1
+    return max(1, min(stage, len(task.stages)))
+
+
+def private_folder(workspace: Path) -> Path:
+    """`ws.private_dir`, created, refusing a data folder inside the workspace (IB_DATA_DIR set there)."""
+    folder = ws.private_dir(workspace)
+    if ws.is_inside(folder, workspace):
+        raise RoundError(f"IB_DATA_DIR ({ws.data_root()}) is inside the workspace. Point it somewhere else.")
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder
 
 
 @dataclass
@@ -378,10 +414,7 @@ def export_judge_prompt(workspace: Path, request: JudgeRequest) -> ExportedPromp
     It holds the hidden tests and the reference solution, so it goes to ib's own data folder (see
     `ws.private_dir`), where an AI assistant working in the workspace doesn't look.
     """
-    folder = ws.private_dir(workspace)
-    if ws.is_inside(folder, workspace):
-        raise RoundError(f"IB_DATA_DIR ({ws.data_root()}) is inside the workspace. Point it somewhere else.")
-    folder.mkdir(parents=True, exist_ok=True)
+    folder = private_folder(workspace)
     text = request.as_paste()
     path = folder / JUDGE_PROMPT
     path.write_text(text, encoding="utf-8")

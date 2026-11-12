@@ -5,12 +5,14 @@ import shutil
 from pathlib import Path
 
 import pytest
+from rich.console import Console
 
-from interviewbench import judge, rounds
+from interviewbench import grader, judge, rounds
 from interviewbench import workspace as ws
 from interviewbench.breaker import Attack
-from interviewbench.grader import score
+from interviewbench.grader import StageResult, score
 from interviewbench.judge import JudgeError
+from interviewbench.report import WITHHELD_ERROR, render, to_markdown
 from interviewbench.tasks import (
     ATTACK_PROMPT, BRIEF, JUDGE_PROMPT, MARKER, REPORT, UI_STATE, WORKSPACE_FILES, get_task,
 )
@@ -136,6 +138,88 @@ def test_grade_round_writes_the_report(tmp_path, task, runner, solution_dir):
     assert outcome.request is None and outcome.judge_error is None
     assert outcome.result.points == 45
     assert "45.0/45" in (dest / REPORT).read_text(encoding="utf-8")
+
+
+def workspace_text(workspace: Path) -> str:
+    """Everything an AI assistant working in the workspace could read, git history aside."""
+    files = [p for p in workspace.rglob("*") if p.is_file() and ".git" not in p.parts]
+    return "\n".join(p.read_text(encoding="utf-8", errors="replace") for p in files)
+
+
+def later_stage_spoilers(task, outcome, revealed: int) -> list[str]:
+    names = [f.name for st in outcome.result.stages if st.stage > revealed for f in st.failures]
+    rubric = [c.description for c in task.criteria if c.type == "auto" and c.stage > revealed]
+    return names + rubric
+
+
+def test_grading_mid_round_keeps_later_stages_out_of_the_workspace(tmp_path, task, runner):
+    dest = rounds.start_round(task, tmp_path / "ws", open_editor=False).path
+    outcome = rounds.grade_round(task, dest, runner)
+    spoilers = later_stage_spoilers(task, outcome, 1)
+    assert outcome.revealed == 1 and len(spoilers) > 2
+    assert not [s for s in spoilers if s in workspace_text(dest)]
+    report = (dest / REPORT).read_text(encoding="utf-8")
+    assert "You'll see which once you reach stage 2" in report and "Hidden tests for stage 3." in report
+    assert outcome.result.stages[0].failures[0].name in report  # the stage you're on is shown in full
+
+    assert not ws.is_inside(outcome.full_report, dest)
+    full = outcome.full_report.read_text(encoding="utf-8")
+    assert all(s in full for s in spoilers)
+
+    rounds.next_stage(task, dest, ws.read_marker(dest))
+    again = rounds.grade_round(task, dest, runner)
+    report = (dest / REPORT).read_text(encoding="utf-8")
+    assert again.revealed == 2 and all(f.name in report for f in again.result.stages[1].failures)
+    assert not [s for s in later_stage_spoilers(task, again, 2) if s in workspace_text(dest)]
+
+
+def test_grading_a_hand_back_or_all_stages_shows_everything(tmp_path, task, runner):
+    handback = shutil.copytree(task.starter_dir, tmp_path / "handback")  # no round marker: not a round
+    outcome = rounds.grade_round(task, handback, runner)
+    assert outcome.revealed is None and outcome.full_report is None
+    assert all(s in (handback / REPORT).read_text(encoding="utf-8") for s in later_stage_spoilers(task, outcome, 1))
+
+    dest = rounds.start_round(task, tmp_path / "ws", open_editor=False).path
+    review = tmp_path / "review.md"
+    outcome = rounds.grade_round(task, dest, runner, all_stages=True, report_path=review)
+    assert outcome.revealed is None and outcome.full_report is None and not (dest / REPORT).exists()
+    assert all(s in review.read_text(encoding="utf-8") for s in later_stage_spoilers(task, outcome, 1))
+
+
+def test_grading_refuses_a_private_folder_inside_the_workspace(tmp_path, task, runner, monkeypatch):
+    dest = rounds.start_round(task, tmp_path / "ws", open_editor=False).path
+    monkeypatch.setenv("IB_DATA_DIR", str(dest / "data"))
+
+    def boom(*args, **kwargs):
+        raise AssertionError("the hidden tests ran before the check")
+
+    monkeypatch.setattr(rounds, "grade", boom)
+    with pytest.raises(rounds.RoundError, match="inside the workspace"):
+        rounds.grade_round(task, dest, runner)
+    assert not (dest / REPORT).exists()
+
+
+def test_grading_removes_results_an_earlier_ib_left_in_the_workspace(tmp_path, task, runner, solution_dir):
+    dest = shutil.copytree(solution_dir, tmp_path / "ws")
+    (dest / UI_STATE).write_text('{"grade": "spoilers"}', encoding="utf-8")
+    rounds.grade_round(task, dest, runner)
+    assert not (dest / UI_STATE).exists()
+
+
+def test_a_stage_that_could_not_run_keeps_its_error_hidden(task):
+    stages = [
+        StageResult(1, 1, 2, [grader.TestFailure("test_shown", "visible")]),
+        StageResult(2, 0, 0, error="Traceback: secret_stage_two_detail"),
+        StageResult(3, 0, 1, [grader.TestFailure("test_secret_three", "nope")]),
+    ]
+    result = score(task, stages, "local")
+    console = Console(record=True, width=200)
+    render(result, console, 1)
+    for text in (to_markdown(result, 1), console.export_text()):
+        assert "test_shown" in text and WITHHELD_ERROR in text
+        assert "secret_stage_two_detail" not in text and "test_secret_three" not in text
+        assert "1 hidden test fails" in text
+    assert "secret_stage_two_detail" in to_markdown(result) and "test_secret_three" in to_markdown(result)
 
 
 def test_grade_round_keeps_scores_when_the_judge_fails(tmp_path, task, runner, solution_dir, monkeypatch):
@@ -276,6 +360,26 @@ def test_delete_round_removes_a_git_workspace(workspaces, task):
     path = rounds.start_in_free_folder(task, open_editor=False).path
     rounds.delete_round(path.name)
     assert not path.exists()
+
+
+def test_a_new_round_in_the_same_folder_starts_without_old_results(workspaces, task):
+    path = rounds.start_in_free_folder(task, open_editor=False).path
+    rounds.private_folder(path).joinpath(UI_STATE).write_text('{"grade": {"percent": 77}}', encoding="utf-8")
+    rounds.delete_round(path.name)
+    assert not ws.private_dir(path).exists()
+
+    again = rounds.start_in_free_folder(task, open_editor=False).path
+    assert again == path
+    rounds.private_folder(path).joinpath(UI_STATE).write_text("{}", encoding="utf-8")
+    rounds.start_round(task, path, force=True, open_editor=False)
+    assert not ws.private_dir(path).exists()
+
+
+@pytest.mark.parametrize("stage, revealed", [(2, 2), (9, 3), (0, 1), (-1, 1), (None, 1), ("x", 1), ([2], 1)])
+def test_revealed_stages_reads_a_damaged_marker_as_the_first_stage(task, stage, revealed):
+    assert rounds.revealed_stages(task, {"task": task.id, "stage": stage}) == revealed
+    assert rounds.revealed_stages(task, {"task": task.id}) == 1
+    assert rounds.revealed_stages(task, None) is None
 
 
 def test_changes_against_the_starter_ignore_ibs_own_files(tmp_path, task):

@@ -1,7 +1,9 @@
 """Dataclasses -> the JSON shapes in docs/GUI.md, including the spoiler rules, and ib-ui.json.
 
-Stored results keep every stage's failures: ib-report.md already holds them, and a failure in stage 2
-should appear once stage 2 is revealed. What's withheld from the browser is decided here, per request.
+Stored results keep every stage's failures, so a failure in stage 2 appears once stage 2 is revealed,
+without grading again. That makes ib-ui.json a spoiler, so it lives in ib's private folder for the
+workspace, not in the workspace. What's withheld from the browser is decided here, per request, with
+the rules in report.py that ib-report.md follows too.
 """
 
 from __future__ import annotations
@@ -9,14 +11,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .. import workspace as ws
 from ..grader import GradeResult, StageResult, TestFailure, score
 from ..judge import Review
-from ..report import summary_line
-from ..rounds import BreakOutcome, Changes, RoundInfo, TaskCheck
-from ..tasks import UI_STATE, Criterion, Task
+from ..report import WITHHELD_ERROR, criterion_description, is_hidden, summary_line
+from ..rounds import BreakOutcome, Changes, RoundInfo, TaskCheck, private_folder
+from ..tasks import UI_STATE, Task
 from .jobs import now_iso
-
-_WITHHELD_ERROR = "This stage's hidden tests could not run. The details stay hidden until it's revealed."
 
 
 # --- ib-ui.json -----------------------------------------------------------------------------
@@ -25,14 +26,16 @@ _WITHHELD_ERROR = "This stage's hidden tests could not run. The details stay hid
 def read_state(workspace: Path) -> dict:
     """The stored results. A missing or damaged file just means there are none."""
     try:
-        state = json.loads((workspace / UI_STATE).read_text(encoding="utf-8"))
+        state = json.loads((ws.private_dir(workspace) / UI_STATE).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
     return state if isinstance(state, dict) else {}
 
 
 def write_state(workspace: Path, state: dict) -> None:
-    (workspace / UI_STATE).write_text(json.dumps(state, indent=2), encoding="utf-8")
+    """Raises RoundError when the private folder would be inside the workspace."""
+    (private_folder(workspace) / UI_STATE).write_text(json.dumps(state, indent=2), encoding="utf-8")
+    (workspace / UI_STATE).unlink(missing_ok=True)  # an earlier ib kept it in the workspace, spoilers and all
 
 
 def prior_result(stored: dict | None, task: Task, fingerprint: str, runner: str) -> GradeResult | None:
@@ -55,13 +58,6 @@ def prior_result(stored: dict | None, task: Task, fingerprint: str, runner: str)
 # --- Tasks and rounds -----------------------------------------------------------------------
 
 
-def _criterion_description(criterion: Criterion, revealed: int) -> str:
-    """An auto criterion says what its stage is about, so it counts as part of that stage's brief."""
-    if criterion.type == "auto" and criterion.stage and criterion.stage > revealed:
-        return f"Hidden tests for stage {criterion.stage}."
-    return criterion.description
-
-
 def task_view(task: Task, revealed: int = 0) -> dict:
     return {
         "id": task.id,
@@ -74,7 +70,7 @@ def task_view(task: Task, revealed: int = 0) -> dict:
         "time_limit_minutes": task.time_limit_minutes,
         "stage_count": len(task.stages),
         "rubric": [
-            {"id": c.id, "type": c.type, "weight": c.weight, "description": _criterion_description(c, revealed)}
+            {"id": c.id, "type": c.type, "weight": c.weight, "description": criterion_description(c, revealed)}
             for c in task.criteria
         ],
     }
@@ -189,7 +185,7 @@ def grade_record(
 
 def _stage_view(stage: dict, task: Task, revealed: int) -> dict:
     number = stage["stage"]
-    if number <= revealed:
+    if not is_hidden(number, revealed):
         title = next((s.title for s in task.stages if s.number == number), None)
         return {**stage, "title": title, "revealed": True, "withheld_failures": 0}
     return {
@@ -198,7 +194,7 @@ def _stage_view(stage: dict, task: Task, revealed: int) -> dict:
         "revealed": False,
         "failures": [],
         "withheld_failures": len(stage["failures"]),
-        "error": _WITHHELD_ERROR if stage["error"] else None,
+        "error": WITHHELD_ERROR if stage["error"] else None,
     }
 
 
@@ -207,9 +203,9 @@ def _criterion_view(entry: dict, task: Task, stages: dict[int, dict], revealed: 
     criterion = next((c for c in task.criteria if c.id == entry["id"]), None)
     view = dict(entry)
     if criterion is not None:
-        view["description"] = _criterion_description(criterion, revealed)
-    if entry["type"] == "auto" and stage and stage > revealed and stages.get(stage, {}).get("error"):
-        view["evidence"] = _WITHHELD_ERROR  # evidence repeats the stage's error, which quotes test output
+        view["description"] = criterion_description(criterion, revealed)
+    if entry["type"] == "auto" and is_hidden(stage, revealed) and stages.get(stage, {}).get("error"):
+        view["evidence"] = WITHHELD_ERROR  # evidence repeats the stage's error, which quotes test output
     return view
 
 

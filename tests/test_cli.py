@@ -7,7 +7,7 @@ from conftest import RUNNER_KIND
 from interviewbench import workspace as ws
 from interviewbench.cli import app
 from interviewbench.grader import _IGNORE
-from interviewbench.tasks import BRIEF, MARKER, bench_root
+from interviewbench.tasks import BRIEF, FULL_REPORT, MARKER, REPORT, bench_root
 
 runner = CliRunner()
 
@@ -136,6 +136,34 @@ def test_grade_solution_writes_report(tmp_path, solution_dir):
     report = (ws / "ib-report.md").read_text(encoding="utf-8")
     assert "45.0/45" in report
     assert f"{RUNNER_KIND} runner" in report
+
+
+def test_grade_mid_round_hides_later_stages_unless_asked(tmp_path):
+    dest = tmp_path / "ws"
+    assert start(dest).exit_code == 0
+    result = runner.invoke(app, ["grade", "--dir", str(dest), "--runner", RUNNER_KIND])
+    assert result.exit_code == 0, result.output
+    out = flat(result.output)
+    assert "FAIL stage 1" in out and "FAIL stage 2" not in out and "FAIL stage 3" not in out
+    assert "You'll see which once you reach stage 2" in out
+    assert "FAIL stage 2" not in (dest / REPORT).read_text(encoding="utf-8")
+
+    result = runner.invoke(app, ["grade", "--dir", str(dest), "--runner", RUNNER_KIND, "--all-stages"])
+    assert result.exit_code == 0, result.output
+    full = ws.private_dir(dest) / FULL_REPORT
+    assert "FAIL stage 2" in flat(result.output)
+    assert str(full).replace(" ", "") in flat(result.output).replace(" ", "")  # Rich may wrap the path
+    assert "- Stage 2 `" in full.read_text(encoding="utf-8")
+    assert "- Stage 2 `" not in (dest / REPORT).read_text(encoding="utf-8")  # the workspace copy is untouched
+
+    inside = dest / "review.md"
+    result = runner.invoke(app, ["grade", "--dir", str(dest), "--runner", RUNNER_KIND, "--all-stages", "-o", str(inside)])
+    assert result.exit_code == 1 and "can't go inside the workspace" in flat(result.output)
+    assert not inside.exists()
+    outside = tmp_path / "review.md"
+    result = runner.invoke(app, ["grade", "--dir", str(dest), "--runner", RUNNER_KIND, "--all-stages", "-o", str(outside)])
+    assert result.exit_code == 0, result.output
+    assert "- Stage 2 `" in outside.read_text(encoding="utf-8")
 
 
 def test_grade_rejects_non_workspace(tmp_path):
