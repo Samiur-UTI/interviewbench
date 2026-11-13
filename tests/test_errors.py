@@ -4,6 +4,7 @@ import json
 import re
 import shutil
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from typer.testing import CliRunner
@@ -140,6 +141,54 @@ def test_a_malformed_pasted_reply_keeps_the_hidden_test_scores(task, tmp_path, s
     outcome = rounds.grade_round(task, workspace, runner, judge="reply", reply=reply)
     assert "isn't a whole number" in outcome.judge_error
     assert "45.0/45" in (workspace / REPORT).read_text(encoding="utf-8")
+
+
+class FakeStream:
+    def __init__(self, text):
+        self.text = text
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def get_final_message(self):
+        return SimpleNamespace(stop_reason="end_turn", content=[SimpleNamespace(type="text", text=self.text)])
+
+
+def claude_failing(monkeypatch, *, on_build=None, on_stream=None, text="{}"):
+    anthropic = pytest.importorskip("anthropic")
+
+    def stream(**kwargs):
+        if on_stream:
+            raise on_stream
+        return FakeStream(text)
+
+    def build(**kwargs):
+        if on_build:
+            raise on_build
+        return SimpleNamespace(beta=SimpleNamespace(messages=SimpleNamespace(stream=stream)))
+
+    monkeypatch.setattr(anthropic, "Anthropic", build)
+
+
+@pytest.mark.parametrize("failure, message", [
+    ({"on_stream": TypeError("Could not resolve authentication method. Expected one of api_key, auth_token, "
+                             "or credentials to be set.")}, "No credentials for the Claude API: set ANTHROPIC_API_KEY"),
+    ({"on_stream": TypeError("Messages.stream() got an unexpected keyword argument 'fallbacks'")},
+     "The installed Anthropic SDK can't make this request"),
+    ({"on_stream": ValueError("unknown beta")}, "can't make this request (unknown beta)"),
+    ({"on_build": "AnthropicError"}, "Claude API error: no profile"),
+    ({"on_stream": "AnthropicError"}, "Claude API error: no profile"),
+    ({"text": "{not json"}, "The judge's answer isn't valid JSON"),
+])
+def test_claude_backend_failures_are_judge_errors(monkeypatch, failure, message):
+    anthropic = pytest.importorskip("anthropic")
+    failure = {k: anthropic.AnthropicError("no profile") if v == "AnthropicError" else v for k, v in failure.items()}
+    claude_failing(monkeypatch, **failure)
+    with pytest.raises(JudgeError, match=re.escape(message)):
+        judge._call_claude("m", system="s", user="u", schema={})
 
 
 def test_validate_still_reports_unknown_and_duplicate_ids(bench):
