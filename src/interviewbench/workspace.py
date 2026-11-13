@@ -86,9 +86,33 @@ def remove_tree(path: Path) -> None:
     shutil.rmtree(path)
 
 
+class MarkerError(ValueError):
+    """The workspace has a round marker, but it is damaged."""
+
+
+def load_marker(workspace: Path) -> dict | None:
+    """The round's marker, or None if the folder has none. Raises MarkerError if it is damaged."""
+    path = workspace / MARKER
+    if not path.is_file():
+        return None
+    try:
+        marker = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:  # ValueError: not UTF-8, or not JSON
+        raise MarkerError(f"{path} is damaged: it isn't readable JSON ({exc}).") from exc
+    if not isinstance(marker, dict) or not isinstance(marker.get("task"), str):
+        raise MarkerError(f"{path} is damaged: it doesn't say which task the round is for.")
+    stage = marker.get("stage", 1)
+    if isinstance(stage, bool) or not isinstance(stage, int):
+        raise MarkerError(f"{path} is damaged: its stage, {json.dumps(stage)}, isn't a whole number.")
+    return marker
+
+
 def read_marker(workspace: Path) -> dict | None:
-    marker = workspace / MARKER
-    return json.loads(marker.read_text(encoding="utf-8")) if marker.is_file() else None
+    """`load_marker`, but a damaged marker reads as {}: no task, so not a round, and stage 1 revealed."""
+    try:
+        return load_marker(workspace)
+    except MarkerError:
+        return {}
 
 
 def write_marker(workspace: Path, marker: dict) -> None:
@@ -118,7 +142,8 @@ def brief(task: Task, started: datetime, git: bool) -> str:
         f"{len(task.stages)} stages, revealed one at a time. Any AI assistant is allowed. In this folder:\n\n"
         "- `ib test` runs your own tests.\n"
         "- `ib next` reveals the next stage (it is added to this file).\n"
-        "- `ib grade` runs the hidden tests and scores your work; `ib grade --judge` adds the AI review.\n"
+        "- `ib grade` runs the hidden tests and scores your work; `ib grade --judge` adds the AI review "
+        "once every stage is revealed.\n"
         "- Write what you found and why in `NOTES.md`; it is graded too.\n"
         f"{history}"
         "- In VS Code, Cursor, Windsurf or Qoder the same commands are under *Terminal > Run Task*.\n\n"
@@ -200,8 +225,11 @@ def write_editor_tasks(workspace: Path) -> bool:
         task("run my tests", "test", group={"kind": "test", "isDefault": True}),
         task("next stage", "next"),
         task("grade", "grade"),
-        task("grade with the AI judge", "grade", "--judge"),
-        task("export the judge prompt (saved outside this folder; paste into any chatbot)", "grade", "--judge-export"),
+        task("grade with the AI judge (once every stage is revealed)", "grade", "--judge"),
+        task(
+            "export the judge prompt (once every stage is revealed; saved outside this folder; paste into any chatbot)",
+            "grade", "--judge-export",
+        ),
     ]
     path.parent.mkdir(exist_ok=True)
     path.write_text(json.dumps({"version": "2.0.0", "tasks": tasks}, indent=2) + "\n", encoding="utf-8")
@@ -214,7 +242,7 @@ def write_editor_tasks(workspace: Path) -> bool:
 def _git(workspace: Path, *args: str) -> None:
     subprocess.run(
         ["git", "-C", str(workspace), *args], check=True, capture_output=True, text=True,
-        stdin=subprocess.DEVNULL,
+        encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL,  # git writes UTF-8, not the locale's code page
     )
 
 

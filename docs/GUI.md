@@ -1,8 +1,9 @@
-# Local GUI
+# The local GUI: architecture and API
 
-`ib ui` starts a small web app on this computer and opens it in the browser. Everything a candidate
-does with `ib` in a terminal, they can do there. The GUI is a second front end over the same code as
-the CLI: neither contains workflow logic of its own.
+This document describes how the GUI is built and its HTTP API. It is for people changing the GUI.
+To use it, run `ib` or `ib ui` (see the README). Everything a candidate does with `ib` in a
+terminal, they can do there. The GUI is a second front end over the same code as the CLI: neither
+contains workflow logic of its own.
 
 ## Design rules
 
@@ -14,6 +15,9 @@ the CLI: neither contains workflow logic of its own.
 - **The GUI never spoils a stage.** Only revealed stages are sent to the browser. Grading runs every
   stage's hidden tests, but failures for unrevealed stages are withheld and shown as a count. The
   same rules (`report.py`) apply to `ib-report.md`, which the candidate's AI assistant can read.
+  The AI judge is shown every stage's brief, hidden tests and reference solution, and its review can
+  describe any of them, so in a round it runs only once every stage is revealed (`all_revealed`).
+  `ib break` referees attack tests with the reference solution for the revealed stages only.
 - **Secrets stay out of the workspace and the environment.** API keys typed into the GUI live in the
   server's memory, are passed to the judge as arguments, and are never written to disk, logged,
   returned by the API, or placed in `os.environ` (`LocalRunner` hands its environment to candidate
@@ -169,6 +173,11 @@ are, and `error`, if the stage couldn't run, is a fixed sentence rather than tes
 `auto` criterion follows suit: its `description` as in `Task`, and its `evidence` if that quoted an
 error.
 
+Any judge (`judge: "api"` or `"prepare"`, `judge-reply`, `judge-prompt`) answers `400 bad_request`
+while stages remain hidden, before anything runs: "The AI judge reviews the whole round, so it runs
+once every stage is revealed (you are on stage 1 of 3). ..." The *Grade* panel says so instead of
+offering the judge. `ib grade --all-stages` and a hand-back folder without a round marker aren't limited.
+
 `judge: "api"` needs a working setting, and when it fails the hidden-test scores still come back with
 `judge_error` set, as in the CLI. `judge-reply` and repeat judge runs reuse the stored grade when the
 workspace is unchanged (a fingerprint of the graded files) and the runner is the same, so they don't
@@ -177,7 +186,9 @@ restart: `judge-prompt` answers `404` again, and `judge-reply` rebuilds the prom
 
 `BreakResult` is `{attacks: [{name, verdict: "real break"|"survived"|"bad test", detail}], counts:
 {real_break, survived, bad_test}, runner, finished_at}`. `filename` is a bare file name (letters,
-digits, `.`, `_` and `-`); the attack file is written to a temp folder, never to the workspace.
+digits, `.`, `_` and `-`); the attack file is written to a temp folder, never to the workspace. A
+test that fails on the reference, or that didn't run on the candidate's code, is a `bad test`: only a
+failure that ran counts as a `real break`. The CLI refuses an attack file inside the workspace.
 
 ### Jobs
 

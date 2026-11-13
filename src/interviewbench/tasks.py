@@ -14,6 +14,7 @@ few interviewbench-only extras. The full contract is in docs/TASK_FORMAT.md:
 
 from __future__ import annotations
 
+import math
 import os
 import re
 import sys
@@ -128,10 +129,14 @@ def bench_root() -> Path:
     env = os.environ.get("IB_ROOT")
     if env:
         return Path(env)
-    bundled = Path(__file__).parent / "_bench"
-    if bundled.is_dir():
-        return bundled
+    if bench_is_bundled():
+        return Path(__file__).parent / "_bench"
     return Path(__file__).resolve().parents[2]
+
+
+def bench_is_bundled() -> bool:
+    """Whether the tasks are the copy a pip or wheel install put inside the package (replaced on upgrade)."""
+    return not os.environ.get("IB_ROOT") and (Path(__file__).parent / "_bench").is_dir()
 
 
 def tasks_root() -> Path:
@@ -155,29 +160,37 @@ def categories(root: Path | None = None) -> list[str]:
 # --- Loading --------------------------------------------------------------------------------
 
 
-def _read_yaml(path: Path) -> dict:
+def _read_text(path: Path) -> str:
     if not path.is_file():
         raise TaskError(f"Missing {path}")
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    try:
+        return path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise TaskError(f"{path} is not UTF-8 text ({exc.reason} at byte {exc.start}). Save it as UTF-8.") from exc
+    except OSError as exc:
+        raise TaskError(f"Can't read {path}: {exc}") from exc
+
+
+def _read_yaml(path: Path) -> dict:
+    try:
+        data = yaml.safe_load(_read_text(path))
+    except yaml.YAMLError as exc:
+        raise TaskError(f"{path} is not valid YAML: {exc}") from exc
     if not isinstance(data, dict):
         raise TaskError(f"{path} must contain a mapping")
     return data
 
 
 def _read_toml(path: Path) -> dict:
-    if not path.is_file():
-        raise TaskError(f"Missing {path}")
     try:
-        return tomllib.loads(path.read_text(encoding="utf-8"))
+        return tomllib.loads(_read_text(path))
     except tomllib.TOMLDecodeError as exc:
         raise TaskError(f"{path} is not valid TOML: {exc}") from exc
 
 
 def _title(instruction: Path) -> tuple[str, str]:
     """Split an instruction.md into its `# Title` and the rest."""
-    if not instruction.is_file():
-        raise TaskError(f"Missing {instruction}")
-    text = instruction.read_text(encoding="utf-8").strip()
+    text = _read_text(instruction).strip()
     first, _, rest = text.partition("\n")
     if not first.startswith("# "):
         raise TaskError(f"{instruction} must start with a '# Title' line")
@@ -218,10 +231,11 @@ def load_task(task_dir: Path) -> Task:
         (rubric_root / f"{category}.yaml", _read_yaml(rubric_root / f"{category}.yaml")),
         (task_dir / "rubric.yaml", _read_yaml(task_dir / "rubric.yaml")),
     ]
+    toml_path = task_dir / "task.toml"
     try:
-        info = config["task"]
-        meta = config.get("metadata", {})
-        ib = meta.get("interviewbench", {})
+        info = _table(config, "task", toml_path)
+        meta = _table(config, "metadata", toml_path)
+        ib = _table(meta, "interviewbench", toml_path, "metadata.interviewbench")
         stages = []
         for i, step in enumerate(config.get("steps") or [], start=1):
             if step["name"] != f"stage-{i}":
@@ -241,7 +255,7 @@ def load_task(task_dir: Path) -> Task:
             )
             for c in merged
         ]
-        env = config.get("environment", {})
+        env = _table(config, "environment", toml_path)
         task = Task(
             id=str(info["name"]).partition("/")[2] or str(info["name"]),
             title=info["description"],
@@ -256,16 +270,24 @@ def load_task(task_dir: Path) -> Task:
             focus=focus,
             path=task_dir,
             business=str(layers[-1][1].get("business") or "").strip(),
-            verifier_timeout=int(config.get("verifier", {}).get("timeout_sec", 120)),
+            verifier_timeout=int(_table(config, "verifier", toml_path).get("timeout_sec", 120)),
             candidate_tests=ib.get("candidate_tests"),
             attack_dir=str(ib.get("attack_dir", "tests")).strip("/") or ".",
             cpus=env.get("cpus"),
             memory_mb=env.get("memory_mb"),
         )
-    except (KeyError, TypeError, ValueError) as exc:
+        _validate(task, config)
+    except (AttributeError, KeyError, TypeError, ValueError) as exc:
         raise TaskError(f"Invalid task definition in {task_dir}: missing or bad field {exc!r}") from exc
-    _validate(task, config)
     return task
+
+
+def _table(parent: dict, key: str, path: Path, name: str | None = None) -> dict:
+    """A TOML table that may be left out, but must be a table if it is there."""
+    value = parent.get(key, {})
+    if not isinstance(value, dict):
+        raise TaskError(f"{path}: [{name or key}] must be a table, not {type(value).__name__}")
+    return value
 
 
 # --- Validation -----------------------------------------------------------------------------
@@ -315,8 +337,8 @@ def _validate(task: Task, config: dict) -> None:
     for c in task.criteria:
         if c.type not in CRITERION_TYPES:
             fail(f"criterion '{c.id}' has type '{c.type}'; expected one of {CRITERION_TYPES}")
-        if c.weight <= 0:
-            fail(f"criterion '{c.id}' must have a positive weight")
+        if not math.isfinite(c.weight) or c.weight <= 0:  # NaN fails every comparison, so check it first
+            fail(f"criterion '{c.id}' must have a positive weight, got {c.weight:g}")
         if c.type == "auto" and c.stage not in stage_numbers:
             fail(f"auto criterion '{c.id}' must reference an existing stage")
         if c.type == "judge" and (len(c.levels) < 2 or sorted(c.levels) != list(range(len(c.levels)))):
@@ -339,16 +361,31 @@ def _task_dirs(root: Path) -> list[Path]:
     return sorted(d for d in root.glob("*/*") if (d / "task.toml").is_file())
 
 
-def load_all(root: Path | None = None) -> list[Task]:
+def load_each(root: Path | None = None) -> list[tuple[Path, Task | TaskError]]:
+    """Every task folder with its task, or the TaskError that stops it loading: one broken task
+    doesn't hide the others. A task id used twice is an error for both folders."""
     root = root or tasks_root()
-    if not root.is_dir():
-        return []
-    tasks = [load_task(d) for d in _task_dirs(root)]
-    seen: dict[str, Path] = {}
-    for t in tasks:
-        if t.id in seen:
-            raise TaskError(f"Task id '{t.id}' is used twice: {seen[t.id]} and {t.path}")
-        seen[t.id] = t.path
+    dirs = _task_dirs(root) if root.is_dir() else []
+    loaded: list[tuple[Path, Task | TaskError]] = []
+    for d in dirs:
+        twins = [other for other in dirs if other.name == d.name]
+        if len(twins) > 1:
+            loaded.append((d, TaskError(f"Task id '{d.name}' is used twice: {twins[0]} and {twins[1]}")))
+            continue
+        try:
+            loaded.append((d, load_task(d)))
+        except TaskError as exc:
+            loaded.append((d, exc))
+    return loaded
+
+
+def load_all(root: Path | None = None) -> list[Task]:
+    """Every task. Raises TaskError if any of them doesn't load."""
+    tasks = []
+    for _, task in load_each(root):
+        if isinstance(task, TaskError):
+            raise task
+        tasks.append(task)
     return tasks
 
 

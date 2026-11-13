@@ -7,7 +7,7 @@ import { html } from "../../../preact.js";
 const VERDICTS = {
   "real break": { kind: "fail", icon: "crack", label: "Real break", meaning: "Fails on your code but passes on the reference. This is a bug worth fixing." },
   survived: { kind: "ok", icon: "check", label: "Survived", meaning: "Passes on both. Your code held up." },
-  "bad test": { kind: "", icon: "ring", label: "Bad test", meaning: "Fails on the reference too, so the test is wrong. It's ignored." },
+  "bad test": { kind: "", icon: "ring", label: "Bad test", meaning: "Fails on the reference too, so the test is wrong, or it didn't run on your code. It's ignored." },
 };
 const ORDER = ["real break", "survived", "bad test"];
 
