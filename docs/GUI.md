@@ -15,6 +15,8 @@ contains workflow logic of its own.
 - **The GUI never spoils a stage.** Only revealed stages are sent to the browser. Grading runs every
   stage's hidden tests, but failures for unrevealed stages are withheld and shown as a count. The
   same rules (`report.py`) apply to `ib-report.md`, which the candidate's AI assistant can read.
+  The AI judge is shown every stage's brief, hidden tests and reference solution, and its review can
+  describe any of them, so in a round it runs only once every stage is revealed (`all_revealed`).
 - **Secrets stay out of the workspace and the environment.** API keys typed into the GUI live in the
   server's memory, are passed to the judge as arguments, and are never written to disk, logged,
   returned by the API, or placed in `os.environ` (`LocalRunner` hands its environment to candidate
@@ -169,6 +171,11 @@ For an unrevealed stage, `title` is null, `failures` is `[]`, `withheld_failures
 are, and `error`, if the stage couldn't run, is a fixed sentence rather than test output. The stage's
 `auto` criterion follows suit: its `description` as in `Task`, and its `evidence` if that quoted an
 error.
+
+Any judge (`judge: "api"` or `"prepare"`, `judge-reply`, `judge-prompt`) answers `400 bad_request`
+while stages remain hidden, before anything runs: "The AI judge reviews the whole round, so it runs
+once every stage is revealed (you are on stage 1 of 3). ..." The *Grade* panel says so instead of
+offering the judge. `ib grade --all-stages` and a hand-back folder without a round marker aren't limited.
 
 `judge: "api"` needs a working setting, and when it fails the hidden-test scores still come back with
 `judge_error` set, as in the CLI. `judge-reply` and repeat judge runs reuse the stored grade when the

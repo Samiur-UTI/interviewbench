@@ -40,9 +40,11 @@ def answer(task, **overrides):
 
 @pytest.fixture
 def workspace(tmp_path, solution_dir):
+    """A finished round: every stage solved and revealed, so the judge may run."""
     dest = tmp_path / "ws"
     shutil.copytree(solution_dir, dest)
-    (dest / MARKER).write_text(json.dumps({"task": "rate-limiter", "started_at": "2026-01-01T00:00:00+00:00"}))
+    marker = {"task": "rate-limiter", "started_at": "2026-01-01T00:00:00+00:00", "stage": 3}
+    (dest / MARKER).write_text(json.dumps(marker))
     return dest
 
 

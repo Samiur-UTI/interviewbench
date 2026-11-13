@@ -142,7 +142,8 @@ def brief(task: Task, started: datetime, git: bool) -> str:
         f"{len(task.stages)} stages, revealed one at a time. Any AI assistant is allowed. In this folder:\n\n"
         "- `ib test` runs your own tests.\n"
         "- `ib next` reveals the next stage (it is added to this file).\n"
-        "- `ib grade` runs the hidden tests and scores your work; `ib grade --judge` adds the AI review.\n"
+        "- `ib grade` runs the hidden tests and scores your work; `ib grade --judge` adds the AI review "
+        "once every stage is revealed.\n"
         "- Write what you found and why in `NOTES.md`; it is graded too.\n"
         f"{history}"
         "- In VS Code, Cursor, Windsurf or Qoder the same commands are under *Terminal > Run Task*.\n\n"
@@ -224,8 +225,11 @@ def write_editor_tasks(workspace: Path) -> bool:
         task("run my tests", "test", group={"kind": "test", "isDefault": True}),
         task("next stage", "next"),
         task("grade", "grade"),
-        task("grade with the AI judge", "grade", "--judge"),
-        task("export the judge prompt (saved outside this folder; paste into any chatbot)", "grade", "--judge-export"),
+        task("grade with the AI judge (once every stage is revealed)", "grade", "--judge"),
+        task(
+            "export the judge prompt (once every stage is revealed; saved outside this folder; paste into any chatbot)",
+            "grade", "--judge-export",
+        ),
     ]
     path.parent.mkdir(exist_ok=True)
     path.write_text(json.dumps({"version": "2.0.0", "tasks": tasks}, indent=2) + "\n", encoding="utf-8")

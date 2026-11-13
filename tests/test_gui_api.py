@@ -14,6 +14,7 @@ from conftest import RUNNER_KIND
 from interviewbench import rounds
 from interviewbench import workspace as ws
 from interviewbench.grader import StageResult, grade
+from interviewbench.judge import JudgeRequest
 from interviewbench.runner import RunnerError
 from interviewbench.tasks import JUDGE_PROMPT, MARKER, REPORT, UI_STATE, get_task
 from interviewbench.ui import server as ui_server
@@ -99,9 +100,14 @@ class Client:
         assert job["state"] == "succeeded", job
         return job["result"]
 
-    def start(self, **body):
+    def start(self, revealed=False, **body):
+        """Start a round; `revealed` also reveals every stage, as the AI judge needs."""
         reply = self.post("/api/rounds", {"task_id": "rate-limiter", **body})
         assert reply.status == 201, reply.text
+        round_id = reply.json["id"]
+        while revealed and not reply.json["all_revealed"]:
+            reply = self.post(f"/api/rounds/{round_id}/next")
+            assert reply.status == 200, reply.text
         return reply.json
 
 
@@ -516,7 +522,7 @@ def stuck(monkeypatch):
 
 
 def test_one_job_at_a_time_and_a_reload_can_reattach(api, stuck, rounds_dir):
-    api.start()
+    api.start(revealed=True)  # so judge-reply would run, if the round weren't busy
     job = api.post("/api/rounds/rate-limiter/test", {"runner": RUNNER_KIND}).json
     assert job["kind"] == "test" and job["round_id"] == "rate-limiter" and job["state"] == "running"
     assert stuck.wait(10)
@@ -532,7 +538,7 @@ def test_one_job_at_a_time_and_a_reload_can_reattach(api, stuck, rounds_dir):
         api.call("DELETE", "/api/rounds/rate-limiter", {"confirm": "rate-limiter"}),
     ):
         assert reply.status == 409 and reply.code == "busy"
-    assert json.loads((rounds_dir / "rate-limiter" / MARKER).read_text())["stage"] == 1
+    assert json.loads((rounds_dir / "rate-limiter" / MARKER).read_text())["stage"] == 3
     assert api.get("/api/rounds/rate-limiter/changes").status == 200  # reading stays open
 
 
@@ -621,7 +627,7 @@ def test_a_job_log_shows_each_phase(api):
 
 
 def test_judge_failure_keeps_the_hidden_test_scores(api, rounds_dir):
-    api.start()
+    api.start(revealed=True)
     api.call("PUT", "/api/settings", {"judge": {"backend": "openai", "model": "m", "base_url": ""}})
     view = api.succeeded(api.post("/api/rounds/rate-limiter/grade", {"runner": RUNNER_KIND, "judge": "api"}))
     assert "IB_JUDGE_BASE_URL" in view["judge_error"] and view["review"] is None
@@ -630,7 +636,7 @@ def test_judge_failure_keeps_the_hidden_test_scores(api, rounds_dir):
 
 
 def test_the_key_reaches_the_provider_and_nothing_else(api, provider, rounds_dir, task, monkeypatch):  # noqa: F811
-    api.start()
+    api.start(revealed=True)
     monkeypatch.delenv("IB_JUDGE_API_KEY")
     url = os.environ["IB_JUDGE_BASE_URL"]
     api.call("PUT", "/api/settings", {"judge": {"backend": "openai", "model": "m", "base_url": url, "api_key": "sk-secret"}})
@@ -651,7 +657,7 @@ def test_the_key_reaches_the_provider_and_nothing_else(api, provider, rounds_dir
 
 
 def test_a_key_quoted_by_a_provider_error_is_scrubbed(api, provider, rounds_dir, monkeypatch):  # noqa: F811
-    api.start()
+    api.start(revealed=True)
     url = os.environ["IB_JUDGE_BASE_URL"]
     api.call("PUT", "/api/settings", {"judge": {"backend": "openai", "model": "m", "base_url": url, "api_key": "sk-secret"}})
     provider.response = (401, {"error": "bad key sk-secret"})
@@ -661,7 +667,7 @@ def test_a_key_quoted_by_a_provider_error_is_scrubbed(api, provider, rounds_dir,
 
 
 def test_the_judge_prompt_stays_in_memory(api, rounds_dir):
-    api.start()
+    api.start(revealed=True)
     workspace = rounds_dir / "rate-limiter"
     assert api.get("/api/rounds/rate-limiter/judge-prompt").status == 404
     view = api.succeeded(api.post("/api/rounds/rate-limiter/grade", {"runner": RUNNER_KIND, "judge": "prepare"}))
@@ -682,7 +688,7 @@ def forbid_hidden_tests(monkeypatch):
 
 
 def test_judge_reply_reuses_the_grade_for_unchanged_code(api, task, rounds_dir, monkeypatch):
-    api.start()
+    api.start(revealed=True)
     api.succeeded(api.post("/api/rounds/rate-limiter/grade", {"runner": RUNNER_KIND, "judge": "prepare"}))
     forbid_hidden_tests(monkeypatch)
     reply = json.dumps(answer(task))
@@ -692,7 +698,7 @@ def test_judge_reply_reuses_the_grade_for_unchanged_code(api, task, rounds_dir, 
 
 
 def test_judge_reply_regrades_changed_code(api, task, rounds_dir, monkeypatch):
-    api.start()
+    api.start(revealed=True)
     api.succeeded(api.post("/api/rounds/rate-limiter/grade", {"runner": RUNNER_KIND, "judge": "prepare"}))
     (rounds_dir / "rate-limiter" / "extra.md").write_text("changed", encoding="utf-8")
     forbid_hidden_tests(monkeypatch)
@@ -701,7 +707,7 @@ def test_judge_reply_regrades_changed_code(api, task, rounds_dir, monkeypatch):
 
 
 def test_a_changed_workspace_makes_the_prompt_stale(api, rounds_dir):
-    api.start()
+    api.start(revealed=True)
     api.succeeded(api.post("/api/rounds/rate-limiter/grade", {"runner": RUNNER_KIND, "judge": "prepare"}))
     (rounds_dir / "rate-limiter" / "extra.md").write_text("changed", encoding="utf-8")
     view = api.succeeded(api.post("/api/rounds/rate-limiter/grade", {"runner": RUNNER_KIND}))
@@ -709,7 +715,7 @@ def test_a_changed_workspace_makes_the_prompt_stale(api, rounds_dir):
 
 
 def test_a_bad_pasted_reply_keeps_the_scores_and_says_why(api):
-    api.start()
+    api.start(revealed=True)
     api.succeeded(api.post("/api/rounds/rate-limiter/grade", {"runner": RUNNER_KIND, "judge": "prepare"}))
     view = api.succeeded(api.post("/api/rounds/rate-limiter/judge-reply", {"reply": "sorry, I can't"}))
     assert "no JSON object" in view["judge_error"] and view["pending_weight"] == 55
@@ -721,6 +727,28 @@ def test_a_plain_grade_always_runs_the_hidden_tests(api, monkeypatch):
     forbid_hidden_tests(monkeypatch)
     job = api.finish(api.post("/api/rounds/rate-limiter/grade", {"runner": RUNNER_KIND}))
     assert job["state"] == "failed" and "ran again" in job["error"]
+
+
+NOT_YET = "runs once every stage is revealed (you are on stage 1 of 3)"
+
+
+def test_the_judge_waits_for_every_stage_to_be_revealed(api, task, monkeypatch):
+    api.start()
+    forbid_hidden_tests(monkeypatch)
+    for mode in ("api", "prepare"):
+        reply = api.post("/api/rounds/rate-limiter/grade", {"runner": RUNNER_KIND, "judge": mode})
+        assert reply.status == 400 and reply.code == "bad_request" and NOT_YET in reply.json["error"]["message"]
+    reply = api.post("/api/rounds/rate-limiter/judge-reply", {"reply": json.dumps(answer(task))})
+    assert reply.status == 400 and NOT_YET in reply.json["error"]["message"]
+    held = JudgeRequest("<hidden_tests>", "u", {}, [], StageResult(0, 1, 1))
+    api.server.api._prepared["rate-limiter"] = ui_server.PreparedJudge(held, "any")  # e.g. a round reset by hand
+    reply = api.get("/api/rounds/rate-limiter/judge-prompt")
+    assert reply.status == 400 and NOT_YET in reply.json["error"]["message"] and "<hidden_tests>" not in reply.text
+    assert api.get("/api/rounds/rate-limiter").json["active_job"] is None  # no job was started
+
+    for _ in range(2):
+        assert api.post("/api/rounds/rate-limiter/next").status == 200
+    assert "<hidden_tests>" in api.get("/api/rounds/rate-limiter/judge-prompt").json["prompt"]
 
 
 def test_a_bad_judge_mode_is_refused(api):

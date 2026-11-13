@@ -245,17 +245,17 @@ def grade(
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Markdown report path"),
     timeout: Optional[int] = typer.Option(None, help="Per-stage test timeout in seconds (default: the task's)"),
     runner: str = typer.Option("auto", help="Where tests run: auto (docker if running, else local), docker, local"),
-    judge: bool = typer.Option(False, "--judge", help="Also score the judge criteria with an AI model (see --judge-backend)"),
+    judge: bool = typer.Option(False, "--judge", help="Also score the judge criteria with an AI model (see --judge-backend). The judge reviews the whole round, so in a round it runs once every stage is revealed (or with --all-stages)"),
     judge_backend: Optional[str] = typer.Option(None, help="claude (needs ANTHROPIC_API_KEY) or openai (any OpenAI-compatible API: set IB_JUDGE_BASE_URL and IB_JUDGE_API_KEY). Default: $IB_JUDGE_BACKEND, else claude"),
     judge_model: Optional[str] = typer.Option(None, help="Model for --judge (default: $IB_JUDGE_MODEL, else claude-opus-5-5 for claude)"),
-    judge_export: bool = typer.Option(False, "--judge-export", help="Write the judge prompt, to paste into any chatbot. It goes outside the workspace (in $IB_DATA_DIR, else your app data folder), since it holds the hidden tests; the path is printed"),
-    judge_reply: Optional[Path] = typer.Option(None, "--judge-reply", help="Score the judge criteria from a chatbot's reply to the exported prompt"),
+    judge_export: bool = typer.Option(False, "--judge-export", help="Write the judge prompt, to paste into any chatbot. Like --judge, it waits for the last stage. It goes outside the workspace (in $IB_DATA_DIR, else your app data folder), since it holds the hidden tests; the path is printed"),
+    judge_reply: Optional[Path] = typer.Option(None, "--judge-reply", help="Score the judge criteria from a chatbot's reply to the exported prompt (also once every stage is revealed)"),
     all_stages: bool = typer.Option(False, "--all-stages", help="Show which hidden tests fail in every stage, including stages the round hasn't reached (for an interviewer grading a hand-back). The report then goes to --output, else outside the workspace"),
 ) -> None:
     """Grade a workspace against the task's hidden tests and rubric, optionally with an AI judge.
 
     Every stage's hidden tests run, but inside a round only the stages you've reached show which tests
-    fail; later stages show a count.
+    fail; later stages show a count. The AI judge sees every stage, so it runs once all are revealed.
     """
     if sum((judge, judge_export, judge_reply is not None)) > 1:
         _fail("Use only one of --judge, --judge-export and --judge-reply.")
