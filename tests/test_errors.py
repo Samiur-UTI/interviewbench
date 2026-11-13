@@ -124,7 +124,6 @@ def judge_answer(task, **first):
     ({"level": {"n": 2}}, "which isn't a whole number"),
     ({"level": 1.5}, "level 1.5, which isn't a whole number"),
     ({"level": True}, "level True"),
-    ({"level": None}, "level None"),
     ({"id": ["root-cause"]}, "criterion id ['root-cause'], which isn't a string"),
     ({"id": {"x": 1}}, "which isn't a string"),
 ])
@@ -134,6 +133,7 @@ def test_a_malformed_judge_answer_is_a_judge_error(task, bad, message):
     with pytest.raises(JudgeError, match="no 'criteria' list"):
         judge._normalize([judge_answer(task)])
     assert judge._normalize(judge_answer(task, level="2"))["criteria"][0]["level"] == 2  # still lenient there
+    assert judge._normalize(judge_answer(task, level=None))["criteria"][0]["level"] is None  # that one stays ungraded
     loose = judge._normalize({**judge_answer(task), "missed_edge_cases": 3, "issues": "none"})
     assert loose["missed_edge_cases"] == [] and loose["issues"] == []
 
