@@ -206,18 +206,28 @@ def parse_reply(text: str) -> dict:
 
 def _normalize(output: dict) -> dict:
     """Make answers from models without schema enforcement safe to score. Claude's always pass through unchanged."""
-    if not isinstance(output.get("criteria"), list):
+    if not isinstance(output, dict) or not isinstance(output.get("criteria"), list):
         raise JudgeError("The judge's answer has no 'criteria' list")
+    resend = "Ask the judge to resend the JSON, following the schema."
     criteria = []
     for c in output["criteria"]:
         if not isinstance(c, dict) or "id" not in c:
             continue
+        if not isinstance(c["id"], str):
+            raise JudgeError(f"The judge's answer has a criterion id {c['id']!r}, which isn't a string. {resend}")
         level = c.get("level")
         if isinstance(level, str) and level.strip().isdigit():
             level = int(level)
+        # A level left out stays None: that criterion is then ungraded, and the rest still count.
+        if level is not None and (isinstance(level, bool) or not isinstance(level, int)):
+            raise JudgeError(
+                f"The judge's answer gives '{c['id']}' the level {level!r}, which isn't a whole number. {resend}"
+            )
         criteria.append({**c, "level": level, "rationale": str(c.get("rationale", ""))})
+    missed = output.get("missed_edge_cases")
+    issues_in = output.get("issues")
     issues = []
-    for i in output.get("issues") or []:
+    for i in issues_in if isinstance(issues_in, list) else []:
         if not isinstance(i, dict):
             continue
         issues.append(Issue(
@@ -228,7 +238,7 @@ def _normalize(output: dict) -> dict:
         ).__dict__)
     return {
         "criteria": criteria,
-        "missed_edge_cases": [str(m) for m in output.get("missed_edge_cases") or []],
+        "missed_edge_cases": [str(m) for m in missed] if isinstance(missed, list) else [],
         "issues": issues,
         "summary": str(output.get("summary", "")),
     }
@@ -387,8 +397,12 @@ def _call_claude(model: str, *, system: str, user: str, schema: dict, api_key: s
     except ImportError as exc:
         raise JudgeError('The AI judge needs the Anthropic SDK: pip install "interviewbench[judge]"') from exc
 
-    client = anthropic.Anthropic(api_key=api_key) if api_key else anthropic.Anthropic()
+    hint = "check the API key" if api_key else "set ANTHROPIC_API_KEY or run `ant auth login`"
+    # getattr: an SDK too old (or a test double) may lack them, and `except` evaluates them lazily.
+    auth_error = getattr(anthropic, "AuthenticationError", ())
+    sdk_error = getattr(anthropic, "AnthropicError", ())
     try:
+        client = anthropic.Anthropic(api_key=api_key) if api_key else anthropic.Anthropic()
         with client.beta.messages.stream(
             model=model,
             max_tokens=64000,
@@ -401,11 +415,17 @@ def _call_claude(model: str, *, system: str, user: str, schema: dict, api_key: s
             messages=[{"role": "user", "content": user}],
         ) as stream:
             message = stream.get_final_message()
-    except anthropic.AuthenticationError as exc:
-        hint = "check the API key" if api_key else "set ANTHROPIC_API_KEY or run `ant auth login`"
+    except auth_error as exc:
         raise JudgeError(f"Claude API authentication failed: {hint}") from exc
-    except anthropic.APIError as exc:
+    except sdk_error as exc:
         raise JudgeError(f"Claude API error: {exc}") from exc
+    except (TypeError, ValueError) as exc:
+        if "authentication" in str(exc).lower():  # the SDK found no API key or other credentials
+            raise JudgeError(f"No credentials for the Claude API: {hint}") from exc
+        raise JudgeError(
+            f"The installed Anthropic SDK can't make this request ({exc}). "
+            'Upgrade it: pip install -U "interviewbench[judge]"'
+        ) from exc
 
     if message.stop_reason == "refusal":
         raise JudgeError("Claude declined to grade this submission")
@@ -414,7 +434,10 @@ def _call_claude(model: str, *, system: str, user: str, schema: dict, api_key: s
     texts = [b.text for b in message.content if b.type == "text"]
     if not texts:
         raise JudgeError("The judge returned no answer")
-    return json.loads(texts[-1])
+    try:
+        return json.loads(texts[-1])
+    except json.JSONDecodeError as exc:
+        raise JudgeError(f"The judge's answer isn't valid JSON ({exc}): {texts[-1][:300]}") from exc
 
 
 def _openai_base_url(base_url: str | None = None) -> str:

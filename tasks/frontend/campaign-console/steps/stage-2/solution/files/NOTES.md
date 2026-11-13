@@ -235,7 +235,7 @@ JSON object, so a browser can't make the server buffer without limit or throw.
   `connection` message and the live region surviving a snapshot.
 - `tests/security.test.ts`: the rotated-token test now expects a pause instead of a failure.
 
-## Stage 3: many open dashboards (what cost what, what I changed, what it costs)
+## Stage 3
 
 ## How I used AI assistance (and what I checked myself)
 

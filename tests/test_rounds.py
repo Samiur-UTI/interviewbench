@@ -483,6 +483,7 @@ def test_retry_after_is_zero_for_a_full_bucket():
 
 def test_break_content_runs_from_memory_and_leaves_the_workspace_alone(tmp_path, task, runner):
     dest = rounds.start_round(task, tmp_path / "ws", git=False, open_editor=False).path
+    rounds.next_stage(task, dest, ws.read_marker(dest))  # retry_after is stage 2's
     before = rounds.fingerprint(dest)
     outcome = rounds.break_content(task, dest, "test_attack.py", ATTACK, runner)
     assert outcome.counts == {"real_break": 1, "survived": 0, "bad_test": 0}

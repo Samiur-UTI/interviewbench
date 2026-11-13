@@ -10,13 +10,15 @@ Scripts only see four folders, always through these variables (defaults are Harb
 - LocalRunner runs the script with bash on this machine, pointing the variables at temp folders.
   Fast and needs no Docker, but the task's toolchain (e.g. Python + pytest) must be installed.
   TEMP/TMP/TMPDIR point at a folder of the run's own, deleted afterwards, so temp files the
-  tests forget to remove don't pile up in the user's temp folder.
+  tests forget to remove don't pile up in the user's temp folder. Secret-looking variables
+  (see is_secret_name) are left out of the scripts' environment.
 """
 
 from __future__ import annotations
 
 import hashlib
 import os
+import re
 import shutil
 import signal
 import stat
@@ -80,12 +82,26 @@ class Runner:
 
 # --- Local ----------------------------------------------------------------------------------
 
+_SECRET_NAME = re.compile(
+    r"API_?KEY|TOKEN|SECRET|PASSW(OR)?D|_PWD$|CREDENTIAL|PRIVATE_KEY|_AUTH$|ASKPASS|CONNECTION_STRING|_DSN$"
+    r"|(DATABASE|DB|POSTGRES(QL)?|PG|MYSQL|MONGO|REDIS|AMQP|BROKER)_UR[IL]$"
+    r"|^(AWS|AZURE|ANTHROPIC|OPENAI|IB_JUDGE|GH|GITHUB|VSCODE_GIT)_|^SSH_AUTH_SOCK$",
+    re.IGNORECASE,
+)
+
+
+def is_secret_name(name: str) -> bool:
+    """Whether LocalRunner keeps this environment variable from task scripts, and so from the
+    candidate's code: API keys, tokens, passwords, cloud credentials, connection strings, credential
+    helpers. A denylist by name, because toolchains (Windows ones especially) need much of the rest."""
+    return bool(_SECRET_NAME.search(name))
+
 
 def find_bash() -> str | None:
     """bash, avoiding Windows' System32 bash.exe (WSL), which can't see Windows paths."""
     override = os.environ.get("IB_BASH")
     if override:
-        return override
+        return override if shutil.which(override) else None  # LocalRunner says what's wrong
     if sys.platform != "win32":
         return shutil.which("bash")
     git = shutil.which("git")
@@ -106,6 +122,9 @@ class LocalRunner(Runner):
     def __post_init__(self) -> None:
         self.name = "local"
         self.bash = self.bash or find_bash() or ""
+        override = os.environ.get("IB_BASH")
+        if not self.bash and override:
+            raise RunnerError(f"IB_BASH is set to {override}, but that path doesn't exist. Point it at bash or unset it.")
         if not self.bash:
             raise RunnerError(
                 "The local runner needs bash (on Windows, install Git for Windows or set IB_BASH). "
@@ -113,7 +132,7 @@ class LocalRunner(Runner):
             )
 
     def run(self, task: Task, command: str, sandbox: Sandbox, timeout: int) -> Completed:
-        env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+        env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH" and not is_secret_name(k)}
         env.update({_ENV_NAMES[k]: p.resolve().as_posix() for k, p in sandbox.folders().items()})
         # Convenience for Python tasks: use the interpreter running ib (it has pytest installed).
         env.setdefault("PYTHON", Path(sys.executable).as_posix())
@@ -144,7 +163,7 @@ def _run_tree(args: list[str], cwd: Path, env: dict[str, str], timeout: int) -> 
     """
     group = {} if os.name == "nt" else {"start_new_session": True}
     with subprocess.Popen(
-        args, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        args, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         text=True, encoding="utf-8", errors="replace", **group,
     ) as proc:
         job = _WindowsJob(proc.pid) if os.name == "nt" else None
@@ -274,19 +293,40 @@ def remove_tree(path: Path, attempts: int = 5) -> bool:
 
 
 def docker_available() -> bool:
+    """Whether Docker is running and can run the tasks' images, which are Linux ones.
+
+    Docker on Windows can be switched to Windows containers; it then answers, but can't pull them.
+    """
     if not shutil.which("docker"):
         return False
     try:
-        return subprocess.run(["docker", "info"], capture_output=True, timeout=15).returncode == 0
+        info = subprocess.run(
+            ["docker", "info", "--format", "{{.OSType}}"], stdin=subprocess.DEVNULL, capture_output=True,
+            text=True, encoding="utf-8", errors="replace", timeout=15,
+        )
     except (OSError, subprocess.TimeoutExpired):
         return False
+    return info.returncode == 0 and info.stdout.strip() == "linux"
 
 
-def _docker(*args: str, timeout: int | None = None, check: bool = True) -> subprocess.CompletedProcess:
-    proc = subprocess.run(
-        ["docker", *args], capture_output=True, text=True, encoding="utf-8", errors="replace",
-        timeout=timeout,
-    )
+DOCKER_TIMEOUT = 300  # seconds, for docker calls other than the build and the script run
+
+
+def _docker(
+    *args: str, timeout: int = DOCKER_TIMEOUT, check: bool = True, timeout_error: bool = True
+) -> subprocess.CompletedProcess:
+    """Run docker. Taking longer than `timeout` is a RunnerError, unless `timeout_error` is False."""
+    try:
+        proc = subprocess.run(
+            ["docker", *args], stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        if not timeout_error:
+            raise
+        raise RunnerError(
+            f"docker {args[0]} didn't finish within {timeout} seconds. Check that Docker is responding, then try again."
+        ) from None
     if check and proc.returncode != 0:
         raise RunnerError(f"docker {args[0]} failed:\n{_tail(proc.stdout + proc.stderr)}")
     return proc
@@ -310,7 +350,9 @@ class DockerRunner(Runner):
     def __post_init__(self) -> None:
         self.name = "docker"
         if not docker_available():
-            raise RunnerError("Docker is not available. Start Docker, or use --runner local.")
+            raise RunnerError(
+                "Docker is not available. Start Docker (with Linux containers, on Windows), or use --runner local."
+            )
 
     def image(self, task: Task) -> str:
         """Build (or reuse) the task image. The tag changes whenever environment/ changes."""
@@ -342,7 +384,7 @@ class DockerRunner(Runner):
                 if key != "logs":
                     _docker("cp", f"{host}/.", f"{name}:{CONTAINER_PATHS[key]}")
             try:
-                proc = _docker("start", "-a", name, timeout=timeout, check=False)
+                proc = _docker("start", "-a", name, timeout=timeout, check=False, timeout_error=False)
                 result = Completed(proc.returncode, proc.stdout + proc.stderr)
             except subprocess.TimeoutExpired as exc:
                 _docker("kill", name, check=False)

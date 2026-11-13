@@ -20,8 +20,8 @@ from .report import render
 from .rounds import check_task
 from .runner import Runner, RunnerError, get_runner
 from .tasks import (
-    ATTACK_PROMPT, BRIEF, FULL_REPORT, JUDGE_PROMPT, JUDGE_REPLY, MARKER, REPORT, Task, TaskError, get_task,
-    load_all,
+    ATTACK_PROMPT, BRIEF, FULL_REPORT, JUDGE_PROMPT, JUDGE_REPLY, MARKER, REPORT, Task, TaskError, categories,
+    get_task, load_each,
 )
 from .ui.server import serve
 
@@ -34,8 +34,19 @@ app = typer.Typer(
 console = Console()
 
 
+def _print_version(value: bool) -> None:
+    if value:
+        console.print(__version__)
+        raise typer.Exit()
+
+
 @app.callback()
-def _root(ctx: typer.Context) -> None:
+def _root(
+    ctx: typer.Context,
+    _version: bool = typer.Option(
+        False, "--version", callback=_print_version, is_eager=True, help="Show the interviewbench version and exit."
+    ),
+) -> None:
     _utf8_output()
     if ctx.invoked_subcommand is None:
         # The GUI is the front door; `ib --help` lists the commands for people who prefer a terminal.
@@ -73,10 +84,20 @@ def _task_or_exit(task_id: str) -> Task:
         _fail(str(exc))
 
 
-def _task_from_workspace(workspace: Path, task_id: Optional[str]) -> Task:
+def _marker_or_exit(workspace: Path, advice: str) -> Optional[dict]:
+    try:
+        return ws.load_marker(workspace)
+    except ws.MarkerError as exc:
+        _fail(f"{exc} ib can't tell which round this folder holds. {advice}")
+
+
+_NEW_ROUND = "Start a new round in a new folder: ib start <task> --dir <folder>."
+
+
+def _task_from_workspace(workspace: Path, task_id: Optional[str], advice: str) -> Task:
     if task_id:
         return _task_or_exit(task_id)
-    marker = ws.read_marker(workspace)
+    marker = _marker_or_exit(workspace, advice)
     if marker is None:
         _fail(f"{workspace} is not an interviewbench workspace (no {MARKER}). Pass --task <id>.")
     return _task_or_exit(marker["task"])
@@ -98,23 +119,32 @@ def list_tasks(
     tag: Optional[str] = typer.Option(None, "--tag", help="Only tasks with this tag"),
 ) -> None:
     """List available tasks."""
-    try:
-        tasks = load_all()
-    except TaskError as exc:
-        _fail(str(exc))
-    tasks = [
-        t for t in tasks
-        if (category is None or t.category == category) and (tag is None or tag in t.tags)
-    ]
-    table = Table()
-    for col in ("ID", "Category", "Title", "Level", "Tags", "Time"):
-        table.add_column(col)
-    for t in tasks:
-        table.add_row(
-            escape(t.id), escape(t.category), escape(t.title), escape(t.level), escape(", ".join(t.tags)),
-            f"{t.time_limit_minutes} min",
+    known = categories()
+    if category is not None and category not in known:
+        _fail(f"Unknown category '{category}'. Categories: {', '.join(known) or 'none'}.")
+    loaded = [(d, t) for d, t in load_each() if category is None or d.parent.name == category]
+    broken = [d for d, t in loaded if isinstance(t, TaskError)]
+    tasks = [t for _, t in loaded if isinstance(t, Task) and (tag is None or tag in t.tags)]
+    if tasks:
+        table = Table()
+        table.add_column("ID", no_wrap=True)  # what you type into `ib start`: never cut short
+        for col in ("Category", "Title", "Level", "Tags", "Time"):
+            table.add_column(col)
+        for t in tasks:
+            table.add_row(
+                escape(t.id), escape(t.category), escape(t.title), escape(t.level), escape(", ".join(t.tags)),
+                f"{t.time_limit_minutes} min",
+            )
+        console.print(table)
+    else:
+        where = f" in the {category} category" if category else ""
+        tagged = f" tagged '{tag}'" if tag else ""
+        console.print(f"There are no tasks{escape(where)}{escape(tagged)} yet.")
+    for d in broken:
+        console.print(
+            f"[yellow]Skipped {escape(f'{d.parent.name}/{d.name}')}:[/yellow] it doesn't load. "
+            f"Run [bold]ib validate {escape(d.name)}[/bold] to see why."
         )
-    console.print(table)
 
 
 @app.command()
@@ -152,7 +182,7 @@ def start(
 
 
 def _workspace_or_exit(dir: Path) -> tuple[Task, dict]:
-    marker = ws.read_marker(dir)
+    marker = _marker_or_exit(dir, _NEW_ROUND)
     if marker is None:
         _fail(f"{dir} is not an interviewbench workspace (no {MARKER}). Run this inside the folder `ib start` made.")
     return _task_or_exit(marker["task"]), marker
@@ -181,7 +211,7 @@ def prompt(
     dir: Path = typer.Option(Path("."), "--dir", "-d", help="Workspace directory"),
 ) -> None:
     """Show the brief for a stage (reading ahead skips the real format; prefer `ib next`)."""
-    _print_stage(_task_from_workspace(dir, task_id), stage)
+    _print_stage(_task_from_workspace(dir, task_id, "Pass the task id: ib prompt <task>."), stage)
 
 
 @app.command("test")
@@ -215,17 +245,17 @@ def grade(
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Markdown report path"),
     timeout: Optional[int] = typer.Option(None, help="Per-stage test timeout in seconds (default: the task's)"),
     runner: str = typer.Option("auto", help="Where tests run: auto (docker if running, else local), docker, local"),
-    judge: bool = typer.Option(False, "--judge", help="Also score the judge criteria with an AI model (see --judge-backend)"),
+    judge: bool = typer.Option(False, "--judge", help="Also score the judge criteria with an AI model (see --judge-backend). The judge reviews the whole round, so in a round it runs once every stage is revealed (or with --all-stages)"),
     judge_backend: Optional[str] = typer.Option(None, help="claude (needs ANTHROPIC_API_KEY) or openai (any OpenAI-compatible API: set IB_JUDGE_BASE_URL and IB_JUDGE_API_KEY). Default: $IB_JUDGE_BACKEND, else claude"),
     judge_model: Optional[str] = typer.Option(None, help="Model for --judge (default: $IB_JUDGE_MODEL, else claude-opus-5-5 for claude)"),
-    judge_export: bool = typer.Option(False, "--judge-export", help="Write the judge prompt, to paste into any chatbot. It goes outside the workspace (in $IB_DATA_DIR, else your app data folder), since it holds the hidden tests; the path is printed"),
-    judge_reply: Optional[Path] = typer.Option(None, "--judge-reply", help="Score the judge criteria from a chatbot's reply to the exported prompt"),
+    judge_export: bool = typer.Option(False, "--judge-export", help="Write the judge prompt, to paste into any chatbot. Like --judge, it waits for the last stage. It goes outside the workspace (in $IB_DATA_DIR, else your app data folder), since it holds the hidden tests; the path is printed"),
+    judge_reply: Optional[Path] = typer.Option(None, "--judge-reply", help="Score the judge criteria from a chatbot's reply to the exported prompt (also once every stage is revealed)"),
     all_stages: bool = typer.Option(False, "--all-stages", help="Show which hidden tests fail in every stage, including stages the round hasn't reached (for an interviewer grading a hand-back). The report then goes to --output, else outside the workspace"),
 ) -> None:
     """Grade a workspace against the task's hidden tests and rubric, optionally with an AI judge.
 
     Every stage's hidden tests run, but inside a round only the stages you've reached show which tests
-    fail; later stages show a count.
+    fail; later stages show a count. The AI judge sees every stage, so it runs once all are revealed.
     """
     if sum((judge, judge_export, judge_reply is not None)) > 1:
         _fail("Use only one of --judge, --judge-export and --judge-reply.")
@@ -233,7 +263,7 @@ def grade(
         _fail(f"{dir} is not a directory")
     if judge_reply is not None and not judge_reply.is_file():
         _fail(f"{judge_reply} doesn't exist. Save the chatbot's reply there first.")
-    task = _task_from_workspace(dir, task_id)
+    task = _task_from_workspace(dir, task_id, f"Pass --task <task> to grade it anyway. Or: {_NEW_ROUND}")
     backend = _runner_or_exit(runner)
     revealed = rounds.revealed_stages(task, ws.read_marker(dir))
     if all_stages and revealed is not None and revealed < len(task.stages):
@@ -308,7 +338,7 @@ def break_code(
     with console.status(f"Running the attack tests on your code and on the reference ({backend.name} runner)..."):
         try:
             outcome = rounds.break_round(task, dir, attack, backend, timeout)
-        except RunnerError as exc:
+        except (RunnerError, rounds.RoundError) as exc:
             _fail(str(exc))
     table = Table()
     for col in ("Verdict", "Attack test", "Detail"):
@@ -321,7 +351,8 @@ def break_code(
     counts = outcome.counts
     console.print(
         f"[bold]{counts['real_break']} real break(s)[/bold], {counts['survived']} survived, "
-        f"{counts['bad_test']} bad test(s) ignored (they fail on the reference solution too)."
+        f"{counts['bad_test']} bad test(s) ignored (they fail on the reference solution too, "
+        "or didn't run on your code)."
     )
 
 
@@ -349,16 +380,21 @@ def validate(
     runner: str = typer.Option("auto", help="Runner for --run: auto, docker, local"),
 ) -> None:
     """Check tasks follow docs/TASK_FORMAT.md."""
-    try:
-        tasks = [get_task(t) for t in task_ids] if task_ids else load_all()
-    except TaskError as exc:
-        _fail(str(exc))
+    loaded = load_each()
+    if task_ids:
+        unknown = [t for t in task_ids if t not in {d.name for d, _ in loaded}]
+        if unknown:
+            _fail(f"Unknown task '{unknown[0]}'. Available: {', '.join(d.name for d, _ in loaded) or 'none'}")
+        loaded = [(d, t) for d, t in loaded if d.name in task_ids]
     backend = _runner_or_exit(runner) if run else None
     failed = False
-    for task in tasks:
-        errors = check_task(task, backend) if backend else []
+    for path, task in loaded:
+        if isinstance(task, TaskError):
+            errors = [str(task)]
+        else:
+            errors = check_task(task, backend) if backend else []
         verdict = "[green]ok[/green]" if not errors else "[red]FAIL[/red]"
-        console.print(f"{verdict} {escape(f'{task.category}/{task.id}')}")
+        console.print(f"{verdict} {escape(f'{path.parent.name}/{path.name}')}")
         for error in errors:
             console.print(f"   - {error}", markup=False)
         failed = failed or bool(errors)

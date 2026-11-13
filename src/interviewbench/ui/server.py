@@ -328,10 +328,13 @@ class Api:
         judge = _field(body, "judge", str, "none")
         if judge not in ("none", "api", "prepare"):
             raise _bad_request("'judge' must be none, api or prepare.")
+        if judge != "none":
+            rounds.check_judge_ready(info.task, info.marker)
         return 202, self.jobs.start("grade", round_id, self._grade_work(info, kind, judge))
 
     def judge_reply(self, body: dict, round_id: str) -> tuple[int, dict]:
         info = rounds.load_round(round_id)
+        rounds.check_judge_ready(info.task, info.marker)
         reply = _required(body, "reply")
         grade = self._state(info.path).get("grade")
         kind = grade.get("runner") if isinstance(grade, dict) else None
@@ -372,7 +375,8 @@ class Api:
         return work
 
     def judge_prompt(self, body: dict, round_id: str) -> tuple[int, dict]:
-        rounds.load_round(round_id)
+        info = rounds.load_round(round_id)
+        rounds.check_judge_ready(info.task, info.marker)
         with self._lock:
             held = self._prepared.get(round_id)
         if held is None:

@@ -17,15 +17,15 @@ from pathlib import Path
 
 from . import workspace as ws
 from .breaker import BAD_TEST, REAL_BREAK, SURVIVED, Attack, attack_prompt, run_break
-from .grader import GradeResult, Progress, build_reference, grade, graded_files, no_progress
+from .grader import GradeResult, Progress, build_reference, grade, graded_files, no_progress, run_stage_tests
 from .judge import (
     JudgeError, JudgeRequest, _diff, _read_tree, apply_judgment, parse_reply, prepare_judge, run_judge,
 )
 from .report import to_markdown
 from .runner import Runner, RunnerError
 from .tasks import (
-    ATTACK_PROMPT, BRIEF, FULL_REPORT, JUDGE_PROMPT, REPORT, UI_STATE, Task, TaskError, _task_dirs, bench_root, categories, get_task, load_task,
-    tasks_root, templates_root,
+    ATTACK_PROMPT, BRIEF, FULL_REPORT, JUDGE_PROMPT, REPORT, UI_STATE, Task, TaskError, _task_dirs, bench_is_bundled,
+    bench_root, categories, get_task, load_task, tasks_root, templates_root,
 )
 
 SAFE_NAME = re.compile(r"[A-Za-z0-9._-]+")  # a round id or attack file name: one plain path segment
@@ -248,7 +248,7 @@ def load_round(round_id: str) -> RoundInfo:
     """A round by id. Raises UnknownRound for anything that isn't a readable round."""
     path = round_path(round_id)
     try:
-        marker = ws.read_marker(path)
+        marker = ws.load_marker(path)  # a damaged marker raises MarkerError, a ValueError
         task = get_task(marker["task"])
         stage = int(marker.get("stage", 1))
     except (AttributeError, KeyError, TypeError, ValueError, OSError, TaskError) as exc:
@@ -352,9 +352,13 @@ def grade_round(
     Every stage's hidden tests run, but the report only names the failures of stages the round has
     reached: the candidate's AI assistant reads the workspace. The full report goes to ib's private
     folder instead. `all_stages` reports everything, for an interviewer grading a hand-back.
+    The judge sees every stage, so in a round it waits for the last one (see `check_judge_ready`).
     """
     settings = settings or JudgeSettings()
-    revealed = None if all_stages else revealed_stages(task, ws.read_marker(workspace))
+    marker = ws.read_marker(workspace)
+    if judge != "none" and not all_stages:
+        check_judge_ready(task, marker)
+    revealed = None if all_stages else revealed_stages(task, marker)
     hides = revealed is not None and revealed < len(task.stages)
     full_report = private_folder(workspace) / FULL_REPORT if hides else None  # fail before the slow part
     result = prior or grade(task, workspace, runner, timeout=timeout, progress=progress)
@@ -390,6 +394,19 @@ def revealed_stages(task: Task, marker: dict | None) -> int | None:
     except (AttributeError, TypeError, ValueError):  # a damaged marker: assume the least is revealed
         stage = 1
     return max(1, min(stage, len(task.stages)))
+
+
+def check_judge_ready(task: Task, marker: dict | None) -> None:
+    """Refuse the AI judge in a round with stages still hidden: its prompt holds every stage's brief,
+    hidden tests and the reference solution, and its review can describe any of them. A hand-back
+    (no marker) is always ready. Raises RoundError."""
+    stage = revealed_stages(task, marker)
+    if stage is not None and stage < len(task.stages):
+        raise RoundError(
+            f"The AI judge reviews the whole round, so it runs once every stage is revealed (you are on "
+            f"stage {stage} of {len(task.stages)}). Reveal the remaining stages first (`ib next`), or grade "
+            "without the judge."
+        )
 
 
 def private_folder(workspace: Path) -> Path:
@@ -435,7 +452,7 @@ def tokens_estimate(text: str) -> int:
 
 
 def write_attack_prompt(task: Task, workspace: Path, marker: dict) -> Path:
-    revealed = min(int(marker.get("stage", len(task.stages))), len(task.stages))
+    revealed = revealed_stages(task, marker) or len(task.stages)
     path = workspace / ATTACK_PROMPT
     path.write_text(attack_prompt(task, workspace, revealed), encoding="utf-8")
     return path
@@ -449,8 +466,19 @@ def break_round(
     timeout: int | None = None,
     progress: Progress = no_progress,
 ) -> BreakOutcome:
-    """Run an attack test file. Raises RunnerError."""
-    return BreakOutcome(run_break(task, workspace, attack, runner, timeout, progress))
+    """Run an attack test file. Raises RunnerError, RoundError.
+
+    The reference solves only the stages the round has revealed (all of them for a hand-back), so an
+    attack is judged by the brief the candidate has, and a bad test's detail can't spoil a later stage.
+    """
+    if ws.is_inside(attack, workspace):
+        # The candidate's run would collect it too, and the duplicate would break that run.
+        raise RoundError(
+            f"{attack} is inside the workspace, so your own test run would pick it up too. Save it outside "
+            f"this folder (e.g. ../{attack.name}), then run `ib break ../{attack.name}`."
+        )
+    upto = revealed_stages(task, ws.read_marker(workspace))
+    return BreakOutcome(run_break(task, workspace, attack, runner, timeout, progress, upto=upto))
 
 
 def suggested_attack_file(task: Task) -> str:
@@ -490,11 +518,15 @@ def break_content(
 
 
 def check_task(task: Task, runner: Runner, progress: Progress = no_progress) -> list[str]:
-    """The starter fails stage 1, and after applying solutions 1..N, stage N's tests all pass."""
+    """The starter fails stage 1, and after applying solutions 1..N, stage N's tests all pass.
+
+    Each check runs only the stage it looks at: running every stage would triple the time, mostly on
+    performance tests against code that hasn't been optimised yet.
+    """
     errors = []
     try:
         progress(f"Checking that the {task.id} starter fails stage 1")
-        first = grade(task, task.starter_dir, runner).stages[0]
+        first = run_stage_tests(task, task.starter_dir, 1, runner)
         if first.error:
             errors.append(f"stage 1 tests could not run on the starter: {first.error}")
         elif first.ratio >= 1:
@@ -503,7 +535,7 @@ def check_task(task: Task, runner: Runner, progress: Progress = no_progress) -> 
             for stage in task.stages:
                 progress(f"Checking {task.id} stage {stage.number} of {len(task.stages)} against its solution")
                 ref = build_reference(task, Path(tmp) / f"ref-{stage.number}", runner, upto=stage.number)
-                result = grade(task, ref, runner).stages[stage.number - 1]
+                result = run_stage_tests(task, ref, stage.number, runner)
                 if result.error or result.total == 0 or result.passed != result.total:
                     detail = result.error or ", ".join(f.name for f in result.failures) or "no tests ran"
                     errors.append(f"after solutions 1..{stage.number}, stage {stage.number} fails: {detail}")
@@ -551,6 +583,13 @@ def templates() -> list[str]:
 
 def new_task(task_id: str, category: str, template: str | None = None) -> NewTask:
     """Create a task skeleton from a template."""
+    if bench_is_bundled():
+        raise RoundError(
+            f"ib new needs a clone of the interviewbench repo. This ib was installed as a package, so its tasks "
+            f"are in {tasks_root()}, where a new task would be lost on the next upgrade. Clone the repo, install it "
+            "with `pip install -e .` and run ib new inside the clone, or set IB_ROOT to a folder that holds "
+            "tasks/, rubrics/ and templates/."
+        )
     known = categories()
     if category not in known:
         raise RoundError(f"Unknown category '{category}'. Known: {', '.join(known)}. Add rubrics/{category}.yaml to create one.")
