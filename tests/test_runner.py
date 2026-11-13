@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -145,6 +146,60 @@ def test_docker_calls_get_no_stdin(monkeypatch):
                         subprocess.CompletedProcess(args, 0, "", ""))
     ib_runner._docker("version")
     assert asked == [subprocess.DEVNULL]
+
+
+def test_a_missing_ib_bash_is_a_runner_error(tmp_path, monkeypatch):
+    monkeypatch.setenv("IB_BASH", str(tmp_path / "nowhere" / "bash.exe"))
+    assert ib_runner.find_bash() is None  # the GUI's status check asks this; it mustn't raise
+    with pytest.raises(RunnerError, match="IB_BASH"):
+        LocalRunner()
+
+
+def fake_docker(monkeypatch, tmp_path, slow=()):
+    """A DockerRunner whose docker calls succeed at once, except the subcommands in `slow`, which time out."""
+    calls = []
+
+    def run(args, **kwargs):
+        calls.append((args, kwargs))
+        if args[1] in slow:
+            raise subprocess.TimeoutExpired(args, kwargs.get("timeout"), output=b"partial output")
+        return subprocess.CompletedProcess(args, 1 if args[1:3] == ["image", "inspect"] else 0, "", "")
+
+    monkeypatch.setattr(ib_runner, "docker_available", lambda: True)
+    monkeypatch.setattr(subprocess, "run", run)
+    (tmp_path / "environment").mkdir()
+    task = SimpleNamespace(id="demo", environment_dir=tmp_path / "environment", cpus=None, memory_mb=None)
+    return ib_runner.DockerRunner(), task, calls
+
+
+def test_a_docker_build_timeout_is_a_runner_error(tmp_path, monkeypatch):
+    docker, task, _ = fake_docker(monkeypatch, tmp_path, slow=("build",))
+    with pytest.raises(RunnerError, match="docker build"):
+        docker.image(task)
+
+
+def test_every_docker_call_has_a_timeout_that_becomes_a_runner_error(tmp_path, monkeypatch):
+    docker, task, calls = fake_docker(monkeypatch, tmp_path, slow=("cp",))
+    with pytest.raises(RunnerError, match="docker cp"):
+        docker.run(task, "true", sandbox(tmp_path / "box"), timeout=5)
+    assert [args[1] for args, _ in calls][-1] == "rm"  # the container is still removed
+    assert all(kwargs.get("timeout") for _, kwargs in calls)
+
+
+def test_a_docker_test_run_timeout_is_still_a_timed_out_result(tmp_path, monkeypatch):
+    docker, task, calls = fake_docker(monkeypatch, tmp_path, slow=("start",))
+    done = docker.run(task, "true", sandbox(tmp_path / "box"), timeout=5)
+    assert done.timed_out and "partial output" in done.output
+    assert [args[1] for args, _ in calls][-1] == "rm"
+
+
+def test_docker_containers_get_none_of_the_host_environment(tmp_path, monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-fake")
+    docker, task, calls = fake_docker(monkeypatch, tmp_path)
+    docker.run(task, "true", sandbox(tmp_path / "box"), timeout=5)
+    create = next(args for args, _ in calls if args[1] == "create")
+    env = [a for a in create if a.startswith(("-e", "--env"))]
+    assert env == ["--env=APP_DIR=/app", "--env=LOGS_DIR=/logs/verifier"]
 
 
 def test_remove_tree_deletes_read_only_files(tmp_path):

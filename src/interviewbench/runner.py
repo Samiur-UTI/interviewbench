@@ -101,7 +101,7 @@ def find_bash() -> str | None:
     """bash, avoiding Windows' System32 bash.exe (WSL), which can't see Windows paths."""
     override = os.environ.get("IB_BASH")
     if override:
-        return override
+        return override if shutil.which(override) else None  # LocalRunner says what's wrong
     if sys.platform != "win32":
         return shutil.which("bash")
     git = shutil.which("git")
@@ -122,6 +122,9 @@ class LocalRunner(Runner):
     def __post_init__(self) -> None:
         self.name = "local"
         self.bash = self.bash or find_bash() or ""
+        override = os.environ.get("IB_BASH")
+        if not self.bash and override:
+            raise RunnerError(f"IB_BASH is set to {override}, but that path doesn't exist. Point it at bash or unset it.")
         if not self.bash:
             raise RunnerError(
                 "The local runner needs bash (on Windows, install Git for Windows or set IB_BASH). "
@@ -298,11 +301,24 @@ def docker_available() -> bool:
         return False
 
 
-def _docker(*args: str, timeout: int | None = None, check: bool = True) -> subprocess.CompletedProcess:
-    proc = subprocess.run(
-        ["docker", *args], stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding="utf-8", errors="replace",
-        timeout=timeout,
-    )
+DOCKER_TIMEOUT = 300  # seconds, for docker calls other than the build and the script run
+
+
+def _docker(
+    *args: str, timeout: int = DOCKER_TIMEOUT, check: bool = True, timeout_error: bool = True
+) -> subprocess.CompletedProcess:
+    """Run docker. Taking longer than `timeout` is a RunnerError, unless `timeout_error` is False."""
+    try:
+        proc = subprocess.run(
+            ["docker", *args], stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        if not timeout_error:
+            raise
+        raise RunnerError(
+            f"docker {args[0]} didn't finish within {timeout} seconds. Check that Docker is responding, then try again."
+        ) from None
     if check and proc.returncode != 0:
         raise RunnerError(f"docker {args[0]} failed:\n{_tail(proc.stdout + proc.stderr)}")
     return proc
@@ -358,7 +374,7 @@ class DockerRunner(Runner):
                 if key != "logs":
                     _docker("cp", f"{host}/.", f"{name}:{CONTAINER_PATHS[key]}")
             try:
-                proc = _docker("start", "-a", name, timeout=timeout, check=False)
+                proc = _docker("start", "-a", name, timeout=timeout, check=False, timeout_error=False)
                 result = Completed(proc.returncode, proc.stdout + proc.stderr)
             except subprocess.TimeoutExpired as exc:
                 _docker("kill", name, check=False)
