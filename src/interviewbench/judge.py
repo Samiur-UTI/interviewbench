@@ -206,18 +206,27 @@ def parse_reply(text: str) -> dict:
 
 def _normalize(output: dict) -> dict:
     """Make answers from models without schema enforcement safe to score. Claude's always pass through unchanged."""
-    if not isinstance(output.get("criteria"), list):
+    if not isinstance(output, dict) or not isinstance(output.get("criteria"), list):
         raise JudgeError("The judge's answer has no 'criteria' list")
+    resend = "Ask the judge to resend the JSON, following the schema."
     criteria = []
     for c in output["criteria"]:
         if not isinstance(c, dict) or "id" not in c:
             continue
+        if not isinstance(c["id"], str):
+            raise JudgeError(f"The judge's answer has a criterion id {c['id']!r}, which isn't a string. {resend}")
         level = c.get("level")
         if isinstance(level, str) and level.strip().isdigit():
             level = int(level)
+        if isinstance(level, bool) or not isinstance(level, int):
+            raise JudgeError(
+                f"The judge's answer gives '{c['id']}' the level {level!r}, which isn't a whole number. {resend}"
+            )
         criteria.append({**c, "level": level, "rationale": str(c.get("rationale", ""))})
+    missed = output.get("missed_edge_cases")
+    issues_in = output.get("issues")
     issues = []
-    for i in output.get("issues") or []:
+    for i in issues_in if isinstance(issues_in, list) else []:
         if not isinstance(i, dict):
             continue
         issues.append(Issue(
@@ -228,7 +237,7 @@ def _normalize(output: dict) -> dict:
         ).__dict__)
     return {
         "criteria": criteria,
-        "missed_edge_cases": [str(m) for m in output.get("missed_edge_cases") or []],
+        "missed_edge_cases": [str(m) for m in missed] if isinstance(missed, list) else [],
         "issues": issues,
         "summary": str(output.get("summary", "")),
     }
