@@ -11,6 +11,7 @@ from typer.testing import CliRunner
 
 from conftest import RUNNER_KIND
 from interviewbench import judge, rounds, tasks
+from interviewbench import cli as cli_module
 from interviewbench import workspace as ws
 from interviewbench.cli import app
 from interviewbench.judge import JudgeError
@@ -249,6 +250,23 @@ def test_new_refuses_to_write_into_an_installed_package(tmp_path, monkeypatch):
 
     monkeypatch.setenv("IB_ROOT", str(package / "_bench"))  # an explicit bench folder is the author's choice
     assert cli.invoke(app, ["new", "my-task", "--category", "backend"]).exit_code == 0
+
+
+@pytest.mark.parametrize("width", [110, 60])
+def test_list_never_cuts_off_a_task_id(monkeypatch, width):
+    monkeypatch.setattr(cli_module.console, "width", width)
+    result = cli.invoke(app, ["list"])
+    assert result.exit_code == 0 and "flight-search-aggregator" in result.output, result.output
+
+
+def test_list_rejects_an_unknown_category_and_says_when_one_is_empty():
+    result = cli.invoke(app, ["list", "-c", "nope"])
+    assert result.exit_code == 1 and "Unknown category 'nope'. Categories: backend, devops, frontend." in flat(result.output)
+    result = cli.invoke(app, ["list", "-c", "devops"])
+    assert result.exit_code == 0 and "There are no tasks in the devops category yet." in flat(result.output)
+    assert "ID" not in result.output  # no empty table
+    result = cli.invoke(app, ["list", "--tag", "cobol"])
+    assert result.exit_code == 0 and "There are no tasks tagged 'cobol' yet." in flat(result.output)
 
 
 def test_validate_still_reports_unknown_and_duplicate_ids(bench):

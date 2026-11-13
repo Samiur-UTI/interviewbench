@@ -20,8 +20,8 @@ from .report import render
 from .rounds import check_task
 from .runner import Runner, RunnerError, get_runner
 from .tasks import (
-    ATTACK_PROMPT, BRIEF, FULL_REPORT, JUDGE_PROMPT, JUDGE_REPLY, MARKER, REPORT, Task, TaskError, get_task,
-    load_each,
+    ATTACK_PROMPT, BRIEF, FULL_REPORT, JUDGE_PROMPT, JUDGE_REPLY, MARKER, REPORT, Task, TaskError, categories,
+    get_task, load_each,
 )
 from .ui.server import serve
 
@@ -108,21 +108,27 @@ def list_tasks(
     tag: Optional[str] = typer.Option(None, "--tag", help="Only tasks with this tag"),
 ) -> None:
     """List available tasks."""
-    loaded = load_each()
+    known = categories()
+    if category is not None and category not in known:
+        _fail(f"Unknown category '{category}'. Categories: {', '.join(known) or 'none'}.")
+    loaded = [(d, t) for d, t in load_each() if category is None or d.parent.name == category]
     broken = [d for d, t in loaded if isinstance(t, TaskError)]
-    tasks = [
-        t for _, t in loaded
-        if isinstance(t, Task) and (category is None or t.category == category) and (tag is None or tag in t.tags)
-    ]
-    table = Table()
-    for col in ("ID", "Category", "Title", "Level", "Tags", "Time"):
-        table.add_column(col)
-    for t in tasks:
-        table.add_row(
-            escape(t.id), escape(t.category), escape(t.title), escape(t.level), escape(", ".join(t.tags)),
-            f"{t.time_limit_minutes} min",
-        )
-    console.print(table)
+    tasks = [t for _, t in loaded if isinstance(t, Task) and (tag is None or tag in t.tags)]
+    if tasks:
+        table = Table()
+        table.add_column("ID", no_wrap=True)  # what you type into `ib start`: never cut short
+        for col in ("Category", "Title", "Level", "Tags", "Time"):
+            table.add_column(col)
+        for t in tasks:
+            table.add_row(
+                escape(t.id), escape(t.category), escape(t.title), escape(t.level), escape(", ".join(t.tags)),
+                f"{t.time_limit_minutes} min",
+            )
+        console.print(table)
+    else:
+        where = f" in the {category} category" if category else ""
+        tagged = f" tagged '{tag}'" if tag else ""
+        console.print(f"There are no tasks{escape(where)}{escape(tagged)} yet.")
     for d in broken:
         console.print(
             f"[yellow]Skipped {escape(f'{d.parent.name}/{d.name}')}:[/yellow] it doesn't load. "
