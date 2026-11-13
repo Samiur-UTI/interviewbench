@@ -16,12 +16,14 @@ The CLI grades a candidate's (or an LLM's) solution against the rubric.
 - `docs/TASK_FORMAT.md` — the task contract; keep it in sync with `tasks.py` validation
 - `tests/` — tests for the interviewbench package itself
 - CONTRIBUTING.md, SECURITY.md, CHANGELOG.md — contributor guide, threat model and how to report problems, release notes
+- `docs/MAINTAINING.md` — how `main` is protected, the required checks, review and release steps; `.github/rulesets/` holds the branch rules
 
 ## Commands
 - Install: `python -m venv .venv && .venv/Scripts/pip install -e ".[dev]"` (Windows) or `.venv/bin/pip install -e ".[dev]"`
 - The harbor extra only installs on Python 3.12+; on older versions the Harbor checks are skipped
 - Package tests: `.venv/Scripts/python -m pytest`
 - Package tests in containers: `IB_TEST_RUNNER=docker .venv/Scripts/python -m pytest`
+- Lint: `ruff check src tests` (rules in `pyproject.toml`)
 - Try a task: `ib start rate-limiter` (workspace goes to ~/ib-workspaces/, never inside the repo), then `ib test` / `ib next` / `ib grade [--judge]` / `ib break` in that folder
 - The same in a browser: `ib ui`
 - Check tasks: `ib validate --run`; Harbor's own check: `harbor run -p tasks/backend -a oracle`

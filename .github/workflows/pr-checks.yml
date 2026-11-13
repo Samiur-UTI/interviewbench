@@ -1,0 +1,74 @@
+name: Pull request checks
+
+# Cheap checks on how a pull request is put together. They re-run when a label changes, which is
+# why they are not in ci.yml: the tests should not.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  commits:
+    name: Commit messages
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # The convention in CONTRIBUTING.md: `type(scope): subject`, for example `fix(grade): ...`.
+      - name: Every commit subject follows the convention
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          pattern='^(feat|fix|docs|test|refactor|perf|chore|build|ci|revert)(\([a-z0-9._/-]+\))?!?: .+'
+          bad=0
+          while IFS= read -r subject; do
+            if ! printf '%s\n' "$subject" | grep -Eq "$pattern"; then
+              echo "::error::Not a conventional commit subject: $subject"
+              bad=1
+            fi
+          done < <(git log --no-merges --format=%s "$BASE..$HEAD")
+          if [ "$bad" -ne 0 ]; then
+            echo "Reword the commits listed above. See 'Commits and pull requests' in CONTRIBUTING.md."
+          fi
+          exit "$bad"
+
+  tests-with-code:
+    name: Tests with code changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # A change to the package comes with a test. A maintainer adds the `no-tests-needed` label to a
+      # pull request where that makes no sense (comments, help text, a pure rename).
+      - name: A change under src/ comes with a change under tests/
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          EXEMPT: ${{ contains(github.event.pull_request.labels.*.name, 'no-tests-needed') }}
+        run: |
+          changed=$(git diff --name-only "$BASE...$HEAD")
+          if ! printf '%s\n' "$changed" | grep -q '^src/'; then
+            echo "No change under src/: nothing to check."
+            exit 0
+          fi
+          if printf '%s\n' "$changed" | grep -q '^tests/'; then
+            echo "src/ and tests/ both changed."
+            exit 0
+          fi
+          if [ "$EXEMPT" = "true" ]; then
+            echo "src/ changed without tests/, and the pull request has the no-tests-needed label."
+            exit 0
+          fi
+          echo "::error::This pull request changes src/ but not tests/. Add a test that fails without the change."
+          exit 1

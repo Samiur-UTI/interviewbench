@@ -39,8 +39,8 @@ judge = ["anthropic>=1.13,<2"]
 # Harbor scores AI agents on the tasks (`harbor run -p tasks/<category>`); the tests use it to check
 # every task is a valid Harbor task.
 harbor = ["harbor>=0.24; python_version >= '3.12'"]
-# Everything the package's own tests use.
-dev = ["interviewbench[judge,harbor]"]
+# Everything the package's own tests and CI checks use.
+dev = ["interviewbench[judge,harbor]", "ruff>=0.8"]
 
 [project.urls]
 Homepage = "https://github.com/Samiur-UTI/interviewbench"
@@ -65,3 +65,14 @@ packages = ["src/interviewbench"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+# CI runs `ruff check src tests`. The tasks are not linted: their starters hold deliberate bugs.
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "B"]
+# E501: typer's option declarations run long, and wrapping them hides the help text.
+# B008: typer declares options as call defaults.
+ignore = ["E501", "B008"]
