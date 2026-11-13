@@ -10,7 +10,7 @@ import pytest
 from typer.testing import CliRunner
 
 from conftest import RUNNER_KIND
-from interviewbench import __version__, judge, rounds, tasks
+from interviewbench import __version__, grader, judge, rounds, tasks
 from interviewbench import cli as cli_module
 from interviewbench import workspace as ws
 from interviewbench.cli import app
@@ -274,6 +274,19 @@ def test_version(args, monkeypatch):
     monkeypatch.setattr(cli_module, "ui", lambda **kwargs: pytest.fail("--version must not open the GUI"))
     result = cli.invoke(app, args)
     assert result.exit_code == 0 and result.output.strip() == __version__, result.output
+
+
+def test_check_task_runs_only_the_stage_each_check_needs(task, runner, monkeypatch):
+    ran, real = [], grader.run_stage_tests
+
+    def counting(task, workspace, stage, runner, timeout=None):
+        ran.append(stage)
+        return real(task, workspace, stage, runner, timeout)
+
+    monkeypatch.setattr(grader, "run_stage_tests", counting)
+    monkeypatch.setattr(rounds, "run_stage_tests", counting, raising=False)
+    assert rounds.check_task(task, runner) == []
+    assert ran == [1, 1, 2, 3]  # the starter on stage 1, then stage N after solutions 1..N
 
 
 def test_validate_still_reports_unknown_and_duplicate_ids(bench):
