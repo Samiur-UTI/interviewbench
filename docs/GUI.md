@@ -17,6 +17,7 @@ contains workflow logic of its own.
   same rules (`report.py`) apply to `ib-report.md`, which the candidate's AI assistant can read.
   The AI judge is shown every stage's brief, hidden tests and reference solution, and its review can
   describe any of them, so in a round it runs only once every stage is revealed (`all_revealed`).
+  `ib break` referees attack tests with the reference solution for the revealed stages only.
 - **Secrets stay out of the workspace and the environment.** API keys typed into the GUI live in the
   server's memory, are passed to the judge as arguments, and are never written to disk, logged,
   returned by the API, or placed in `os.environ` (`LocalRunner` hands its environment to candidate

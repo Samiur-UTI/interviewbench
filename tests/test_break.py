@@ -1,14 +1,18 @@
 """`ib break`: attack tests refereed by the reference solution."""
 
 import json
+import shutil
 
 import pytest
 from typer.testing import CliRunner
 
 from conftest import RUNNER_KIND
+from interviewbench import breaker, rounds
+from interviewbench import workspace as ws
 from interviewbench.breaker import BAD_TEST, REAL_BREAK, SURVIVED, run_break
 from interviewbench.cli import app
 from interviewbench.grader import build_reference
+from interviewbench.runner import RunnerError
 from interviewbench.tasks import ATTACK_PROMPT, MARKER
 
 cli = CliRunner()
@@ -97,3 +101,56 @@ def test_a_file_without_tests_is_reported(tmp_path, stage1_done):
     empty.write_text("VALUE = 1\n", encoding="utf-8")
     result = cli.invoke(app, ["break", str(empty), "--dir", str(stage1_done), "--runner", RUNNER_KIND])
     assert result.exit_code == 1 and "No attack tests ran" in " ".join(result.output.split())
+
+
+# Stage 2 makes a cost above capacity raise ValueError; until then it is just refused.
+COST_ATTACK = """\
+import pytest
+from ratelimiter import FakeClock, RateLimiter
+
+
+def test_a_cost_above_capacity_is_refused():
+    assert RateLimiter(5, 1, FakeClock()).allow("k", cost=10) is False
+
+
+def test_a_cost_above_capacity_raises():
+    with pytest.raises(ValueError):
+        RateLimiter(5, 1, FakeClock()).allow("k", cost=10)
+"""
+
+
+def test_the_reference_solves_only_the_revealed_stages(tmp_path, task, runner, monkeypatch):
+    built = []
+
+    def recording(task, dest, runner, upto=None):
+        built.append(upto)
+        return build_reference(task, dest, runner, upto=upto)
+
+    monkeypatch.setattr(breaker, "build_reference", recording)
+    dest = rounds.start_round(task, tmp_path / "ws", git=False, open_editor=False).path
+    attack = tmp_path / "attack_test.py"
+    attack.write_text(COST_ATTACK, encoding="utf-8")
+
+    result = cli.invoke(app, ["break", str(attack), "--dir", str(dest), "--runner", RUNNER_KIND])
+    assert result.exit_code == 0, result.output
+    assert built == [1] and "0 real break(s), 1 survived, 1 bad test(s)" in " ".join(result.output.split())
+    verdicts = {a.name: a.verdict for a in rounds.break_round(task, dest, attack, runner).attacks}
+    assert verdicts == {"test_a_cost_above_capacity_is_refused": SURVIVED, "test_a_cost_above_capacity_raises": BAD_TEST}
+
+    rounds.next_stage(task, dest, ws.read_marker(dest))
+    outcome = rounds.break_content(task, dest, "test_attack.py", COST_ATTACK, runner)  # the GUI's path
+    assert built == [1, 1, 2]
+    verdicts = {a.name: a.verdict for a in outcome.attacks}
+    assert verdicts == {"test_a_cost_above_capacity_is_refused": BAD_TEST, "test_a_cost_above_capacity_raises": REAL_BREAK}
+
+
+def test_a_hand_back_is_refereed_by_the_full_reference(tmp_path, task, runner, monkeypatch):
+    built = []
+    monkeypatch.setattr(breaker, "build_reference", lambda task, dest, runner, upto=None: built.append(upto) or dest)
+    monkeypatch.setattr(breaker, "_cases", lambda *args: {})  # runs nothing, so no attack tests ran
+    attack = tmp_path / "attack_test.py"
+    attack.write_text(COST_ATTACK, encoding="utf-8")
+    handback = shutil.copytree(task.starter_dir, tmp_path / "handback")  # no round marker
+    with pytest.raises(RunnerError, match="No attack tests ran"):
+        rounds.break_round(task, handback, attack, runner)
+    assert built == [None]
