@@ -17,7 +17,7 @@ from pathlib import Path
 
 from . import workspace as ws
 from .breaker import BAD_TEST, REAL_BREAK, SURVIVED, Attack, attack_prompt, run_break
-from .grader import GradeResult, Progress, build_reference, grade, graded_files, no_progress
+from .grader import GradeResult, Progress, build_reference, grade, graded_files, no_progress, run_stage_tests
 from .judge import (
     JudgeError, JudgeRequest, _diff, _read_tree, apply_judgment, parse_reply, prepare_judge, run_judge,
 )
@@ -490,11 +490,15 @@ def break_content(
 
 
 def check_task(task: Task, runner: Runner, progress: Progress = no_progress) -> list[str]:
-    """The starter fails stage 1, and after applying solutions 1..N, stage N's tests all pass."""
+    """The starter fails stage 1, and after applying solutions 1..N, stage N's tests all pass.
+
+    Each check runs only the stage it looks at: running every stage would triple the time, mostly on
+    performance tests against code that hasn't been optimised yet.
+    """
     errors = []
     try:
         progress(f"Checking that the {task.id} starter fails stage 1")
-        first = grade(task, task.starter_dir, runner).stages[0]
+        first = run_stage_tests(task, task.starter_dir, 1, runner)
         if first.error:
             errors.append(f"stage 1 tests could not run on the starter: {first.error}")
         elif first.ratio >= 1:
@@ -503,7 +507,7 @@ def check_task(task: Task, runner: Runner, progress: Progress = no_progress) -> 
             for stage in task.stages:
                 progress(f"Checking {task.id} stage {stage.number} of {len(task.stages)} against its solution")
                 ref = build_reference(task, Path(tmp) / f"ref-{stage.number}", runner, upto=stage.number)
-                result = grade(task, ref, runner).stages[stage.number - 1]
+                result = run_stage_tests(task, ref, stage.number, runner)
                 if result.error or result.total == 0 or result.passed != result.total:
                     detail = result.error or ", ".join(f.name for f in result.failures) or "no tests ran"
                     errors.append(f"after solutions 1..{stage.number}, stage {stage.number} fails: {detail}")
