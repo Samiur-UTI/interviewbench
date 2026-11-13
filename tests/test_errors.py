@@ -95,6 +95,17 @@ def test_one_broken_task_leaves_the_others_usable(bench, damage):
     assert checks["rate-limiter"] == [] and checks["spare"]
 
 
+@pytest.mark.parametrize("weight", [".nan", ".inf", "-5", "0"])
+def test_a_weight_must_be_a_positive_number(bench, weight):
+    rubric = spare(bench) / "rubric.yaml"
+    old = "  - id: communication\n    weight: 5\n"
+    assert old in rubric.read_text(encoding="utf-8")
+    rubric.write_text(rubric.read_text(encoding="utf-8").replace(old, f"  - id: communication\n    weight: {weight}\n"),
+                      encoding="utf-8", newline="\n")
+    with pytest.raises(TaskError, match="'communication' must have a positive weight"):
+        load_task(spare(bench))
+
+
 def test_validate_still_reports_unknown_and_duplicate_ids(bench):
     result = cli.invoke(app, ["validate", "nope"])
     assert result.exit_code == 1 and "Unknown task 'nope'" in result.output
