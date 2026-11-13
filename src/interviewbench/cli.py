@@ -26,7 +26,7 @@ from .tasks import (
 from .ui.server import serve
 
 app = typer.Typer(
-    help="Realistic AI-era coding interview tasks with rubrics and a grader.\n\n"
+    help="Realistic tasks for AI-assisted coding interviews, with rubrics and a grader.\n\n"
     "Run `ib` alone to open the GUI in your browser, or use the commands below.",
     invoke_without_command=True,
     add_completion=False,

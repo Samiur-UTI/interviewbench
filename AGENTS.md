@@ -3,7 +3,7 @@
 Shared by every agent working in this repo (Qoder, Claude Code, others). Keep it short and current.
 
 ## What this is
-Open-source kit of realistic "AI-enabled" coding interview tasks. Each task is a small multi-file repo with
+Open-source kit of realistic tasks for AI-assisted coding interviews. Each task is a small multi-file repo with
 three stages (fix a bug → add a feature → optimize), hidden tests per stage, and a weighted rubric.
 The CLI grades a candidate's (or an LLM's) solution against the rubric.
 

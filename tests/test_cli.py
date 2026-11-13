@@ -14,6 +14,12 @@ from interviewbench.tasks import BRIEF, FULL_REPORT, MARKER, REPORT, bench_root
 runner = CliRunner()
 
 
+def test_help_says_what_ib_is_in_the_readmes_words():
+    result = runner.invoke(app, ["--help"])
+    assert result.exit_code == 0
+    assert "AI-assisted coding interviews" in " ".join(result.output.split())
+
+
 def test_list_shows_tasks():
     result = runner.invoke(app, ["list"])
     assert result.exit_code == 0
