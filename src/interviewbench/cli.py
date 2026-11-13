@@ -338,7 +338,7 @@ def break_code(
     with console.status(f"Running the attack tests on your code and on the reference ({backend.name} runner)..."):
         try:
             outcome = rounds.break_round(task, dir, attack, backend, timeout)
-        except RunnerError as exc:
+        except (RunnerError, rounds.RoundError) as exc:
             _fail(str(exc))
     table = Table()
     for col in ("Verdict", "Attack test", "Detail"):
@@ -351,7 +351,8 @@ def break_code(
     counts = outcome.counts
     console.print(
         f"[bold]{counts['real_break']} real break(s)[/bold], {counts['survived']} survived, "
-        f"{counts['bad_test']} bad test(s) ignored (they fail on the reference solution too)."
+        f"{counts['bad_test']} bad test(s) ignored (they fail on the reference solution too, "
+        "or didn't run on your code)."
     )
 
 

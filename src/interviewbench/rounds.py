@@ -466,11 +466,17 @@ def break_round(
     timeout: int | None = None,
     progress: Progress = no_progress,
 ) -> BreakOutcome:
-    """Run an attack test file. Raises RunnerError.
+    """Run an attack test file. Raises RunnerError, RoundError.
 
     The reference solves only the stages the round has revealed (all of them for a hand-back), so an
     attack is judged by the brief the candidate has, and a bad test's detail can't spoil a later stage.
     """
+    if ws.is_inside(attack, workspace):
+        # The candidate's run would collect it too, and the duplicate would break that run.
+        raise RoundError(
+            f"{attack} is inside the workspace, so your own test run would pick it up too. Save it outside "
+            f"this folder (e.g. ../{attack.name}), then run `ib break ../{attack.name}`."
+        )
     upto = revealed_stages(task, ws.read_marker(workspace))
     return BreakOutcome(run_break(task, workspace, attack, runner, timeout, progress, upto=upto))
 
