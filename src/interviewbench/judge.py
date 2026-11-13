@@ -218,7 +218,8 @@ def _normalize(output: dict) -> dict:
         level = c.get("level")
         if isinstance(level, str) and level.strip().isdigit():
             level = int(level)
-        if isinstance(level, bool) or not isinstance(level, int):
+        # A level left out stays None: that criterion is then ungraded, and the rest still count.
+        if level is not None and (isinstance(level, bool) or not isinstance(level, int)):
             raise JudgeError(
                 f"The judge's answer gives '{c['id']}' the level {level!r}, which isn't a whole number. {resend}"
             )
