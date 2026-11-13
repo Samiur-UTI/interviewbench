@@ -21,7 +21,7 @@ from .rounds import check_task
 from .runner import Runner, RunnerError, get_runner
 from .tasks import (
     ATTACK_PROMPT, BRIEF, FULL_REPORT, JUDGE_PROMPT, JUDGE_REPLY, MARKER, REPORT, Task, TaskError, get_task,
-    load_all,
+    load_each,
 )
 from .ui.server import serve
 
@@ -98,13 +98,11 @@ def list_tasks(
     tag: Optional[str] = typer.Option(None, "--tag", help="Only tasks with this tag"),
 ) -> None:
     """List available tasks."""
-    try:
-        tasks = load_all()
-    except TaskError as exc:
-        _fail(str(exc))
+    loaded = load_each()
+    broken = [d for d, t in loaded if isinstance(t, TaskError)]
     tasks = [
-        t for t in tasks
-        if (category is None or t.category == category) and (tag is None or tag in t.tags)
+        t for _, t in loaded
+        if isinstance(t, Task) and (category is None or t.category == category) and (tag is None or tag in t.tags)
     ]
     table = Table()
     for col in ("ID", "Category", "Title", "Level", "Tags", "Time"):
@@ -115,6 +113,11 @@ def list_tasks(
             f"{t.time_limit_minutes} min",
         )
     console.print(table)
+    for d in broken:
+        console.print(
+            f"[yellow]Skipped {escape(f'{d.parent.name}/{d.name}')}:[/yellow] it doesn't load. "
+            f"Run [bold]ib validate {escape(d.name)}[/bold] to see why."
+        )
 
 
 @app.command()
@@ -349,16 +352,21 @@ def validate(
     runner: str = typer.Option("auto", help="Runner for --run: auto, docker, local"),
 ) -> None:
     """Check tasks follow docs/TASK_FORMAT.md."""
-    try:
-        tasks = [get_task(t) for t in task_ids] if task_ids else load_all()
-    except TaskError as exc:
-        _fail(str(exc))
+    loaded = load_each()
+    if task_ids:
+        unknown = [t for t in task_ids if t not in {d.name for d, _ in loaded}]
+        if unknown:
+            _fail(f"Unknown task '{unknown[0]}'. Available: {', '.join(d.name for d, _ in loaded) or 'none'}")
+        loaded = [(d, t) for d, t in loaded if d.name in task_ids]
     backend = _runner_or_exit(runner) if run else None
     failed = False
-    for task in tasks:
-        errors = check_task(task, backend) if backend else []
+    for path, task in loaded:
+        if isinstance(task, TaskError):
+            errors = [str(task)]
+        else:
+            errors = check_task(task, backend) if backend else []
         verdict = "[green]ok[/green]" if not errors else "[red]FAIL[/red]"
-        console.print(f"{verdict} {escape(f'{task.category}/{task.id}')}")
+        console.print(f"{verdict} {escape(f'{path.parent.name}/{path.name}')}")
         for error in errors:
             console.print(f"   - {error}", markup=False)
         failed = failed or bool(errors)
