@@ -1,248 +1,300 @@
 # interviewbench
 
-A framework for realistic AI-assisted coding interview tasks: small multi-file repos with three
-stages, hidden tests, a weighted rubric, and a grader (`ib`) that scores a solution, optionally
-with an AI judge. The same task folders are [Harbor](https://harborframework.com) tasks, so you can
-also use them to evaluate AI coding agents.
+Practice tasks for AI-assisted coding interviews, with hidden tests, a rubric and a grader (`ib`)
+that runs on your own machine. For engineers preparing for interviews where AI tools are allowed.
 
-Early release: 3 tasks (see [Status and limitations](#status-and-limitations)).
+[![CI](https://github.com/Samiur-UTI/interviewbench/actions/workflows/ci.yml/badge.svg)](https://github.com/Samiur-UTI/interviewbench/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
 
-**Who it's for**
+![A round of the rate-limiter task in the ib GUI: the stage 2 brief on the left, the Tests panel with 5 of 5 tests passed on the right, and a stage stepper with stage 3 not revealed yet](docs/images/gui-round.png)
 
-- **Engineers practising for AI-assisted interviews.** Work through a task with your own AI tools,
-  then grade yourself.
-- **Hiring teams.** Write your own private tasks in the same format and grade candidates with `ib`.
-  Don't use the shipped tasks to vet real candidates: see [About the shipped tasks](#about-the-shipped-tasks).
-- **People evaluating LLMs.** Run any task under Harbor with the agent and model of your choice.
+## What you get
 
-## Prerequisites
+- **Three original tasks**, each a small multi-file repo in three stages: fix a bug, add a feature,
+  then optimize. One is Python, two are TypeScript.
+- **A grader** that runs hidden tests and scores a weighted rubric, without spoiling the stages you
+  haven't reached.
+- **A browser GUI and a CLI** over the same rounds. Use your own editor and AI tools.
+- **An optional AI judge** for what tests can't measure, and `ib break`, which asks an LLM to break
+  your code.
+- **Harbor tasks**: the same folders score AI coding agents with [Harbor](https://harborframework.com).
 
-- **Python 3.10+** and **git**.
-- Somewhere to run the tests, one of:
-  - **Docker** (the default when it's running). Each task's toolchain comes in its image, so you
-    need nothing else.
-  - **bash**, for the local runner (`--runner local`). On Windows, install
-    [Git for Windows](https://gitforwindows.org/); `ib` finds its bash. With this runner the task's
-    toolchain must be on your machine: the Python task uses the Python running `ib`, and the
-    TypeScript tasks need **Node.js 24.11 or later** on your PATH.
-- For Harbor only: Python 3.12+ and Docker.
+## Contents
 
-## Install
+[Quickstart](#quickstart) · [How a round works](#how-a-round-works) · [The tasks](#the-tasks) ·
+[Commands](#commands) · [The AI judge](#the-ai-judge) · [For hiring teams](#for-hiring-teams) ·
+[Harbor](#for-evaluating-llms-with-harbor) · [Configuration](#configuration) ·
+[Troubleshooting](#troubleshooting) · [Status and limitations](#status-and-limitations)
 
-With [uv](https://docs.astral.sh/uv/) or [pipx](https://pipx.pypa.io/), so `ib` works in every
-terminal, including your editor's:
+## Quickstart
+
+**You need:**
+
+- Python 3.10 or later, and git.
+- A way to run the tests. Either:
+  - **Docker**, running Linux containers. Each task brings its toolchain in its own image.
+  - **bash**, for the local runner. On Windows, install [Git for Windows](https://gitforwindows.org/).
+    The local runner uses your toolchain: `rate-limiter` needs only Python, and the TypeScript tasks
+    need Node.js 24.11 or later.
+
+**Install** from GitHub (the project is not on PyPI):
 
 ```bash
-git clone https://github.com/Samiur-UTI/interviewbench.git && cd interviewbench
-uv tool install --editable .          # or: pipx install --editable .
+uv tool install git+https://github.com/Samiur-UTI/interviewbench.git
+ib --version
 ```
 
-With plain pip, in a virtual environment:
+You should see `0.1.0`. No [uv](https://docs.astral.sh/uv/)? Use
+`pipx install git+https://github.com/Samiur-UTI/interviewbench.git`, or the same URL with
+`pip install` inside a virtual environment.
 
-```bash
-git clone https://github.com/Samiur-UTI/interviewbench.git && cd interviewbench
-python -m venv .venv
-.venv/bin/pip install -e .            # Windows: .venv\Scripts\pip install -e .
-```
-
-Then activate the environment (`source .venv/bin/activate`, or `.venv\Scripts\activate` on
-Windows) or call `.venv/bin/ib` directly.
-
-Only want to practise? You can skip the clone, since the package bundles the tasks:
-`pip install git+https://github.com/Samiur-UTI/interviewbench.git`. Writing tasks (`ib new`) needs a
-clone with an editable install.
-
-## Practise a round
+**Open the GUI:**
 
 ```bash
 ib
 ```
 
-That's it: `ib` on its own opens the GUI in your browser. Pick a task, read the brief, run the
-tests, grade, and try to break your code. It listens on 127.0.0.1 only and needs no extra install
-(`ib ui --port <n> --no-open` if you want control over that). See [docs/GUI.md](docs/GUI.md).
-
-Prefer the terminal? Every step is also a command (`ib --help` lists them all):
-
-```bash
-ib list                               # or: ib list --category backend --tag python
-ib start rate-limiter                 # your round starts here
+```text
+Prefer the terminal? `ib --help` lists the commands.
+interviewbench is running. This link is your private way in:
+http://127.0.0.1:7473/?token=...
+Press Ctrl+C to stop.
 ```
 
-Both front ends share the same rounds: one started in the GUI shows up for `ib` in its folder, and
-one started with `ib start` (without `--dir`) appears in the GUI's *Rounds* screen.
+Your browser opens on the task list. The server listens on 127.0.0.1 only. Pick
+**Per-key token-bucket rate limiter** (`rate-limiter`, Python, 60 minutes) and click **Start round**.
 
-| Task | Category | Language | Level | Time |
-|---|---|---|---|---|
-| `rate-limiter` | backend | Python | mid | 60 min |
-| `flight-search-aggregator` | backend | TypeScript (Node.js) | senior | 180 min |
-| `campaign-console` | frontend | TypeScript (Node.js, Preact) | senior | 240 min |
+![The Tasks screen of the GUI: a short "How a round works" guide, filters by category, level and tag, and a card per task with a Start round button](docs/images/gui-tasks.png)
 
-`ib start` sets the round up the way a real AI-enabled interview feels:
-
-- Copies the starter code to `~/ib-workspaces/<task>` (or `$IB_WORKSPACES/<task>`, or `--dir`).
-  It refuses folders inside this repo, because the repo holds the hidden tests and reference
-  solutions, which an AI assistant working there could read. The folder must be new or empty;
-  `--force` replaces only an earlier round's workspace, never any other folder.
-- Opens that folder in your editor: `$IB_EDITOR` if set, else VS Code, Cursor or Windsurf
-  (`--no-open` to skip). Point `IB_EDITOR` at any other editor.
-- Writes the stage 1 brief, the time limit and the commands to `TASK.md`, and starts the clock.
-- Makes the workspace a git repo with the starter as its first commit (`--no-git` to skip), so
-  you can branch, diff and revert like in any project.
-- Adds the commands as editor tasks (*Terminal > Run Task*: run my tests, next stage, grade,
-  judge). They work even when `ib` isn't on the editor terminal's PATH.
-
-Then, in the workspace:
+**Prefer the terminal?** The same round, with commands:
 
 ```bash
-ib test      # run your own tests (no hidden tests, no spoilers)
-ib next      # commit and tag your work (stage-1, ...), then reveal the next stage in TASK.md
-ib grade     # run the hidden tests, score the rubric, show time used; writes ib-report.md
-             # (stages you haven't reached show only how many hidden tests fail)
-ib grade --judge          # ...and have an AI model review what tests can't measure
-ib break ../attack_test.py   # check tests an LLM wrote to break your code (see below)
+ib start rate-limiter
+cd ~/ib-workspaces/rate-limiter
+ib test
+ib grade
 ```
 
-`ib test`, `ib grade` and `ib break` take `--runner docker` or `--runner local`; the default uses
-Docker when it's running, else bash on your machine.
+`ib start` prints the stage 1 brief and opens the folder in your editor. `ib test` runs the tests in
+the workspace (`4/4 of your tests passed` on the starter code). `ib grade` runs the hidden tests:
 
-## How a task works
+```text
+┌────────────────────┬───────┬────────┬───────┬──────────────────────────────┐
+│ Criterion          │ Type  │ Weight │ Score │ Evidence                     │
+├────────────────────┼───────┼────────┼───────┼──────────────────────────────┤
+│ stage1-bug-fixed   │ auto  │     15 │   25% │ 1/4 hidden tests passed      │
+│ stage2-feature     │ auto  │     15 │    0% │ 0/10 hidden tests passed     │
+│ stage3-scales      │ auto  │     15 │   20% │ 1/5 hidden tests passed      │
+│ correctness        │ judge │     10 │     - │ Needs the AI judge (not run) │
+...
+└────────────────────┴───────┴────────┴───────┴──────────────────────────────┘
+FAIL stage 1 - test_burst_after_idle_is_capped_at_capacity: assert 100 == 5
+FAIL stage 1 - test_tokens_never_exceed_capacity: assert 2004.0 == 5
+FAIL stage 1 - test_limiter_burst_after_idle_is_capped: assert 50 == 5
+Stage 2: 10 hidden tests fail. You'll see which once you reach stage 2.
+Stage 3: 4 hidden tests fail. You'll see which once you reach stage 3.
 
-Each task is a small multi-file codebase with three stages:
+Score: 6.8/45 on auto-checked criteria (15%); 55 of 100 rubric points need the AI judge
+```
 
-1. **Fix the bug**: diagnose a realistic defect.
-2. **Add a feature**: extend the code cleanly.
-3. **Optimize**: make it scale.
+Rounds are shared: a round started in the GUI works with `ib` in its folder, and one started with
+`ib start` shows up in the GUI's **Rounds** screen.
 
-Hidden tests check each stage, and a weighted rubric scores the result. The rubric mixes `auto`
-criteria (the fraction of a stage's hidden tests passed) with `judge` criteria such as root
-cause, code quality and communication, which the AI judge scores.
+## How a round works
 
-Tasks are grouped by category (`tasks/backend/`, `tasks/frontend/`, `tasks/devops/`) and follow
-the Harbor task format. Each task brings its own Dockerfile and test script, so any language or
-stack works without changes to `ib`.
+A **round** is one timed attempt at a task, in a folder of its own called the **workspace**. A task
+has several **stages**, usually three, revealed one at a time. Each stage has **hidden tests**: tests
+the task's author wrote, which stay in the task folder and are never copied into your workspace.
 
-## About the shipped tasks
+1. **Start.** `ib start <task>`, or **Start round** in the GUI. ib copies the starter code to
+   `~/ib-workspaces/<task>`, makes it a git repo, opens it in your editor and starts the clock.
+2. **Read `TASK.md`.** It holds the time limit, the commands and the stage 1 brief. In VS Code,
+   Cursor or Windsurf, the commands are also under *Terminal > Run Task*.
+3. **Work with your AI tools.** Open only the workspace folder, so your assistant can't read the
+   hidden tests. Any assistant is allowed. Write what you found and why in `NOTES.md`: it is graded.
+4. **Run your tests: `ib test`.** It runs the tests in your workspace, including any you add, the
+   way the grader does. It never runs the hidden tests.
+5. **Reveal the next stage: `ib next`.** It commits your work, tags it (`stage-1`, ...) and adds the
+   next brief to `TASK.md`. Later stages stay hidden until you do this.
+6. **Grade: `ib grade`.** It runs every stage's hidden tests and scores the **rubric**, a weighted
+   list of criteria. `auto` criteria are scored from the hidden tests; `judge` criteria need the
+   [AI judge](#the-ai-judge). For stages you have reached, it names each failing test. For later
+   stages it shows only a count, so nothing is spoiled. `ib-report.md` follows the same rule; the
+   full report is kept outside the workspace. Grade as often as you like.
 
-The hidden tests and reference solutions of every task are public in this repo, and will likely
-end up in LLM training data. The shipped tasks are for practice and for evaluating models.
+   ![The Grade panel at stage 2: 40% of the 45 points graded so far, stage 1 with 4 of 4 hidden tests passed, stage 2 with 0 of 10 and a "Show 10 failures" toggle, and stage 3, not revealed, showing only that 4 hidden tests failed](docs/images/gui-grade.png)
 
-To interview real candidates, keep a private copy of the repo and write your own tasks with the
-framework:
+7. **Try to break it: `ib break` (optional).** `ib break --prompt` writes `ib-attack-prompt.md`.
+   Give it to any chatbot or coding agent and save the test file it writes *outside* the workspace.
+   Each attack test runs on your code and on the reference solution for the stages revealed so far.
+   Only a test that passes on the reference and fails on your code is a real break. Your workspace
+   isn't changed.
+
+   ```bash
+   ib break --prompt
+   ib break ../attack_test.py
+   ```
+
+   The terminal prints the same verdicts as the GUI's **Break it** panel:
+
+   ![The Break it panel: 1 real break, 1 survived and 1 bad test ignored, with the failure message under each attack test](docs/images/gui-break.png)
+
+8. **Get the AI review (optional).** Once every stage is revealed, run `ib grade --judge` or use the
+   judge in the GUI's **Grade** panel. See [The AI judge](#the-ai-judge).
+
+`ib test`, `ib grade` and `ib break` run the task's scripts with a **runner**. `--runner docker` uses
+a fresh container without network, built from the task's Dockerfile. `--runner local` uses bash on
+your machine and first removes secret-looking environment variables (API keys, tokens, passwords,
+cloud credentials). The default, `--runner auto`, uses Docker if it runs Linux containers, else local.
+
+## The tasks
+
+| Task | What it is | Category | Language | Level | Time |
+|---|---|---|---|---|---|
+| `rate-limiter` | Per-key token-bucket rate limiter | backend | Python | mid | 60 min |
+| `flight-search-aggregator` | Multi-supplier flight search: nested fares, DB-backed paging, 1 s budget | backend | TypeScript (Node.js) | senior | 180 min |
+| `campaign-console` | Full-stack campaign console (TypeScript server, Preact client) | frontend | TypeScript (Node.js, Preact) | senior | 240 min |
+
+`ib list` shows the same, with tags. Filter it with `ib list --category backend --tag python`.
+
+## Commands
+
+| Command | What it does |
+|---|---|
+| `ib` | Open the GUI in your browser. |
+| `ib ui [--port N] [--no-open]` | The same, with options. Default port 7473, or the next free one. |
+| `ib list [--category C] [--tag T]` | List the tasks. |
+| `ib start <task>` | Start a round. Options: `--dir`, `--no-open` (no editor), `--no-git`, `--force`. |
+| `ib prompt [<task>] --stage N` | Print a stage's brief. Reading ahead skips the real format; prefer `ib next`. |
+| `ib test` | Run your own tests. |
+| `ib next` | Commit and tag your work, then reveal the next stage. |
+| `ib grade` | Run the hidden tests and score the rubric. Writes `ib-report.md`. |
+| `ib grade --judge` | Also score the judge criteria with an AI model. See `--judge-export` and `--judge-reply`. |
+| `ib grade --all-stages` | Show failing hidden tests for every stage, for an interviewer grading a hand-back. |
+| `ib break [<file>] [--prompt]` | Run attack tests on your code and on the reference. |
+| `ib new <id> --category C` | Create a task skeleton from a template. Needs a clone or `IB_ROOT`. |
+| `ib validate [<id>...] [--run]` | Check tasks against [the task format](docs/TASK_FORMAT.md); `--run` also runs their tests. |
+| `ib version`, `ib --version` | Print the version. |
+
+Commands that work on a round take `--dir <workspace>` (default: the current folder). Commands that
+run tests take `--runner` and `--timeout`. `ib <command> --help` lists every option.
+
+## The AI judge
+
+Some criteria need a reviewer: correctness beyond the tests, root cause, code quality, the tests you
+wrote, business rules, and `NOTES.md`. The AI judge asks a model to score them; in `rate-limiter` they are
+worth 55 of 100 points. It sees every stage's hidden tests and reference solution, so in a round it
+runs only once every stage is revealed. Before that, ib refuses with a message.
+
+| Way | What you need | Command |
+|---|---|---|
+| Paste into a chatbot | Nothing to install | `ib grade --judge-export`, then the `--judge-reply` command it prints |
+| Any OpenAI-compatible API | `IB_JUDGE_BASE_URL`, a model id, usually `IB_JUDGE_API_KEY` | `ib grade --judge --judge-backend openai --judge-model <id>` |
+| Claude API (default) | The `[judge]` extra and `ANTHROPIC_API_KEY` | `ib grade --judge` |
+
+- `--judge-export` writes the prompt outside the workspace, to ib's data folder, and prints its path
+  and the exact `ib grade --judge-reply "<path>"` command to run with the chatbot's saved reply.
+- **Size:** the prompt is about 11,000 tokens for `rate-limiter`, 120,000 for
+  `flight-search-aggregator` and 250,000 for `campaign-console`. Pasting is practical for
+  `rate-limiter`, or with a model that has a very large context window. With an API, every run sends
+  the whole prompt, so check the price.
+- The prompt contains the hidden tests and the reference solution: don't share it.
+- Prefer a judge from a different model family than the one that helped you.
+
+Provider URLs, models on your computer (Ollama, LM Studio), the GUI's settings and where files go:
+[docs/JUDGE.md](docs/JUDGE.md).
+
+## For hiring teams
+
+The shipped tasks' hidden tests and reference solutions are public, in this repo and in the
+installed package. Use them to try the format, not to vet candidates. To interview, write private
+tasks in one of two ways:
+
+- **A private clone.** Clone this repo, keep the copy private, and install it with
+  `uv tool install --editable .` (or `pip install -e .`). `ib new` adds tasks to the clone.
+- **A private task folder.** Set `IB_ROOT` to a folder holding `tasks/`, `rubrics/` and `templates/`
+  (copy the last two from this repo). ib then uses only the tasks there.
 
 ```bash
-ib new my-task --category backend      # skeleton from templates/
-ib validate my-task --run              # starter fails stage 1, each stage's solution passes
+ib new order-api --category backend
+ib validate order-api --run
 ```
 
-The full contract is in [docs/TASK_FORMAT.md](docs/TASK_FORMAT.md). Anyone with the repo (or the
-installed package) can read every task's hidden tests, so keep private tasks off candidates'
-machines: give them the starter code and grade what they hand back with
-`ib grade --dir <their workspace> --task <task-id>`. If they stopped mid-round, add `--all-stages`
-to see which hidden tests fail in the stages they didn't reach.
-
-## AI judge
-
-Some rubric criteria (correctness beyond the tests, missed edge cases, code quality, root cause,
-fit with the task's business rules, communication) need a reviewer. `ib grade --judge` asks a
-model to score them and lists any other issues it finds. Three ways to run it:
-
-**Paste into any chatbot**, no API key needed:
+`ib new` copies a template from `templates/` (only `backend-python` exists so far); fill in every
+TODO, as [docs/TASK_FORMAT.md](docs/TASK_FORMAT.md) describes. Give candidates the starter code and
+the briefs, never the task folder. Then grade the **hand-back**, the folder they return:
 
 ```bash
-ib grade --judge-export                    # writes a prompt file (~10-15k tokens) and prints its path
-# paste it into a chat and save the reply to a file next to the prompt
-ib grade --judge-reply reply.txt
+ib grade --dir ./their-folder --task order-api --runner docker
 ```
 
-**Any OpenAI-compatible API**: OpenRouter, Google AI Studio (Gemini), Groq, Mistral, or a local
-model with Ollama, LM Studio or vLLM. No extra packages needed.
+A folder without a round shows every stage's failing tests. For a round that stopped mid-way, add
+`--all-stages`. Limits: grading runs the candidate's code, so use `--runner docker` for code you
+didn't write; code under test can forge its own score, so read the code; and ib doesn't proctor.
+See [SECURITY.md](SECURITY.md).
 
-```bash
-export IB_JUDGE_BASE_URL=https://openrouter.ai/api/v1          # or http://localhost:11434/v1 for Ollama
-export IB_JUDGE_API_KEY=...                                    # not needed for local models
-ib grade --judge --judge-backend openai --judge-model <model id>
-```
+## For evaluating LLMs with Harbor
 
-Set `IB_JUDGE_BACKEND=openai` and `IB_JUDGE_MODEL` to make that the default for `ib grade --judge`.
-Other OpenAI-compatible base URLs: `https://generativelanguage.googleapis.com/v1beta/openai`
-(Gemini), `https://api.groq.com/openai/v1` (Groq).
-
-**Local models need a bigger context window.** The judge prompt is ~10-15k tokens and an attack
-prompt can pass 8k, but Ollama runs models with 2048-4096 tokens by default (it depends on the
-version and your memory) and silently drops the *start* of a longer prompt, so the model never sees
-the rules or the brief. Raise it to 32768:
-start the server with `OLLAMA_CONTEXT_LENGTH=32768 ollama serve` (or use the context length
-setting in the Ollama app), or type `/set parameter num_ctx 32768` in `ollama run` when pasting.
-In LM Studio, set the context length when you load the model.
-
-**Claude API** (the default backend; the API enforces the answer's JSON schema):
-
-```bash
-uv tool install --editable ".[judge]" --force   # or: pipx install --editable ".[judge]" --force
-                                                # or, in a venv: pip install -e ".[judge]"
-export ANTHROPIC_API_KEY=...                     # from platform.claude.com/settings/keys
-ib grade --judge                                 # model: claude-opus-5-5, or --judge-model / IB_JUDGE_MODEL
-```
-
-Prefer a judge from a different model family than the one that helped you solve the task: LLM
-judges tend to favour their own family's work. The judge prompt contains the hidden tests and
-the reference solution, so don't share it. That's why `--judge-export` writes it outside the
-workspace, to ib's data folder (`%LOCALAPPDATA%\interviewbench` on Windows,
-`~/Library/Application Support/interviewbench` on macOS, `~/.local/state/interviewbench` on Linux,
-or `$IB_DATA_DIR`).
-
-## Try to break your code
-
-`ib break` checks attack tests written by any LLM. Each test runs on your code and on the task's
-reference solution, and only counts when the reference passes it, so a model that misreads the
-brief can't invent bugs:
-
-```bash
-ib break --prompt              # writes ib-attack-prompt.md: give it to any chatbot or coding agent
-# save the test file it writes OUTSIDE the workspace, e.g. ../attack_test.py
-ib break ../attack_test.py     # real break / survived / bad test, for each attack test
-```
-
-Your workspace isn't changed. The attack file runs with the task's own test command, so this
-works for any language. If a local model only describes your code instead of writing tests, its
-context window is too small for the prompt: see the note on local models under [AI judge](#ai-judge).
-
-## Evaluate AI agents with Harbor
-
-There is no published leaderboard. Because every task folder is a Harbor multi-step task, you can
-score agents and models yourself (Harbor needs Python 3.12+ and Docker):
+Every task folder is a [Harbor](https://harborframework.com) multi-step task. Harbor needs
+Python 3.12+ and Docker, and works from a clone:
 
 ```bash
 pip install -e ".[harbor]"
-harbor run -p tasks/backend -a oracle        # reference solutions: should score 1.0
-harbor run -p tasks/backend -a claude-code   # an AI agent, one category at a time
+harbor run -p tasks/backend -a oracle
+harbor run -p tasks/backend -a claude-code
 ```
 
-`-p` is a category folder, `-a` picks the agent (`oracle` applies the reference solutions; others
-include `claude-code`, `codex`, `gemini-cli`, `aider` and `openhands`), and `-m` picks the model.
-A trial's score is the mean of the three stages' fraction of hidden tests passed. See
-`harbor run --help`.
+`-p` is a category folder, `-a` the agent (`oracle` applies the reference solutions and should score
+1.0), and `-m` the model. A trial's score is the mean of the stages' fractions of hidden tests passed.
+There is no published leaderboard.
+
+## Configuration
+
+| Variable | What it does | Default |
+|---|---|---|
+| `IB_WORKSPACES` | Folder for new rounds and the GUI's round list | `~/ib-workspaces` |
+| `IB_DATA_DIR` | ib's private folder: full reports, the judge prompt, GUI results | `%LOCALAPPDATA%\interviewbench` (Windows), `~/Library/Application Support/interviewbench` (macOS), `$XDG_STATE_HOME/interviewbench` or `~/.local/state/interviewbench` (Linux) |
+| `IB_EDITOR` | Command that opens the workspace. Empty: never open one | The first of `code`, `cursor`, `windsurf` found |
+| `IB_BASH` | Path to bash for the local runner | Found on `PATH`; on Windows, Git for Windows' bash |
+| `IB_ROOT` | Folder holding `tasks/`, `rubrics/` and `templates/` | The clone, or the copy inside the package |
+| `IB_JUDGE_BACKEND` | `claude` or `openai` | `claude` |
+| `IB_JUDGE_MODEL` | Judge model | `claude-opus-5-5` for `claude`; required for `openai` |
+| `IB_JUDGE_BASE_URL` | OpenAI-compatible endpoint | None; required for `openai` |
+| `IB_JUDGE_API_KEY` | Key for the `openai` backend (`OPENAI_API_KEY` also works) | None |
+| `ANTHROPIC_API_KEY` | Key for the `claude` backend | None |
+
+## Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| `The local runner needs bash` | On Windows, install Git for Windows, or set `IB_BASH` to a `bash.exe`. ib skips WSL's bash, which can't see Windows paths. |
+| `Docker is not available` | Start Docker. On Windows, switch Docker Desktop to Linux containers. Or use `--runner local`. With the default `--runner auto`, ib falls back to the local runner without asking. |
+| A TypeScript task fails to run its tests | The local runner needs Node.js 24.11 or later on your `PATH` (`node --version`). Or use `--runner docker`. |
+| `timeout: command not found` on macOS | The TypeScript tasks' hidden-test scripts call `timeout`, which macOS lacks. Install GNU coreutils (`brew install coreutils`), or use `--runner docker`. |
+| `... is not an interviewbench workspace` | Run the command inside the folder `ib start` made, or pass `--dir`. To grade a folder without a round, pass `--task <id>`. |
+| `The AI judge reviews the whole round...` | Reveal the remaining stages with `ib next` first. |
+| A local model describes your code instead of answering | Its context window is too small. See [docs/JUDGE.md](docs/JUDGE.md#models-on-your-computer). |
 
 ## Status and limitations
 
-- **3 tasks**: one Python, two TypeScript. No `devops` tasks yet.
-- **One template.** `ib new` only has `templates/backend-python`, although two of the three tasks
-  are TypeScript. Other stacks need a template written by hand (see
-  [docs/TASK_FORMAT.md](docs/TASK_FORMAT.md)).
-- **No CI yet.** The package's tests run locally: `pytest` (add `IB_TEST_RUNNER=docker` to run
-  the task checks in containers).
-- **No proctoring.** `ib` shows the time limit and the time used but doesn't enforce it, and it
-  doesn't watch or record the candidate.
-- The hidden tests and reference solutions of the shipped tasks are public (see above).
+- Version 0.1.0, alpha. Install from GitHub; it is not on PyPI.
+- Three tasks: one Python, two TypeScript. The `devops` category has a rubric but no tasks yet.
+- One template for `ib new`, `backend-python`. Other stacks need a template written by hand.
+- No proctoring: ib shows the time limit and the time used, but doesn't enforce it or watch anyone.
+- The shipped tasks are for practice and for evaluating models, not for vetting candidates.
+- Grades are not tamper-proof: code under test can forge its results.
+- CI runs on Linux and Windows. macOS is not tested in CI.
 
 ## Contributing
 
-Tasks must be original: never copy real company interview questions or NDA'd material. Start with
-`ib new`, follow [docs/TASK_FORMAT.md](docs/TASK_FORMAT.md), and check your task with
-`ib validate <task-id> --run` before opening a pull request. [AGENTS.md](AGENTS.md) has the repo
-layout and rules.
+New tasks are welcome. Set up a clone with `pip install -e ".[dev]"` and read [CONTRIBUTING.md](CONTRIBUTING.md).
+Changes are listed in [CHANGELOG.md](CHANGELOG.md).
+
+## Security
+
+Report vulnerabilities privately, as [SECURITY.md](SECURITY.md) describes.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE). Vendored code: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
