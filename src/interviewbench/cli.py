@@ -73,10 +73,20 @@ def _task_or_exit(task_id: str) -> Task:
         _fail(str(exc))
 
 
-def _task_from_workspace(workspace: Path, task_id: Optional[str]) -> Task:
+def _marker_or_exit(workspace: Path, advice: str) -> Optional[dict]:
+    try:
+        return ws.load_marker(workspace)
+    except ws.MarkerError as exc:
+        _fail(f"{exc} ib can't tell which round this folder holds. {advice}")
+
+
+_NEW_ROUND = "Start a new round in a new folder: ib start <task> --dir <folder>."
+
+
+def _task_from_workspace(workspace: Path, task_id: Optional[str], advice: str) -> Task:
     if task_id:
         return _task_or_exit(task_id)
-    marker = ws.read_marker(workspace)
+    marker = _marker_or_exit(workspace, advice)
     if marker is None:
         _fail(f"{workspace} is not an interviewbench workspace (no {MARKER}). Pass --task <id>.")
     return _task_or_exit(marker["task"])
@@ -155,7 +165,7 @@ def start(
 
 
 def _workspace_or_exit(dir: Path) -> tuple[Task, dict]:
-    marker = ws.read_marker(dir)
+    marker = _marker_or_exit(dir, _NEW_ROUND)
     if marker is None:
         _fail(f"{dir} is not an interviewbench workspace (no {MARKER}). Run this inside the folder `ib start` made.")
     return _task_or_exit(marker["task"]), marker
@@ -184,7 +194,7 @@ def prompt(
     dir: Path = typer.Option(Path("."), "--dir", "-d", help="Workspace directory"),
 ) -> None:
     """Show the brief for a stage (reading ahead skips the real format; prefer `ib next`)."""
-    _print_stage(_task_from_workspace(dir, task_id), stage)
+    _print_stage(_task_from_workspace(dir, task_id, "Pass the task id: ib prompt <task>."), stage)
 
 
 @app.command("test")
@@ -236,7 +246,7 @@ def grade(
         _fail(f"{dir} is not a directory")
     if judge_reply is not None and not judge_reply.is_file():
         _fail(f"{judge_reply} doesn't exist. Save the chatbot's reply there first.")
-    task = _task_from_workspace(dir, task_id)
+    task = _task_from_workspace(dir, task_id, f"Pass --task <task> to grade it anyway. Or: {_NEW_ROUND}")
     backend = _runner_or_exit(runner)
     revealed = rounds.revealed_stages(task, ws.read_marker(dir))
     if all_stages and revealed is not None and revealed < len(task.stages):

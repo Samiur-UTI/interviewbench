@@ -248,7 +248,7 @@ def load_round(round_id: str) -> RoundInfo:
     """A round by id. Raises UnknownRound for anything that isn't a readable round."""
     path = round_path(round_id)
     try:
-        marker = ws.read_marker(path)
+        marker = ws.load_marker(path)  # a damaged marker raises MarkerError, a ValueError
         task = get_task(marker["task"])
         stage = int(marker.get("stage", 1))
     except (AttributeError, KeyError, TypeError, ValueError, OSError, TaskError) as exc:

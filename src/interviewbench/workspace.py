@@ -86,9 +86,33 @@ def remove_tree(path: Path) -> None:
     shutil.rmtree(path)
 
 
+class MarkerError(ValueError):
+    """The workspace has a round marker, but it is damaged."""
+
+
+def load_marker(workspace: Path) -> dict | None:
+    """The round's marker, or None if the folder has none. Raises MarkerError if it is damaged."""
+    path = workspace / MARKER
+    if not path.is_file():
+        return None
+    try:
+        marker = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:  # ValueError: not UTF-8, or not JSON
+        raise MarkerError(f"{path} is damaged: it isn't readable JSON ({exc}).") from exc
+    if not isinstance(marker, dict) or not isinstance(marker.get("task"), str):
+        raise MarkerError(f"{path} is damaged: it doesn't say which task the round is for.")
+    stage = marker.get("stage", 1)
+    if isinstance(stage, bool) or not isinstance(stage, int):
+        raise MarkerError(f"{path} is damaged: its stage, {json.dumps(stage)}, isn't a whole number.")
+    return marker
+
+
 def read_marker(workspace: Path) -> dict | None:
-    marker = workspace / MARKER
-    return json.loads(marker.read_text(encoding="utf-8")) if marker.is_file() else None
+    """`load_marker`, but a damaged marker reads as {}: no task, so not a round, and stage 1 revealed."""
+    try:
+        return load_marker(workspace)
+    except MarkerError:
+        return {}
 
 
 def write_marker(workspace: Path, marker: dict) -> None:

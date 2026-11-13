@@ -9,10 +9,12 @@ from types import SimpleNamespace
 import pytest
 from typer.testing import CliRunner
 
+from conftest import RUNNER_KIND
 from interviewbench import judge, rounds
+from interviewbench import workspace as ws
 from interviewbench.cli import app
 from interviewbench.judge import JudgeError
-from interviewbench.tasks import REPORT, TaskError, load_all, load_task
+from interviewbench.tasks import MARKER, REPORT, TaskError, load_all, load_task
 
 REPO = Path(__file__).resolve().parents[1]
 cli = CliRunner()
@@ -189,6 +191,46 @@ def test_claude_backend_failures_are_judge_errors(monkeypatch, failure, message)
     claude_failing(monkeypatch, **failure)
     with pytest.raises(JudgeError, match=re.escape(message)):
         judge._call_claude("m", system="s", user="u", schema={})
+
+
+DAMAGED_MARKERS = {
+    "not-json": ("{bad", "isn't readable JSON"),
+    "a-list": ("[1]", "doesn't say which task"),
+    "no-task": ('{"stage": 1}', "doesn't say which task"),
+    "bad-stage": ('{"task": "rate-limiter", "stage": "x"}', 'its stage, "x", isn\'t a whole number'),
+}
+
+
+@pytest.mark.parametrize("command", [["test"], ["next"], ["grade"], ["break", "attack.py"], ["break", "--prompt"]])
+@pytest.mark.parametrize("name", DAMAGED_MARKERS)
+def test_a_damaged_marker_is_one_clear_error(tmp_path, command, name):
+    text, detail = DAMAGED_MARKERS[name]
+    (tmp_path / MARKER).write_text(text, encoding="utf-8")
+    result = cli.invoke(app, [*command, "--dir", str(tmp_path)])
+    assert result.exit_code == 1 and not isinstance(result.exception, Exception), result.output
+    out = flat(result.output)
+    assert f"{tmp_path / MARKER}isdamaged".replace(" ", "") in out.replace(" ", "")  # Rich may wrap the path
+    assert detail in out
+    assert ("--task" in out) == (command == ["grade"]) and "ib start" in out
+
+
+def test_a_damaged_marker_can_still_be_graded_with_task(tmp_path, solution_dir):
+    workspace = shutil.copytree(solution_dir, tmp_path / "ws")
+    (workspace / MARKER).write_text("{bad", encoding="utf-8")
+    result = cli.invoke(app, ["grade", "--dir", str(workspace), "--task", "rate-limiter", "--runner", RUNNER_KIND])
+    assert result.exit_code == 0, result.output
+    assert "45.0/45" in (workspace / REPORT).read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("name", DAMAGED_MARKERS)
+def test_the_gui_skips_a_damaged_round(tmp_path, monkeypatch, name):
+    monkeypatch.setenv("IB_WORKSPACES", str(tmp_path))
+    (tmp_path / name).mkdir()
+    (tmp_path / name / MARKER).write_text(DAMAGED_MARKERS[name][0], encoding="utf-8")
+    with pytest.raises(rounds.UnknownRound):
+        rounds.load_round(name)
+    assert rounds.list_rounds() == []
+    assert ws.read_marker(tmp_path / name) == {}  # what grading reads: no task, so the first stage revealed
 
 
 def test_validate_still_reports_unknown_and_duplicate_ids(bench):
