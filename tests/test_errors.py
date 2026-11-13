@@ -259,7 +259,8 @@ def test_list_never_cuts_off_a_task_id(monkeypatch, width):
     assert result.exit_code == 0 and "flight-search-aggregator" in result.output, result.output
 
 
-def test_list_rejects_an_unknown_category_and_says_when_one_is_empty():
+def test_list_rejects_an_unknown_category_and_says_when_one_is_empty(bench):
+    # The bench fixture has every rubric but only backend tasks, so devops is a category with no tasks.
     result = cli.invoke(app, ["list", "-c", "nope"])
     assert result.exit_code == 1 and "Unknown category 'nope'. Categories: backend, devops, frontend." in flat(result.output)
     result = cli.invoke(app, ["list", "-c", "devops"])
