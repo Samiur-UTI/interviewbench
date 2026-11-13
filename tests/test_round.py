@@ -103,7 +103,7 @@ def test_editor_tasks_run_ib_with_this_python(tmp_path):
     tasks = json.loads((dest / ".vscode" / "tasks.json").read_text(encoding="utf-8"))["tasks"]
     labels = [t["label"] for t in tasks]
     assert labels[:3] == ["ib: run my tests", "ib: next stage", "ib: grade"]
-    assert "ib: grade with the AI judge" in labels
+    assert "ib: grade with the AI judge (once every stage is revealed)" in labels
     assert tasks[0]["command"] == sys.executable and tasks[0]["args"] == ["-m", "interviewbench", "test"]
     # What the editor runs really works from the workspace, with no `ib` on PATH needed.
     done = subprocess.run(

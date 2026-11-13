@@ -116,7 +116,16 @@ function ChatbotRoute({ grade }) {
 }
 
 // `grade` is null before the first grade. Once there's a review, asking for another moves out of the way.
+// The judge sees every stage, so the server refuses it while any stage is hidden.
 export function Routes({ grade }) {
+  const { round } = useRoundContext();
+  if (!round.all_revealed) {
+    return html`
+      <section class="stack">
+        <h3>Get the AI review</h3>
+        <${Notice} kind="info">The AI review is available once every stage is revealed. It reviews the whole round, so it waits for the last stage.<//>
+      </section>`;
+  }
   const body = html`
     <p class="muted">Pick either route. Use a model family other than the one that helped you solve the task, because LLM judges favour their own family's work.</p>
     <${ConnectedRoute} grade=${grade} />

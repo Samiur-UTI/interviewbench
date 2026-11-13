@@ -17,7 +17,7 @@ function Explainer({ open }) {
       <div class="explainer-body">
         <p>Grading runs the hidden tests for every stage, even stages you haven't revealed yet. That fills in the auto-scored part of the rubric. It can take a few minutes, and it doesn't change your code.</p>
         <p>If a stage you haven't reached has failures, you only see how many. The details stay hidden, so nothing is spoiled.</p>
-        <p>The rest of the rubric is about how you did the work, so it needs an AI reviewer. You can get that review two ways, further down this panel.</p>
+        <p>The rest of the rubric is about how you did the work, so it needs an AI reviewer. Once every stage is revealed, you can get that review two ways, further down this panel.</p>
       </div>
     </details>`;
 }

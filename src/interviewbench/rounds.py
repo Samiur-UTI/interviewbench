@@ -352,9 +352,13 @@ def grade_round(
     Every stage's hidden tests run, but the report only names the failures of stages the round has
     reached: the candidate's AI assistant reads the workspace. The full report goes to ib's private
     folder instead. `all_stages` reports everything, for an interviewer grading a hand-back.
+    The judge sees every stage, so in a round it waits for the last one (see `check_judge_ready`).
     """
     settings = settings or JudgeSettings()
-    revealed = None if all_stages else revealed_stages(task, ws.read_marker(workspace))
+    marker = ws.read_marker(workspace)
+    if judge != "none" and not all_stages:
+        check_judge_ready(task, marker)
+    revealed = None if all_stages else revealed_stages(task, marker)
     hides = revealed is not None and revealed < len(task.stages)
     full_report = private_folder(workspace) / FULL_REPORT if hides else None  # fail before the slow part
     result = prior or grade(task, workspace, runner, timeout=timeout, progress=progress)
@@ -390,6 +394,19 @@ def revealed_stages(task: Task, marker: dict | None) -> int | None:
     except (AttributeError, TypeError, ValueError):  # a damaged marker: assume the least is revealed
         stage = 1
     return max(1, min(stage, len(task.stages)))
+
+
+def check_judge_ready(task: Task, marker: dict | None) -> None:
+    """Refuse the AI judge in a round with stages still hidden: its prompt holds every stage's brief,
+    hidden tests and the reference solution, and its review can describe any of them. A hand-back
+    (no marker) is always ready. Raises RoundError."""
+    stage = revealed_stages(task, marker)
+    if stage is not None and stage < len(task.stages):
+        raise RoundError(
+            f"The AI judge reviews the whole round, so it runs once every stage is revealed (you are on "
+            f"stage {stage} of {len(task.stages)}). Reveal the remaining stages first (`ib next`), or grade "
+            "without the judge."
+        )
 
 
 def private_folder(workspace: Path) -> Path:
