@@ -10,7 +10,7 @@ import pytest
 from typer.testing import CliRunner
 
 from conftest import RUNNER_KIND
-from interviewbench import judge, rounds, tasks
+from interviewbench import __version__, judge, rounds, tasks
 from interviewbench import cli as cli_module
 from interviewbench import workspace as ws
 from interviewbench.cli import app
@@ -267,6 +267,13 @@ def test_list_rejects_an_unknown_category_and_says_when_one_is_empty():
     assert "ID" not in result.output  # no empty table
     result = cli.invoke(app, ["list", "--tag", "cobol"])
     assert result.exit_code == 0 and "There are no tasks tagged 'cobol' yet." in flat(result.output)
+
+
+@pytest.mark.parametrize("args", [["--version"], ["version"]])
+def test_version(args, monkeypatch):
+    monkeypatch.setattr(cli_module, "ui", lambda **kwargs: pytest.fail("--version must not open the GUI"))
+    result = cli.invoke(app, args)
+    assert result.exit_code == 0 and result.output.strip() == __version__, result.output
 
 
 def test_validate_still_reports_unknown_and_duplicate_ids(bench):

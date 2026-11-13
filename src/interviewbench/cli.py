@@ -34,8 +34,19 @@ app = typer.Typer(
 console = Console()
 
 
+def _print_version(value: bool) -> None:
+    if value:
+        console.print(__version__)
+        raise typer.Exit()
+
+
 @app.callback()
-def _root(ctx: typer.Context) -> None:
+def _root(
+    ctx: typer.Context,
+    _version: bool = typer.Option(
+        False, "--version", callback=_print_version, is_eager=True, help="Show the interviewbench version and exit."
+    ),
+) -> None:
     _utf8_output()
     if ctx.invoked_subcommand is None:
         # The GUI is the front door; `ib --help` lists the commands for people who prefer a terminal.
