@@ -293,12 +293,20 @@ def remove_tree(path: Path, attempts: int = 5) -> bool:
 
 
 def docker_available() -> bool:
+    """Whether Docker is running and can run the tasks' images, which are Linux ones.
+
+    Docker on Windows can be switched to Windows containers; it then answers, but can't pull them.
+    """
     if not shutil.which("docker"):
         return False
     try:
-        return subprocess.run(["docker", "info"], capture_output=True, timeout=15).returncode == 0
+        info = subprocess.run(
+            ["docker", "info", "--format", "{{.OSType}}"], stdin=subprocess.DEVNULL, capture_output=True,
+            text=True, encoding="utf-8", errors="replace", timeout=15,
+        )
     except (OSError, subprocess.TimeoutExpired):
         return False
+    return info.returncode == 0 and info.stdout.strip() == "linux"
 
 
 DOCKER_TIMEOUT = 300  # seconds, for docker calls other than the build and the script run
@@ -342,7 +350,9 @@ class DockerRunner(Runner):
     def __post_init__(self) -> None:
         self.name = "docker"
         if not docker_available():
-            raise RunnerError("Docker is not available. Start Docker, or use --runner local.")
+            raise RunnerError(
+                "Docker is not available. Start Docker (with Linux containers, on Windows), or use --runner local."
+            )
 
     def image(self, task: Task) -> str:
         """Build (or reuse) the task image. The tag changes whenever environment/ changes."""

@@ -155,6 +155,17 @@ def test_a_missing_ib_bash_is_a_runner_error(tmp_path, monkeypatch):
         LocalRunner()
 
 
+@pytest.mark.parametrize("code, os_type, available", [
+    (0, "linux\n", True),
+    (0, "windows\n", False),  # Docker on Windows in Windows-container mode: it can't pull the tasks' images
+    (1, "", False),  # the daemon isn't running
+])
+def test_docker_is_available_only_with_linux_containers(monkeypatch, code, os_type, available):
+    monkeypatch.setattr(ib_runner.shutil, "which", lambda name: "docker")
+    monkeypatch.setattr(subprocess, "run", lambda args, **kwargs: subprocess.CompletedProcess(args, code, os_type, ""))
+    assert ib_runner.docker_available() is available
+
+
 def fake_docker(monkeypatch, tmp_path, slow=()):
     """A DockerRunner whose docker calls succeed at once, except the subcommands in `slow`, which time out."""
     calls = []
