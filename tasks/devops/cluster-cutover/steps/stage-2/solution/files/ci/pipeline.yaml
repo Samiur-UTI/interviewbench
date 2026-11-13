@@ -1,0 +1,45 @@
+stages:
+  - test
+  - firewall
+  - vault
+  - deploy
+
+default:
+  image: registry.quayside.example/quayside/ci-tools:3.2.0
+
+test:
+  stage: test
+  image: registry.quayside.example/mirror/library/python:3.12-slim
+  script:
+    - pip install --quiet pytest==8.4.1 pyyaml==6.0.2
+    - python -m pytest
+
+firewall:
+  stage: firewall
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  resource_group: halyard-firewall
+  script:
+    - ci/apply-firewall.sh
+
+vault:
+  stage: vault
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  resource_group: platform-vault
+  variables:
+    VAULT_ADDR: https://vault.platform.quayside.example:8200
+  script:
+    - ci/vault-apply.sh
+
+deploy:
+  stage: deploy
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+  resource_group: quay-prod-fra1
+  environment:
+    name: production
+  variables:
+    KUBECONFIG: $PROD_KUBECONFIG
+  script:
+    - ci/deploy.sh

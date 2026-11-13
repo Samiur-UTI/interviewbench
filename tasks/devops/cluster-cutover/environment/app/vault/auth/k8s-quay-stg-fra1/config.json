@@ -1,0 +1,5 @@
+{
+  "kubernetes_host": "https://api.quay-stg.quayside.example:6443",
+  "kubernetes_ca_cert": "@platform-ca",
+  "disable_local_ca_jwt": true
+}

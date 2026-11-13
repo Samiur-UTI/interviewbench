@@ -1,0 +1,5 @@
+{
+  "type": "kv",
+  "options": {"version": "2"},
+  "description": "Production secrets"
+}

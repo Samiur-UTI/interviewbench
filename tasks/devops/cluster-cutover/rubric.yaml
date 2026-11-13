@@ -1,0 +1,165 @@
+# Inherits rubrics/base.yaml and rubrics/devops.yaml. Entries below add criteria or override
+# inherited ones by id. Total weight: 45 auto + 55 judge = 100
+# (15 + 15 + 15 + correctness 10 + root-cause 10 + code-quality 5 + verification 5
+#  + business-alignment 5 + communication 5 + security 10 + reproducibility 5).
+
+focus: |
+  The truth in this repo is scattered on purpose: docs/network.md (addresses and the complete list
+  of inbound flows), docs/access.md (who needs what), docs/monitoring.md (what Statusbeat and
+  Prometheus need), docs/vault.md (address, CA ConfigMap, KV v2 mounts, one auth mount per cluster
+  named after clusterName, the reviewer identity and its address), docs/standards/vault-clients.md
+  (the eight rules), docs/adr/0004 (no injector), infra/README.md (firewall semantics),
+  infra/cluster/kubeadm.yaml (cluster name and version), services/payments/Dockerfile (the app's
+  user), deploy/k8s/payments/hpa.yaml and vault/sys/quotas/ (the numbers for stage 3). Reward
+  candidates who followed a request end to end across layers; penalise fixes that make one layer
+  look right. Watch for:
+  - Stage 1, one door of several. There are four ways in and each has more than one layer: the API
+    server (firewall source + an RBAC binding for system:unauthenticated), the kubelet on 10250
+    (firewall + anonymous + AlwaysAllow), the kubelet's read-only port, and the dashboard (NodePort
+    range open + skip-login + a cluster-admin service account). Closing only the firewall leaves
+    every door open from the VPN, a compromised pod or the next firewall mistake; fixing only the
+    cluster leaves etcd, ssh and the NodePort range open to the internet.
+  - Stage 1, over-fixing. `anonymous-auth: "false"` breaks Statusbeat (it cannot send credentials;
+    /readyz is already served to anonymous callers by system:public-info-viewer, so the probe never
+    needed a binding). Turning off the kubelet's webhook authentication breaks Prometheus. Deleting
+    the cluster-reader role takes support's access away. Dropping the platform Vault's flow to 6443
+    breaks token reviews (and so stage 2). Removing the dashboard or its NodePort takes support's
+    only tool away. Removing `Node` from authorization-mode breaks the kubelets.
+  - Stage 1, a firewall rewritten by guesswork instead of from docs/network.md: a /24 around the
+    VPN address, ssh from the node network, etcd from the node network, NodePorts left open.
+  - Stage 2, the Vault path. KV version 2: the policy path is kv/data/payments/stripe, not
+    kv/payments/stripe; a glob (kv/data/payments/*) also reads other payments secrets. The auth
+    mount is k8s-quay-prod-fra1, not `kubernetes`. A role without `audience` accepts any token of
+    that service account, including the one automounted into every container. A role bound to
+    `default` or to `*` is every pod in the namespace or cluster.
+  - Stage 2, what was already there. The `smoke-test` role (default service account, any
+    namespace, kv-read-all) lets any pod on the default service account read every secret in kv/,
+    the Stripe key included: it has to go or lose its reach. The `service-discovery` binding gives
+    every authenticated identity cluster-reader (Secrets included); developers have `edit`
+    cluster-wide (exec, Secrets, create pods and service account tokens in payments); support's
+    cluster-reader reads Secrets.
+  - Stage 2, the pod. The agent must be an init container that exits (`exit_after_auth`), or the
+    service starts before its file exists; a native sidecar does not exist on v1.28. The file must
+    be readable by uid 10001 although the agent writes it as uid 100 (fsGroup, or one user for
+    both), without world-readable bits. `tls_skip_verify`, a disk-backed emptyDir, the automounted
+    token left on, the token mounted into the payments container, a Secret still referenced, the
+    value still passing through the pipeline, the Agent Injector's annotations (not installed).
+  - Stage 2, the service. Falling back to the environment when the file is missing; a default
+    dataclass repr or a log line that prints the settings or the request headers; an exception
+    message that quotes the file's content.
+  - Stage 3. Keeping the default render interval (5 minutes) misses the 60 seconds; a very short
+    one (5 s) breaks the quota at 40 replicas: 40 / interval must be at most 2 per second, so the
+    interval has to be between 20 s and 60 s. Lowering maxReplicas or raising the quota is not a
+    solution. A sidecar with `exit_after_auth` crash-loops. Restarting pods from the agent (a
+    template `command` that kills the service) is a restart. A service that re-reads on a timer, or
+    that crashes or blanks its key when the file is missing for a moment. Reward NOTES.md that
+    gives the numbers and says what happens while Vault is down.
+
+business: |
+  Quayside runs online ordering for independent restaurants. Card payments through Stripe are the
+  business: README's priorities are taking payments first (a configuration change must never stop
+  card payments), then the storefront, then everything else. The platform team is small; support
+  has no kubectl and works through the dashboard over the VPN.
+
+  Rules (each stated in a brief or a starter document):
+  - Nobody without credentials gets anything from the cluster beyond its health and version
+    endpoints, and the firewall lets in only the flows docs/network.md lists (stage 1).
+  - Closing the incident must not break what depends on the cluster: Statusbeat's probe,
+    Prometheus, the pipeline, people's access per docs/access.md, Vault's token reviews, the public
+    storefront, support's dashboard (stage 1).
+  - The two Stripe values live in the platform Vault and nowhere else; only the payments pods can
+    read them, and in the payments namespace only the pipeline, platform admins and payments
+    on-call can do anything that yields the workload's identity or memory (stage 2).
+  - Vault clients follow docs/standards/vault-clients.md (stage 2).
+  - The service fails closed at start and never logs the values (stage 2).
+  - A rolled key is in use within 60 seconds with no restart, inside the Vault quota at any size
+    the Deployment can reach; a running pod keeps serving with its last valid key when the file or
+    Vault is briefly unavailable (stage 3).
+
+  Priorities when they conflict: not leaking the key > taking payments > least privilege for
+  people's convenience > freshness of a rotation > Vault load. A pod that cannot get its key must
+  not start (fail closed), but a running pod must not stop taking payments because Vault or the
+  file is briefly unavailable. Access people need per docs/access.md is kept; access nobody needs
+  is removed, not left "for convenience".
+
+criteria:
+  - id: stage1-every-way-in
+    type: auto
+    stage: 1
+    weight: 15
+    description: Hidden stage 1 tests pass (the firewall lets in only the documented flows; no answer without credentials from the API server, the kubelets or the dashboard; the probe, Prometheus, the pipeline, people's access and Vault's token reviews still work).
+
+  - id: stage2-key-in-vault
+    type: auto
+    stage: 2
+    weight: 15
+    description: Hidden stage 2 tests pass (a payments pod cold-starts with the Stripe values rendered from Vault by an agent that meets the platform standard; no other identity can read them through Vault or reach the workload through Kubernetes; the values are nowhere else; the service reads the file, fails closed and never logs them).
+
+  - id: stage3-rotation
+    type: auto
+    stage: 3
+    weight: 15
+    description: Hidden stage 3 tests pass (running pods use a rolled key within 60 seconds without a restart, inside the Vault quota at the largest Deployment size; the service follows the file and keeps its last valid values; nothing from stages 1 and 2 given back).
+
+  - id: correctness
+    weight: 10
+    levels:
+      0: Wrong in common cases (a way in left open, a pod that cannot start, a service that cannot charge), or the candidate's tests fail.
+      1: Works for the tested paths but has a real problem the tests miss (e.g. a manifest the API server would reject, an existing binding's roleRef changed in place (the apply fails; it needs a new name), a template that breaks on a key containing a quote, a reload that reads a half-written file, a role or policy name that collides with another team's).
+      2: Correct, with at most minor gaps.
+      3: Correct, including the awkward cases (a key with JSON-special characters, token expiry and re-login, Vault unreachable at start and while running, a rollout during a rotation).
+
+  - id: root-cause
+    weight: 10
+    description: Finds every root cause of the stage 1 exposure, in every layer, and fixes each where it lives.
+    levels:
+      0: No fix, or one layer only (the firewall alone, or the cluster alone), or a fix that hides the symptom by breaking something that depends on the cluster.
+      1: Every door closed, but by the wrong means in places (anonymous-auth off instead of removing the binding, the dashboard removed instead of fixed, a guessed firewall instead of the documented flows).
+      2: Firewall from docs/network.md; the unauthenticated binding removed and anonymous health checks kept; kubelet authentication and Webhook authorisation; read-only port off; dashboard login required and its service account confined to its namespace.
+      3: As 2, and NOTES.md explains why each door existed (what the contractor was trying to make work, and why it never needed it, e.g. /readyz is public by default) and which doors the firewall alone would not have closed.
+
+  - id: code-quality
+    weight: 5
+    levels:
+      0: Hard to follow, or breaks the formats the pipeline applies (firewall schema, vault/ tree, manifests).
+      1: Works but with unnecessary complexity or duplication (copy-pasted agent configs that will drift, RBAC rules repeated per namespace by hand where a built-in role fits, dead manifests left behind).
+      2: Clear and consistent with the repo.
+      3: Clear and minimal; one agent config shared by the init and the long-running agent where possible; RBAC built from built-in roles; the service's reload isolated in one small unit.
+
+  - id: verification
+    weight: 5
+    levels:
+      0: No new tests.
+      1: Some tests, but they would not have caught the original problems.
+      2: Tests for the service's file contract, fail-closed behaviour and logging, plus checks over the manifests or firewall that would have caught at least one stage 1 door.
+      3: As 2, plus tests for the reload (replace, missing, corrupt) and checks that encode the standard (no world-readable render, memory volume, bound audience, the render interval within both limits).
+
+  - id: business-alignment
+    weight: 5
+    levels:
+      0: Breaks a rule (a way in left open, the key readable by someone else or left in a second place, payments stopped by the change, something that depends on the cluster broken).
+      1: Rules hold, but a judgement call works against the business (a service that stops taking payments when the file is briefly missing, access people need removed or access nobody needs kept, a rotation that needs a manual step, a render interval at the very edge of the quota or of the 60 seconds).
+      2: Every rule holds, and judgement calls follow the stated priorities.
+
+  - id: communication
+    weight: 5
+    levels:
+      0: Empty or missing.
+      1: Lists changes only.
+      2: Explains each root cause, the design and its trade-offs, what Finance and on-call must do at go-live (roll both values, remove the pipeline variables), and the stage 3 numbers.
+      3: As 2, the runbook is updated to match, and it says what the AI got wrong or what was verified by hand.
+
+  # From rubrics/devops.yaml; weight raised from 5 and levels made specific to this task.
+  - id: security
+    weight: 10
+    description: The key's whole path is least-privilege, from Vault to the process, with no second copy and no borrowed identity.
+    levels:
+      0: The key is readable by an identity that should not have it (through Vault, a Secret, the pipeline, exec, a token, logs), or a stage 1 door is open.
+      1: No such path, but broader than needed (a policy glob, a role without audience or bound loosely, long token lifetimes, the token mounted into the payments container, TLS verification off, a world-readable or disk-backed file, containers running as root).
+      2: Least privilege throughout (exact-path read-only policy, role bound to one service account, one namespace and an audience, short lifetimes, projected token only in the agent, verified TLS, memory-backed non-world-readable file, non-root containers), with the leftovers removed (smoke-test role, broad bindings, the Secret, the pipeline variables).
+
+  - id: reproducibility
+    levels:
+      0: Unpinned images, or changes that only work when applied by hand or in a particular order.
+      1: Mostly pinned and declarative, with gaps (an image without a tag, a manual step needed for the change to take effect that the notes do not mention).
+      2: Every image pinned from the mirror; everything is in the files the pipeline applies and applying them twice gives the same result; the only manual steps are the ones that must be (the values in Vault, the roll at Stripe) and they are in the runbook.

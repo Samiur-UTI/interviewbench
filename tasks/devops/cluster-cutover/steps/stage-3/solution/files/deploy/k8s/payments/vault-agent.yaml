@@ -1,0 +1,47 @@
+# Vault Agent's configuration for the payments pods (docs/standards/vault-clients.md), shared by
+# the init container (renders once and exits) and the sidecar (keeps the file current). It logs in
+# with the pod's projected token for audience vault and renders the Stripe values from
+# kv/payments/stripe into /vault/secrets/stripe.json, the file the payments container reads
+# (STRIPE_CREDENTIALS_FILE). No token sink: the Vault token stays in the agent's memory.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: payments-vault-agent
+  namespace: payments
+data:
+  agent.hcl: |
+    vault {
+      address = "https://vault.platform.quayside.example:8200"
+      ca_cert = "/vault/ca/ca.crt"
+    }
+
+    auto_auth {
+      method "kubernetes" {
+        mount_path = "auth/k8s-quay-prod-fra1"
+        config = {
+          role       = "payments-api"
+          token_path = "/var/run/secrets/vault/token"
+        }
+      }
+    }
+
+    # Re-read kv/payments/stripe every 30 s (Vault Agent waits 85-95% of it, 25.5-28.5 s): a
+    # rolled key is in use within 30 s, and 40 pods (the autoscaler's maximum) read at most
+    # 40 / 25.5 = 1.6 times a second, inside the payments quota of 2 per second.
+    template_config {
+      static_secret_render_interval = "30s"
+    }
+
+    template {
+      source      = "/vault/config/stripe.json.ctmpl"
+      destination = "/vault/secrets/stripe.json"
+      perms       = "0440"
+    }
+  # toJSON quotes and escapes each value, so the file is valid JSON whatever the values contain.
+  stripe.json.ctmpl: |
+    {{- with secret "kv/data/payments/stripe" -}}
+    {
+      "secret_key": {{ .Data.data.secret_key | toJSON }},
+      "webhook_secret": {{ .Data.data.webhook_secret | toJSON }}
+    }
+    {{ end -}}

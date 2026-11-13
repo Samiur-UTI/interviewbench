@@ -1,0 +1,52 @@
+name: quayside
+
+services:
+  storefront:
+    image: registry.quayside.example/quayside/storefront:3.7.4
+    restart: unless-stopped
+    ports:
+      - "80:8080"
+      - "443:8443"
+    environment:
+      PORT: "8080"
+      TLS_PORT: "8443"
+      TLS_CERT_FILE: /tls/fullchain.pem
+      TLS_KEY_FILE: /tls/privkey.pem
+      ORDERS_URL: http://orders:8080
+      PAYMENTS_URL: http://payments:8080
+    volumes:
+      - /etc/letsencrypt/live/quayside.example:/tls:ro
+    depends_on:
+      - orders
+
+  orders:
+    image: registry.quayside.example/quayside/orders:2.19.0
+    restart: unless-stopped
+    environment:
+      PORT: "8080"
+      PAYMENTS_URL: http://payments:8080
+      DATABASE_URL: postgres://orders:${POSTGRES_PASSWORD}@postgres:5432/orders
+    depends_on:
+      - postgres
+      - payments
+
+  payments:
+    image: registry.quayside.example/quayside/payments:1.13.0
+    restart: unless-stopped
+    environment:
+      PORT: "8080"
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+
+  postgres:
+    image: registry.quayside.example/mirror/library/postgres:15.6
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: orders
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: orders
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata: {}

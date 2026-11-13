@@ -1,0 +1,51 @@
+schema_version = "1.4"
+# Harbor's trial reward is the mean of the three stage rewards (each = fraction of hidden tests passed).
+multi_step_reward_strategy = "mean"
+
+[task]
+name = "interviewbench/cluster-cutover"
+version = "1.0.0"
+description = "Platform repo after a Compose-to-Kubernetes cutover (firewall, kubeadm, RBAC, Vault, a Python payments service): an exposed cluster, then two follow-ups"
+authors = [{ name = "interviewbench" }]
+keywords = ["kubernetes", "vault", "security", "rbac", "firewall", "secrets", "python"]
+
+[metadata]
+category = "devops"                        # must match the folder: tasks/devops/
+tags = ["kubernetes", "kubeadm", "vault", "rbac", "firewall", "secrets", "security", "python"]
+difficulty = "hard"                        # Harbor vocabulary: easy | medium | hard
+expert_time_estimate_min = 120
+junior_time_estimate_min = 360
+
+[metadata.interviewbench]
+level = "senior"                           # junior | mid | senior
+language = "yaml"
+time_limit_minutes = 180
+# How the candidate's own tests are run (from $APP_DIR): the starter's pytest.ini points pytest at
+# tests/ and puts services/payments on the path. Needs Python with pytest and PyYAML; with the local
+# runner that is the interpreter running ib, which has both.
+candidate_tests = '"${PYTHON:-python}" -m pytest -q -p no:cacheprovider --junitxml="$LOGS_DIR/junit.xml"'
+attack_dir = "tests"
+
+[[steps]]
+name = "stage-1"
+[steps.agent]
+timeout_sec = 2400
+
+[[steps]]
+name = "stage-2"
+[steps.agent]
+timeout_sec = 2400
+
+[[steps]]
+name = "stage-3"
+[steps.agent]
+timeout_sec = 2400
+
+[verifier]
+# No cluster, no Vault, no processes: the hidden tests evaluate files and import the payments package.
+timeout_sec = 300
+
+[environment]
+build_timeout_sec = 600
+cpus = 1
+memory_mb = 2048

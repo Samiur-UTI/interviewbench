@@ -1,0 +1,4 @@
+{
+  "type": "kubernetes",
+  "description": "Service accounts of quay-prod-fra1"
+}
