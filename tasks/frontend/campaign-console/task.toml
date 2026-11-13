@@ -28,9 +28,9 @@ time_limit_minutes = 240
 #   last test, once its results are reported. Inline, so the starter needs no extra file.
 # - --single-threaded: without it the stage 2 reference's socket tests aborted at forced exit on
 #   Windows in 15 of 15 `npm test` runs (libuv UV_HANDLE_CLOSING assertion), 0 of 15 with it.
-# - `timeout -k 5 540s` ends a run that still hangs below [verifier].timeout_sec (600), so the
-#   spec output shows which test was running instead of only "timed out".
-candidate_tests = '''timeout -k 5 540s node --single-threaded --import "data:text/javascript,import{after}from'node:test';after(()=>{setTimeout(()=>process.exit(),2000).unref()})" --no-warnings=ExperimentalWarning --test --test-timeout=30000 --test-reporter=junit --test-reporter-destination="$LOGS_DIR/junit.xml" --test-reporter=spec --test-reporter-destination=stdout "tests/**/*.test.ts"'''
+# - No outer `timeout`, unlike tests/test.sh: the runner already stops a run that hangs, and macOS
+#   has no `timeout` command, so `ib test` must not need one.
+candidate_tests = '''node --single-threaded --import "data:text/javascript,import{after}from'node:test';after(()=>{setTimeout(()=>process.exit(),2000).unref()})" --no-warnings=ExperimentalWarning --test --test-timeout=30000 --test-reporter=junit --test-reporter-destination="$LOGS_DIR/junit.xml" --test-reporter=spec --test-reporter-destination=stdout "tests/**/*.test.ts"'''
 attack_dir = "tests"
 
 [[steps]]
