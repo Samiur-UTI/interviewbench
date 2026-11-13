@@ -98,8 +98,9 @@ after a full round with the reference solutions:
 | `rate-limiter` | about 11,000 tokens |
 | `flight-search-aggregator` | about 120,000 tokens |
 | `campaign-console` | about 250,000 tokens |
+| `cluster-cutover` | about 115,000 tokens |
 
-- Pasting into a chatbot is practical for `rate-limiter`. For the other two, use a model with a very
+- Pasting into a chatbot is practical for `rate-limiter`. For the others, use a model with a very
   large context window, or an API.
 - With an API, every judge run sends the whole prompt. Check your provider's prices before you
   grade the large tasks repeatedly.

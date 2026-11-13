@@ -35,8 +35,8 @@ that runs on your own machine. For engineers preparing for interviews where AI t
 - A way to run the tests. Either:
   - **Docker**, running Linux containers. Each task brings its toolchain in its own image.
   - **bash**, for the local runner. On Windows, install [Git for Windows](https://gitforwindows.org/).
-    The local runner uses your toolchain: `rate-limiter` needs only Python, and the TypeScript tasks
-    need Node.js 24.11 or later.
+    The local runner uses your toolchain: `rate-limiter` and `cluster-cutover` need only Python, and
+    the TypeScript tasks need Node.js 24.11 or later.
 
 **Install** from GitHub (the project is not on PyPI):
 
@@ -155,6 +155,7 @@ cloud credentials). The default, `--runner auto`, uses Docker if it runs Linux c
 | `rate-limiter` | Per-key token-bucket rate limiter | backend | Python | mid | 60 min |
 | `flight-search-aggregator` | Multi-supplier flight search: nested fares, DB-backed paging, 1 s budget | backend | TypeScript (Node.js) | senior | 180 min |
 | `campaign-console` | Full-stack campaign console (TypeScript server, Preact client) | frontend | TypeScript (Node.js, Preact) | senior | 240 min |
+| `cluster-cutover` | Platform repo after a Compose-to-Kubernetes cutover: firewall, kubeadm, RBAC, Vault, a payments service | devops | YAML, HCL, Python (Kubernetes, Vault) | senior | 180 min |
 
 `ib list` shows the same, with tags. Filter it with `ib list --category backend --tag python`.
 
@@ -195,8 +196,8 @@ runs only once every stage is revealed. Before that, ib refuses with a message.
 
 - `--judge-export` writes the prompt outside the workspace, to ib's data folder, and prints its path
   and the exact `ib grade --judge-reply "<path>"` command to run with the chatbot's saved reply.
-- **Size:** the prompt is about 11,000 tokens for `rate-limiter`, 120,000 for
-  `flight-search-aggregator` and 250,000 for `campaign-console`. Pasting is practical for
+- **Size:** the prompt is about 11,000 tokens for `rate-limiter`, 115,000 for `cluster-cutover`,
+  120,000 for `flight-search-aggregator` and 250,000 for `campaign-console`. Pasting is practical for
   `rate-limiter`, or with a model that has a very large context window. With an API, every run sends
   the whole prompt, so check the price.
 - The prompt contains the hidden tests and the reference solution: don't share it.
@@ -279,7 +280,7 @@ There is no published leaderboard.
 ## Status and limitations
 
 - Version 0.1.0, alpha. Install from GitHub; it is not on PyPI.
-- Three tasks: one Python, two TypeScript. The `devops` category has a rubric but no tasks yet.
+- Four tasks: one Python, two TypeScript, and one Kubernetes and Vault task whose tests need only Python.
 - One template for `ib new`, `backend-python`. Other stacks need a template written by hand.
 - No proctoring: ib shows the time limit and the time used, but doesn't enforce it or watch anyone.
 - The shipped tasks are for practice and for evaluating models, not for vetting candidates.

@@ -47,8 +47,7 @@ templates/<category>-<stack>/     # skeletons used by `ib new`
 ## Categories
 
 A category exists when `rubrics/<category>.yaml` exists. Its tasks live in `tasks/<category>/`.
-To add one, create both. Today: `backend`, `frontend` and `devops`. `devops` has a rubric but no
-tasks yet.
+To add one, create both. Today: `backend`, `frontend` and `devops`.
 
 - `metadata.category` in `task.toml` must equal the folder name.
 - Task ids (folder names) must be unique across all categories. Pick the category once; moving
