@@ -37,8 +37,14 @@ def run_break(
     runner: Runner,
     timeout: int | None = None,
     progress: Progress = no_progress,
+    upto: int | None = None,
 ) -> list[Attack]:
-    """Run `attack` against the candidate's code and the reference solution. Raises RunnerError."""
+    """Run `attack` against the candidate's code and the reference solution. Raises RunnerError.
+
+    `upto`: the stages the reference solves, which should be the ones the candidate has been asked
+    for. A later stage's reference would judge an attack by behaviour that stage changes, and its
+    failure messages would describe it. None solves every stage.
+    """
     if not task.candidate_tests:
         raise RunnerError(f"Task '{task.id}' defines no candidate_tests command, so attack tests can't run")
     if not attack.is_file():
@@ -47,7 +53,7 @@ def run_break(
     with tempfile.TemporaryDirectory(prefix="ib-break-", ignore_cleanup_errors=True) as tmp:
         tmp_path = Path(tmp)
         progress("Building the reference solution")
-        reference = build_reference(task, tmp_path / "reference", runner)
+        reference = build_reference(task, tmp_path / "reference", runner, upto=upto)
         baseline = _cases(task, runner, reference, tmp_path / "logs-baseline", timeout)
         progress("Running the attack tests on the reference solution")
         _place(attack, reference / destination)

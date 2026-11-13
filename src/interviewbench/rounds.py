@@ -452,7 +452,7 @@ def tokens_estimate(text: str) -> int:
 
 
 def write_attack_prompt(task: Task, workspace: Path, marker: dict) -> Path:
-    revealed = min(int(marker.get("stage", len(task.stages))), len(task.stages))
+    revealed = revealed_stages(task, marker) or len(task.stages)
     path = workspace / ATTACK_PROMPT
     path.write_text(attack_prompt(task, workspace, revealed), encoding="utf-8")
     return path
@@ -466,8 +466,13 @@ def break_round(
     timeout: int | None = None,
     progress: Progress = no_progress,
 ) -> BreakOutcome:
-    """Run an attack test file. Raises RunnerError."""
-    return BreakOutcome(run_break(task, workspace, attack, runner, timeout, progress))
+    """Run an attack test file. Raises RunnerError.
+
+    The reference solves only the stages the round has revealed (all of them for a hand-back), so an
+    attack is judged by the brief the candidate has, and a bad test's detail can't spoil a later stage.
+    """
+    upto = revealed_stages(task, ws.read_marker(workspace))
+    return BreakOutcome(run_break(task, workspace, attack, runner, timeout, progress, upto=upto))
 
 
 def suggested_attack_file(task: Task) -> str:
