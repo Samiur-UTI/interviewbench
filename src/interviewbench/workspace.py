@@ -1,6 +1,6 @@
 """A candidate's workspace: where it lives, TASK.md, the editor, git checkpoints and editor tasks.
 
-`ib start` makes the workspace feel like a real AI-enabled round: the starter code in its own folder
+`ib start` makes the workspace feel like a real AI-assisted round: the starter code in its own folder
 outside the repo (so an AI assistant there can't read the hidden tests), the brief in TASK.md, the
 editor opened on it, a git repo with one commit per stage, and buttons for the ib commands.
 """

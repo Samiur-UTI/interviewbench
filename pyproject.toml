@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "interviewbench"
 dynamic = ["version"]
-description = "Realistic AI-era coding interview tasks with hidden tests, rubrics and a grader; they also run as Harbor tasks."
+description = "Realistic tasks for AI-assisted coding interviews, with hidden tests, rubrics and a grader; they also run as Harbor tasks."
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
