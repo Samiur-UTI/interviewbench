@@ -186,7 +186,9 @@ restart: `judge-prompt` answers `404` again, and `judge-reply` rebuilds the prom
 
 `BreakResult` is `{attacks: [{name, verdict: "real break"|"survived"|"bad test", detail}], counts:
 {real_break, survived, bad_test}, runner, finished_at}`. `filename` is a bare file name (letters,
-digits, `.`, `_` and `-`); the attack file is written to a temp folder, never to the workspace.
+digits, `.`, `_` and `-`); the attack file is written to a temp folder, never to the workspace. A
+test that fails on the reference, or that didn't run on the candidate's code, is a `bad test`: only a
+failure that ran counts as a `real break`. The CLI refuses an attack file inside the workspace.
 
 ### Jobs
 

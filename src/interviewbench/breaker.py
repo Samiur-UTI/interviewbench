@@ -21,12 +21,13 @@ from .tasks import Task
 from .workspace import stage_section
 
 REAL_BREAK, BAD_TEST, SURVIVED = "real break", "bad test", "survived"
+NOT_RUN = "did not run on your code, so it isn't counted as a break. Check that `ib test` runs your tests"
 
 
 @dataclass
 class Attack:
     name: str
-    verdict: str  # REAL_BREAK, BAD_TEST or SURVIVED
+    verdict: str  # REAL_BREAK, BAD_TEST (it fails on the reference, or never ran on your code) or SURVIVED
     detail: str = ""
 
 
@@ -71,7 +72,7 @@ def run_break(
         if ref_error is not None:
             attacks.append(Attack(name, BAD_TEST, f"fails on the reference too: {ref_error}"))
         elif case_id not in on_yours:
-            attacks.append(Attack(name, REAL_BREAK, "did not run on your code"))
+            attacks.append(Attack(name, BAD_TEST, NOT_RUN))  # only a failure that ran is a break
         elif on_yours[case_id] is not None:
             attacks.append(Attack(name, REAL_BREAK, on_yours[case_id]))
         else:

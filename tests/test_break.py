@@ -154,3 +154,26 @@ def test_a_hand_back_is_refereed_by_the_full_reference(tmp_path, task, runner, m
     with pytest.raises(RunnerError, match="No attack tests ran"):
         rounds.break_round(task, handback, attack, runner)
     assert built == [None]
+
+
+@pytest.mark.parametrize("inside", ["my_attack_test.py", "tests/my_attack_test.py"])
+def test_an_attack_file_inside_the_workspace_is_refused(stage1_done, monkeypatch, inside):
+    """The candidate's run would collect the copy too, and the duplicate module would fail that run."""
+    copy = stage1_done / inside
+    copy.write_text(ATTACK, encoding="utf-8")
+    monkeypatch.setattr(breaker, "build_reference", lambda *args, **kwargs: pytest.fail("ran before the check"))
+    result = cli.invoke(app, ["break", str(copy), "--dir", str(stage1_done), "--runner", RUNNER_KIND])
+    text = " ".join(result.output.split())
+    assert result.exit_code == 1 and "is inside the workspace" in text and "../my_attack_test.py" in text
+
+
+def test_a_test_that_did_not_run_on_your_code_is_not_a_break(tmp_path, task, runner, monkeypatch):
+    runs = iter([{}, {"m::test_ran": None, "m::test_lost": None}, {"m::test_ran": None}])  # baseline, reference, yours
+    monkeypatch.setattr(breaker, "build_reference", lambda task, dest, runner, upto=None: dest)
+    monkeypatch.setattr(breaker, "_cases", lambda *args: next(runs))
+    attack = tmp_path / "attack_test.py"
+    attack.write_text(ATTACK, encoding="utf-8")
+    outcome = rounds.break_round(task, task.starter_dir, attack, runner)
+    assert {a.name: a.verdict for a in outcome.attacks} == {"test_ran": SURVIVED, "test_lost": BAD_TEST}
+    assert outcome.counts == {"real_break": 0, "survived": 1, "bad_test": 1}
+    assert "did not run on your code" in outcome.attacks[1].detail
