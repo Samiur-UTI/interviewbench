@@ -21,10 +21,16 @@ level = "senior"                           # junior | mid | senior
 language = "typescript"
 time_limit_minutes = 240
 # How the candidate's own tests are run (from $APP_DIR). Needs Node.js >= 24.11 (built-in type
-# stripping); with the local runner that means on the host. Same flags as tests/test.sh, including
-# --single-threaded: without it the stage 2 reference's socket tests aborted at forced exit on
-# Windows in 15 of 15 `npm test` runs (libuv UV_HANDLE_CLOSING assertion), 0 of 15 with it.
-candidate_tests = 'node --single-threaded --no-warnings=ExperimentalWarning --test --test-force-exit --test-timeout=30000 --test-reporter=junit --test-reporter-destination="$LOGS_DIR/junit.xml" --test-reporter=spec --test-reporter-destination=stdout "tests/**/*.test.ts"'
+# stripping); with the local runner that means on the host.
+# - No --test-force-exit: with junit written to a file it can drop testcases (see tests/test.sh).
+#   The inline --import module takes its place, as tests/exit-guard.mjs does in
+#   flight-search-aggregator: a test file whose code leaks a timer or socket exits 2 s after its
+#   last test, once its results are reported. Inline, so the starter needs no extra file.
+# - --single-threaded: without it the stage 2 reference's socket tests aborted at forced exit on
+#   Windows in 15 of 15 `npm test` runs (libuv UV_HANDLE_CLOSING assertion), 0 of 15 with it.
+# - `timeout -k 5 540s` ends a run that still hangs below [verifier].timeout_sec (600), so the
+#   spec output shows which test was running instead of only "timed out".
+candidate_tests = '''timeout -k 5 540s node --single-threaded --import "data:text/javascript,import{after}from'node:test';after(()=>{setTimeout(()=>process.exit(),2000).unref()})" --no-warnings=ExperimentalWarning --test --test-timeout=30000 --test-reporter=junit --test-reporter-destination="$LOGS_DIR/junit.xml" --test-reporter=spec --test-reporter-destination=stdout "tests/**/*.test.ts"'''
 attack_dir = "tests"
 
 [[steps]]
