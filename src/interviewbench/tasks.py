@@ -14,6 +14,7 @@ few interviewbench-only extras. The full contract is in docs/TASK_FORMAT.md:
 
 from __future__ import annotations
 
+import math
 import os
 import re
 import sys
@@ -332,8 +333,8 @@ def _validate(task: Task, config: dict) -> None:
     for c in task.criteria:
         if c.type not in CRITERION_TYPES:
             fail(f"criterion '{c.id}' has type '{c.type}'; expected one of {CRITERION_TYPES}")
-        if c.weight <= 0:
-            fail(f"criterion '{c.id}' must have a positive weight")
+        if not math.isfinite(c.weight) or c.weight <= 0:  # NaN fails every comparison, so check it first
+            fail(f"criterion '{c.id}' must have a positive weight, got {c.weight:g}")
         if c.type == "auto" and c.stage not in stage_numbers:
             fail(f"auto criterion '{c.id}' must reference an existing stage")
         if c.type == "judge" and (len(c.levels) < 2 or sorted(c.levels) != list(range(len(c.levels)))):
