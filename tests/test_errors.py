@@ -1,14 +1,17 @@
 """Damaged input gives a clear error naming the file, never a traceback, and never takes down the rest."""
 
+import json
+import re
 import shutil
 from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
 
-from interviewbench import rounds
+from interviewbench import judge, rounds
 from interviewbench.cli import app
-from interviewbench.tasks import TaskError, load_all, load_task
+from interviewbench.judge import JudgeError
+from interviewbench.tasks import REPORT, TaskError, load_all, load_task
 
 REPO = Path(__file__).resolve().parents[1]
 cli = CliRunner()
@@ -104,6 +107,39 @@ def test_a_weight_must_be_a_positive_number(bench, weight):
                       encoding="utf-8", newline="\n")
     with pytest.raises(TaskError, match="'communication' must have a positive weight"):
         load_task(spare(bench))
+
+
+def judge_answer(task, **first):
+    criteria = [{"id": c.id, "rationale": "r", "evidence": [], "level": 1} for c in task.criteria if c.type == "judge"]
+    criteria[0].update(first)
+    return {"criteria": criteria, "missed_edge_cases": [], "issues": [], "summary": "s"}
+
+
+@pytest.mark.parametrize("bad, message", [
+    ({"level": [2]}, "level [2], which isn't a whole number"),
+    ({"level": {"n": 2}}, "which isn't a whole number"),
+    ({"level": 1.5}, "level 1.5, which isn't a whole number"),
+    ({"level": True}, "level True"),
+    ({"level": None}, "level None"),
+    ({"id": ["root-cause"]}, "criterion id ['root-cause'], which isn't a string"),
+    ({"id": {"x": 1}}, "which isn't a string"),
+])
+def test_a_malformed_judge_answer_is_a_judge_error(task, bad, message):
+    with pytest.raises(JudgeError, match=re.escape(message)):
+        judge._normalize(judge_answer(task, **bad))
+    with pytest.raises(JudgeError, match="no 'criteria' list"):
+        judge._normalize([judge_answer(task)])
+    assert judge._normalize(judge_answer(task, level="2"))["criteria"][0]["level"] == 2  # still lenient there
+    loose = judge._normalize({**judge_answer(task), "missed_edge_cases": 3, "issues": "none"})
+    assert loose["missed_edge_cases"] == [] and loose["issues"] == []
+
+
+def test_a_malformed_pasted_reply_keeps_the_hidden_test_scores(task, tmp_path, solution_dir, runner):
+    workspace = shutil.copytree(solution_dir, tmp_path / "ws")
+    reply = "```json\n" + json.dumps(judge_answer(task, level=[2])) + "\n```"
+    outcome = rounds.grade_round(task, workspace, runner, judge="reply", reply=reply)
+    assert "isn't a whole number" in outcome.judge_error
+    assert "45.0/45" in (workspace / REPORT).read_text(encoding="utf-8")
 
 
 def test_validate_still_reports_unknown_and_duplicate_ids(bench):
