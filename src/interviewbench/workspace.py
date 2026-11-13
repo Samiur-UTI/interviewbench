@@ -238,7 +238,7 @@ def write_editor_tasks(workspace: Path) -> bool:
 def _git(workspace: Path, *args: str) -> None:
     subprocess.run(
         ["git", "-C", str(workspace), *args], check=True, capture_output=True, text=True,
-        stdin=subprocess.DEVNULL,
+        encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL,  # git writes UTF-8, not the locale's code page
     )
 
 
