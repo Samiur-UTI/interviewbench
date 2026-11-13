@@ -1,0 +1,59 @@
+name: Task proposal
+description: Propose a new interview task before writing it
+labels: ["task"]
+body:
+  - type: markdown
+    attributes:
+      value: Describe the task before you build it, so we can agree on scope. The task contract is in docs/TASK_FORMAT.md and the rules for fair hidden tests are in CONTRIBUTING.md.
+  - type: input
+    id: title
+    attributes:
+      label: Working title
+    validations:
+      required: true
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options:
+        - backend
+        - frontend
+        - devops
+        - a new category
+    validations:
+      required: true
+  - type: input
+    id: stack
+    attributes:
+      label: Language and stack
+      description: For example Python with pytest, or TypeScript on Node.js
+    validations:
+      required: true
+  - type: textarea
+    id: scenario
+    attributes:
+      label: Scenario
+      description: The fictional product and the small codebase the candidate receives.
+    validations:
+      required: true
+  - type: textarea
+    id: stages
+    attributes:
+      label: The three stages
+      description: "Stage 1: the bug to fix. Stage 2: the feature to add. Stage 3: what to optimise. One or two sentences each."
+    validations:
+      required: true
+  - type: input
+    id: time
+    attributes:
+      label: Expected time
+      description: Minutes for a candidate at the target level, with AI assistance
+    validations:
+      required: true
+  - type: checkboxes
+    id: originality
+    attributes:
+      label: Originality
+      options:
+        - label: This task is my own work. It is not a real interview question from any company, not under NDA, and not copied from a product.
+          required: true
