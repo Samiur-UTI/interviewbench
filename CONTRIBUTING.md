@@ -25,6 +25,7 @@ Node.js 24.11 or later on your PATH.
   with the local runner.
 - `IB_TEST_RUNNER=docker python -m pytest` runs the same checks in containers. Docker must be running.
 - `ib validate --run` checks the tasks only.
+- `ruff check src tests` runs the linter. The rules are in `pyproject.toml`.
 
 ## Writing a task
 
@@ -62,8 +63,22 @@ as `.example`. Credentials in fixtures must be obviously fake: they must contain
 ## Commits and pull requests
 
 Make small commits with a conventional prefix (`feat`, `fix`, `docs`, `test`, `refactor`, `perf`,
-`chore`) and an optional scope, for example `fix(grade): ...`. Keep one topic per pull request.
-Say what you ran.
+`chore`, `build`, `ci`, `revert`) and an optional scope, for example `fix(grade): ...`. Keep one
+topic per pull request. Say what you ran.
+
+Nobody pushes to `main`. Open a pull request from a branch or a fork. It can merge when:
+
+| Check | What it needs from you |
+|---|---|
+| Tests | `python -m pytest` passes on Linux and Windows, on Python 3.10 and 3.12. |
+| Tasks in containers | Every task's starter fails stage 1 and every reference solution passes in Docker. |
+| Lint | `ruff check src tests` reports nothing. |
+| Commit messages | Every commit subject looks like `type(scope): subject`. |
+| Tests with code changes | A change under `src/` comes with a change under `tests/`. If no test makes sense, say why and a maintainer can waive the check. |
+| Review | A maintainer approves, and every review comment is resolved. |
+
+A push to your branch re-runs the checks, and a new push after an approval needs a new approval.
+How the rules are set up is in [docs/MAINTAINING.md](docs/MAINTAINING.md).
 
 ## Security
 

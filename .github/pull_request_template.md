@@ -5,7 +5,9 @@
 ## Checklist
 
 - [ ] `python -m pytest` passes locally
+- [ ] `ruff check src tests` reports nothing
 - [ ] A test fails without this change (or say here why none is needed)
+- [ ] Every commit subject follows `type(scope): subject`
 - [ ] Docs are updated if behaviour changed
 
 For task changes:
