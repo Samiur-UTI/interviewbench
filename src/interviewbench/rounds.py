@@ -24,8 +24,8 @@ from .judge import (
 from .report import to_markdown
 from .runner import Runner, RunnerError
 from .tasks import (
-    ATTACK_PROMPT, BRIEF, FULL_REPORT, JUDGE_PROMPT, REPORT, UI_STATE, Task, TaskError, _task_dirs, bench_root, categories, get_task, load_task,
-    tasks_root, templates_root,
+    ATTACK_PROMPT, BRIEF, FULL_REPORT, JUDGE_PROMPT, REPORT, UI_STATE, Task, TaskError, _task_dirs, bench_is_bundled,
+    bench_root, categories, get_task, load_task, tasks_root, templates_root,
 )
 
 SAFE_NAME = re.compile(r"[A-Za-z0-9._-]+")  # a round id or attack file name: one plain path segment
@@ -551,6 +551,13 @@ def templates() -> list[str]:
 
 def new_task(task_id: str, category: str, template: str | None = None) -> NewTask:
     """Create a task skeleton from a template."""
+    if bench_is_bundled():
+        raise RoundError(
+            f"ib new needs a clone of the interviewbench repo. This ib was installed as a package, so its tasks "
+            f"are in {tasks_root()}, where a new task would be lost on the next upgrade. Clone the repo, install it "
+            "with `pip install -e .` and run ib new inside the clone, or set IB_ROOT to a folder that holds "
+            "tasks/, rubrics/ and templates/."
+        )
     known = categories()
     if category not in known:
         raise RoundError(f"Unknown category '{category}'. Known: {', '.join(known)}. Add rubrics/{category}.yaml to create one.")

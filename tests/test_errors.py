@@ -10,7 +10,7 @@ import pytest
 from typer.testing import CliRunner
 
 from conftest import RUNNER_KIND
-from interviewbench import judge, rounds
+from interviewbench import judge, rounds, tasks
 from interviewbench import workspace as ws
 from interviewbench.cli import app
 from interviewbench.judge import JudgeError
@@ -231,6 +231,24 @@ def test_the_gui_skips_a_damaged_round(tmp_path, monkeypatch, name):
         rounds.load_round(name)
     assert rounds.list_rounds() == []
     assert ws.read_marker(tmp_path / name) == {}  # what grading reads: no task, so the first stage revealed
+
+
+def test_new_refuses_to_write_into_an_installed_package(tmp_path, monkeypatch):
+    package = tmp_path / "site-packages" / "interviewbench"
+    for folder in ("rubrics", "templates"):
+        shutil.copytree(REPO / folder, package / "_bench" / folder)
+    (package / "_bench" / "tasks").mkdir()
+    monkeypatch.delenv("IB_ROOT", raising=False)
+    monkeypatch.setattr(tasks, "__file__", str(package / "tasks.py"))
+    assert tasks.bench_root() == package / "_bench"
+    result = cli.invoke(app, ["new", "my-task", "--category", "backend"])
+    assert result.exit_code == 1 and not isinstance(result.exception, Exception), result.output
+    out = flat(result.output)
+    assert "ib new needs a clone of the interviewbench repo" in out and "pip install -e ." in out and "IB_ROOT" in out
+    assert not any((package / "_bench" / "tasks").iterdir())
+
+    monkeypatch.setenv("IB_ROOT", str(package / "_bench"))  # an explicit bench folder is the author's choice
+    assert cli.invoke(app, ["new", "my-task", "--category", "backend"]).exit_code == 0
 
 
 def test_validate_still_reports_unknown_and_duplicate_ids(bench):

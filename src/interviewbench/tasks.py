@@ -129,10 +129,14 @@ def bench_root() -> Path:
     env = os.environ.get("IB_ROOT")
     if env:
         return Path(env)
-    bundled = Path(__file__).parent / "_bench"
-    if bundled.is_dir():
-        return bundled
+    if bench_is_bundled():
+        return Path(__file__).parent / "_bench"
     return Path(__file__).resolve().parents[2]
+
+
+def bench_is_bundled() -> bool:
+    """Whether the tasks are the copy a pip or wheel install put inside the package (replaced on upgrade)."""
+    return not os.environ.get("IB_ROOT") and (Path(__file__).parent / "_bench").is_dir()
 
 
 def tasks_root() -> Path:
