@@ -1,0 +1,6 @@
+{
+  "bound_service_account_names": "*",
+  "bound_service_account_namespaces": "storefront,orders,payments",
+  "token_policies": ["stg-read"],
+  "ttl": "768h"
+}

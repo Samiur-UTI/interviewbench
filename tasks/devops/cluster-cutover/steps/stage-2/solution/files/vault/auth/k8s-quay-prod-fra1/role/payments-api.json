@@ -1,0 +1,8 @@
+{
+  "bound_service_account_names": ["payments-api"],
+  "bound_service_account_namespaces": ["payments"],
+  "audience": "vault",
+  "token_policies": ["payments-api"],
+  "token_ttl": "20m",
+  "token_max_ttl": "4h"
+}

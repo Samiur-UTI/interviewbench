@@ -1,0 +1,23 @@
+cluster: quay-prod-fra1
+region: fra1
+nodes:
+  - name: cp-1
+    role: control-plane
+    private_ip: 10.20.0.10
+    public_ip: 198.51.100.10
+    size: hc-4x8
+  - name: w-1
+    role: worker
+    private_ip: 10.20.0.21
+    public_ip: 198.51.100.21
+    size: hc-8x16
+  - name: w-2
+    role: worker
+    private_ip: 10.20.0.22
+    public_ip: 198.51.100.22
+    size: hc-8x16
+  - name: w-3
+    role: worker
+    private_ip: 10.20.0.23
+    public_ip: 198.51.100.23
+    size: hc-8x16

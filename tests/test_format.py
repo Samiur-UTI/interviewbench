@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from interviewbench.cli import check_task
-from interviewbench.runner import DockerRunner, docker_available
+from interviewbench.runner import DockerRunner, Sandbox, docker_available
 from interviewbench.tasks import TaskError, get_task, load_all, load_task
 
 REPO = Path(__file__).resolve().parents[1]
@@ -131,3 +131,20 @@ def test_starter_that_already_passes_is_reported(bench, runner):
 @pytest.mark.skipif(not docker_available(), reason="Docker is not running")
 def test_docker_runner_matches_harbor_contract():
     assert check_task(get_task("rate-limiter"), DockerRunner()) == []
+
+
+@pytest.mark.skipif(not docker_available(), reason="Docker is not running")
+def test_docker_runner_does_not_bring_back_deleted_starter_files(tmp_path):
+    # The image holds the starter in /app. A file the candidate deleted must not be there when
+    # the script runs, and must not come back to the host afterwards.
+    task = get_task("rate-limiter")
+    app = shutil.copytree(task.starter_dir, tmp_path / "app")
+    (app / "NOTES.md").unlink()
+    shutil.rmtree(app / "tests")
+    box = Sandbox(app=app, logs=tmp_path / "logs")
+    done = DockerRunner().run(task, 'ls -A "$APP_DIR"', box, timeout=120)
+    assert done.returncode == 0, done.output
+    listed = done.output.split()
+    assert "README.md" in listed and "NOTES.md" not in listed and "tests" not in listed
+    assert (app / "README.md").is_file()
+    assert not (app / "NOTES.md").exists() and not (app / "tests").exists()

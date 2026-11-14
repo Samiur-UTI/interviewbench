@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: storefront
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: orders
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: payments
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: platform
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kubernetes-dashboard

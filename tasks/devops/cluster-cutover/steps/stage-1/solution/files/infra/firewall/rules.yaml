@@ -1,0 +1,48 @@
+firewalls:
+  - name: quay-prod-control-plane
+    apply_to: {role: control-plane}
+    inbound:
+      - description: Kubernetes API (VPN, CI runners, Statusbeat, platform Vault, node network)
+        protocol: tcp
+        ports: "6443"
+        sources: ["203.0.113.17/32", "203.0.113.40/32", "192.0.2.64/28", "203.0.113.60/32", "10.20.0.0/24"]
+      - description: kubelet (API server and Prometheus, over the node network)
+        protocol: tcp
+        ports: "10250"
+        sources: ["10.20.0.0/24"]
+      - description: overlay (flannel vxlan)
+        protocol: udp
+        ports: "8472"
+        sources: ["10.20.0.0/24"]
+      - description: ssh (VPN)
+        protocol: tcp
+        ports: "22"
+        sources: ["203.0.113.17/32"]
+
+  - name: quay-prod-workers
+    apply_to: {role: worker}
+    inbound:
+      - description: ingress http
+        protocol: tcp
+        ports: "80"
+        sources: ["0.0.0.0/0"]
+      - description: ingress https
+        protocol: tcp
+        ports: "443"
+        sources: ["0.0.0.0/0"]
+      - description: dashboard NodePort (VPN)
+        protocol: tcp
+        ports: "30443"
+        sources: ["203.0.113.17/32"]
+      - description: kubelet (API server and Prometheus, over the node network)
+        protocol: tcp
+        ports: "10250"
+        sources: ["10.20.0.0/24"]
+      - description: overlay (flannel vxlan)
+        protocol: udp
+        ports: "8472"
+        sources: ["10.20.0.0/24"]
+      - description: ssh (VPN)
+        protocol: tcp
+        ports: "22"
+        sources: ["203.0.113.17/32"]

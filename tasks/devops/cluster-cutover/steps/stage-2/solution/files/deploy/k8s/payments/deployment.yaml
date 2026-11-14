@@ -1,0 +1,122 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: payments-api
+  namespace: payments
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payments-api
+  namespace: payments
+  labels:
+    app: payments-api
+spec:
+  replicas: 3
+  # New pods need Vault to start; never take an old pod away before its replacement is ready.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: payments-api
+  template:
+    metadata:
+      labels:
+        app: payments-api
+    spec:
+      serviceAccountName: payments-api
+      automountServiceAccountToken: false
+      securityContext:
+        # The agent (uid 100) writes the credentials file; the payments user reads it through
+        # this group.
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: vault-agent-init
+          image: registry.quayside.example/mirror/hashicorp/vault:1.15.6
+          command: ["vault", "agent", "-config=/vault/config/agent.hcl", "-exit-after-auth"]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 100
+            runAsGroup: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: vault-agent-config
+              mountPath: /vault/config
+              readOnly: true
+            - name: platform-ca
+              mountPath: /vault/ca
+              readOnly: true
+            - name: vault-token
+              mountPath: /var/run/secrets/vault
+              readOnly: true
+            - name: stripe-credentials
+              mountPath: /vault/secrets
+      containers:
+        - name: payments
+          image: registry.quayside.example/quayside/payments:1.14.2
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+            - name: STRIPE_API_BASE
+              value: "https://api.stripe.com"
+            - name: STRIPE_CREDENTIALS_FILE
+              value: /vault/secrets/stripe.json
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8080
+          resources:
+            requests:
+              cpu: 250m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: stripe-credentials
+              mountPath: /vault/secrets
+              readOnly: true
+      volumes:
+        - name: vault-agent-config
+          configMap:
+            name: payments-vault-agent
+        - name: platform-ca
+          configMap:
+            name: platform-ca
+            items:
+              - key: ca.crt
+                path: ca.crt
+        # Only the agent mounts this: a token for Vault alone, rotated by the kubelet.
+        - name: vault-token
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: vault
+                  expirationSeconds: 600
+                  path: token
+        - name: stripe-credentials
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi

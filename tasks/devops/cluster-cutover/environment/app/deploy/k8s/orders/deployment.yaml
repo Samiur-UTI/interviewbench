@@ -1,0 +1,54 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: orders-api
+  namespace: orders
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orders-api
+  namespace: orders
+  labels:
+    app: orders-api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: orders-api
+  template:
+    metadata:
+      labels:
+        app: orders-api
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      serviceAccountName: orders-api
+      containers:
+        - name: orders
+          image: registry.quayside.example/quayside/orders:2.21.0
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+            - name: PAYMENTS_URL
+              value: http://payments-api.payments.svc.cluster.local
+            - name: DATABASE_HOST
+              value: orders-db.quayside.example
+            - name: DATABASE_NAME
+              value: orders
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false

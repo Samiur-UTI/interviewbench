@@ -1,0 +1,83 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: platform-admins
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: quayside:platform
+---
+# Developers deploy and debug storefront and orders (edit there) and look everywhere else
+# (view: read-only, no Secrets, no exec).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: developers
+  namespace: storefront
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: edit
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: quayside:developers
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: developers
+  namespace: orders
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: edit
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: quayside:developers
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: developers-view
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: view
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: quayside:developers
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  # Not `support`: a binding's roleRef cannot be changed, so the old one is pruned instead.
+  name: support-readers
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: support-reader
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: quayside:support
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: payments-oncall
+  namespace: payments
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: admin
+subjects:
+  - apiGroup: rbac.authorization.k8s.io
+    kind: Group
+    name: quayside:payments-oncall

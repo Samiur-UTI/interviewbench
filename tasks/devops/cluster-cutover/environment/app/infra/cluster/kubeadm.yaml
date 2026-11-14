@@ -1,0 +1,51 @@
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: ClusterConfiguration
+clusterName: quay-prod-fra1
+kubernetesVersion: v1.28.9
+controlPlaneEndpoint: api.quay-prod.quayside.example:6443
+imageRepository: registry.quayside.example/mirror
+networking:
+  dnsDomain: cluster.local
+  podSubnet: 10.244.0.0/16
+  serviceSubnet: 10.96.0.0/12
+etcd:
+  local:
+    dataDir: /var/lib/etcd
+apiServer:
+  certSANs:
+    - api.quay-prod.quayside.example
+    - 10.20.0.10
+    - 198.51.100.10
+  extraArgs:
+    anonymous-auth: "true"
+    authorization-mode: "Node,RBAC"
+    profiling: "false"
+    oidc-issuer-url: https://sso.quayside.example
+    oidc-client-id: kubernetes
+    oidc-username-claim: email
+    oidc-groups-claim: groups
+controllerManager:
+  extraArgs:
+    profiling: "false"
+scheduler:
+  extraArgs:
+    profiling: "false"
+---
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+cgroupDriver: systemd
+serverTLSBootstrap: true
+rotateCertificates: true
+clusterDNS:
+  - 10.96.0.10
+clusterDomain: cluster.local
+authentication:
+  anonymous:
+    enabled: true
+  webhook:
+    enabled: false
+  x509:
+    clientCAFile: /etc/kubernetes/pki/ca.crt
+authorization:
+  mode: AlwaysAllow
+readOnlyPort: 10255

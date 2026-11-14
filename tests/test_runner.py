@@ -213,6 +213,53 @@ def test_docker_containers_get_none_of_the_host_environment(tmp_path, monkeypatc
     assert env == ["--env=APP_DIR=/app", "--env=LOGS_DIR=/logs/verifier"]
 
 
+def starter_tree(root: Path) -> Path:
+    for rel in ("README.md", "deploy/secret.yaml", "deploy/app.yaml", "old/a.txt", "old/deep/b.txt", "it's here.txt"):
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_text("x")
+    return root
+
+
+def test_removed_from_starter_lists_what_the_app_no_longer_has(tmp_path):
+    starter = starter_tree(tmp_path / "starter")
+    app = shutil.copytree(starter, tmp_path / "app")
+    assert ib_runner.removed_from_starter(starter, app) == []
+    (app / "deploy" / "secret.yaml").unlink()
+    shutil.rmtree(app / "old")
+    (app / "added.txt").write_text("new files are not the runner's business")
+    # A folder that is gone is listed once, not file by file.
+    assert ib_runner.removed_from_starter(starter, app) == ["old", "deploy/secret.yaml"]
+    assert ib_runner.removed_from_starter(tmp_path / "no-starter", app) == []
+
+
+def test_docker_removes_starter_files_deleted_from_the_app(tmp_path, monkeypatch):
+    # The image holds the starter in /app and `docker cp` only adds and overwrites, so without
+    # this a file the candidate (or solve.sh) deleted is back when the hidden tests run.
+    docker, task, calls = fake_docker(monkeypatch, tmp_path)
+    starter_tree(task.environment_dir / "app")
+
+    def box(name: str) -> Sandbox:
+        made = sandbox(tmp_path / name)
+        shutil.copytree(task.environment_dir / "app", made.app, dirs_exist_ok=True)
+        return made
+
+    docker.run(task, "true", box("untouched"), timeout=5)
+    script = next(args for args, _ in calls if args[1] == "create")[-1]
+    assert script == "mkdir -p /app /logs/verifier && true"  # nothing deleted: nothing removed
+
+    edited = box("edited")
+    (edited.app / "deploy" / "secret.yaml").unlink()
+    (edited.app / "it's here.txt").unlink()
+    calls.clear()
+    docker.run(task, "true", edited, timeout=5)
+    script = next(args for args, _ in calls if args[1] == "create")[-1]
+    assert script == (
+        "mkdir -p /app /logs/verifier"
+        """ && rm -rf -- '/app/it'"'"'s here.txt' /app/deploy/secret.yaml"""
+        " && true"
+    )
+
+
 def test_remove_tree_deletes_read_only_files(tmp_path):
     target = tmp_path / "t" / "nested"
     target.mkdir(parents=True)
