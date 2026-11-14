@@ -17,3 +17,6 @@ tasks/devops/cluster-cutover/**/*.yml   text eol=lf
 tasks/devops/cluster-cutover/**/*.hcl   text eol=lf
 tasks/devops/cluster-cutover/**/*.py    text eol=lf
 tasks/devops/cluster-cutover/**/*.ini   text eol=lf
+
+# Git hooks run with sh.
+.githooks/*  text eol=lf

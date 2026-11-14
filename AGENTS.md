@@ -35,3 +35,4 @@ The CLI grades a candidate's (or an LLM's) solution against the rubric.
 - Never add language-specific logic to the grader; it belongs in the task's `test.sh` and Dockerfile.
 - Keep dependencies minimal. The local GUI (`ib ui`, see `docs/GUI.md`) uses the standard library on the server, and Preact and htm vendored in `ui/static/vendor/` in the browser: no npm, no build step, and no new vendored library without a reason.
 - Coordinate via git: one agent per branch/file area at a time; commit small.
+- Never push to `main`: push a branch and open a pull request. `git config core.hooksPath .githooks` makes git refuse it.
