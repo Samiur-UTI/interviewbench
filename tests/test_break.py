@@ -96,6 +96,19 @@ def test_break_prompt_shows_revealed_stages_and_code_but_no_hidden_tests(stage1_
     assert "_EPSILON" not in text  # the reference solution's code
 
 
+@pytest.mark.parametrize(("task_id", "name"), [
+    ("rate-limiter", "test_attack.py"),
+    ("flight-search-aggregator", "attack.test.ts"),  # its runner collects only tests/**/*.test.ts
+])
+def test_break_prompt_suggests_a_file_name_the_tasks_runner_collects(tmp_path, task_id, name):
+    dest = tmp_path / task_id
+    started = cli.invoke(app, ["start", task_id, "--dir", str(dest), "--no-open", "--no-git"])
+    assert started.exit_code == 0, started.output
+    result = cli.invoke(app, ["break", "--prompt", "--dir", str(dest)])
+    assert result.exit_code == 0, result.output
+    assert f"ib break ../{name}" in " ".join(result.output.split())
+
+
 def test_a_file_without_tests_is_reported(tmp_path, stage1_done):
     empty = tmp_path / "nothing_test.py"
     empty.write_text("VALUE = 1\n", encoding="utf-8")
