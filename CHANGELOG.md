@@ -8,6 +8,10 @@ All notable changes to this project are listed here, in the [Keep a Changelog](h
 
 - The `cluster-cutover` task, the first in the `devops` category: a Kubernetes and Vault platform repo whose hidden tests simulate the cluster and Vault, so they need only Python.
 
+### Fixed
+
+- The Docker runner no longer brings back starter files that the candidate or a reference solution deleted. The image holds the starter, and copying the workspace over it only added and overwrote files.
+
 ## [0.1.0] - Unreleased
 
 ### Added

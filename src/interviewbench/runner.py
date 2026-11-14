@@ -6,7 +6,8 @@ Scripts only see four folders, always through these variables (defaults are Harb
 
 - DockerRunner builds the task's environment/Dockerfile and runs the script in a fresh,
   network-less container, copying the folders in and out. Same result on every machine and for
-  every language; this is what Harbor does.
+  every language; this is what Harbor does. The image already holds the starter in /app, so
+  starter files the copied-in app no longer has are removed before the script runs.
 - LocalRunner runs the script with bash on this machine, pointing the variables at temp folders.
   Fast and needs no Docker, but the task's toolchain (e.g. Python + pytest) must be installed.
   TEMP/TMP/TMPDIR point at a folder of the run's own, deleted afterwards, so temp files the
@@ -19,6 +20,7 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+import shlex
 import shutil
 import signal
 import stat
@@ -373,11 +375,16 @@ class DockerRunner(Runner):
         folders = sandbox.folders()
         env = [f"--env={_ENV_NAMES[k]}={CONTAINER_PATHS[k]}" for k in folders]
         # `docker cp` rather than bind mounts: no host-path quirks, and files installed in the
-        # image (dependencies, build output) stay unless the sandbox replaces them.
+        # image (dependencies, build output) stay unless the sandbox replaces them. The image also
+        # holds the starter, and `docker cp` only adds and overwrites, so a starter file that was
+        # deleted from the app would come back: those are removed before the script runs.
+        setup = f"mkdir -p {' '.join(CONTAINER_PATHS[k] for k in folders)}"
+        removed = removed_from_starter(task.environment_dir / "app", sandbox.app)
+        if removed:
+            setup += " && rm -rf -- " + " ".join(shlex.quote(f"{CONTAINER_PATHS['app']}/{rel}") for rel in removed)
         _docker(
             "create", "--name", name, "--network", "none", "-w", CONTAINER_PATHS["app"], *env, *limits,
-            self.image(task), "bash", "-c",
-            f"mkdir -p {' '.join(CONTAINER_PATHS[k] for k in folders)} && {command}",
+            self.image(task), "bash", "-c", f"{setup} && {command}",
         )
         try:
             for key, host in folders.items():
@@ -394,6 +401,20 @@ class DockerRunner(Runner):
             return result
         finally:
             _docker("rm", "-f", name, check=False)
+
+
+def removed_from_starter(starter: Path, app: Path) -> list[str]:
+    """The paths `starter` has and `app` does not, relative, with forward slashes, in a stable order.
+
+    A folder that is gone is listed once, not file by file.
+    """
+    removed: list[str] = []
+    for dirpath, dirnames, filenames in os.walk(starter):
+        rel = Path(dirpath).relative_to(starter)
+        gone = sorted(name for name in dirnames + filenames if not os.path.lexists(app / rel / name))
+        removed += [(rel / name).as_posix() for name in gone]
+        dirnames[:] = sorted(d for d in dirnames if d not in gone)
+    return removed
 
 
 def _copy_out(container: str, source: str, dest: Path) -> None:
