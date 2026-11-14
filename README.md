@@ -11,8 +11,8 @@ that runs on your own machine. For engineers preparing for interviews where AI t
 
 ## What you get
 
-- **Three original tasks**, each a small multi-file repo in three stages: fix a bug, add a feature,
-  then optimize. One is Python, two are TypeScript.
+- **Four original tasks**, each a small multi-file repo in three stages: fix a bug, add a feature,
+  then optimize. One is Python, two are TypeScript, and one is Kubernetes and Vault configuration.
 - **A grader** that runs hidden tests and scores a weighted rubric, without spoiling the stages you
   haven't reached.
 - **A browser GUI and a CLI** over the same rounds. Use your own editor and AI tools.
@@ -110,7 +110,7 @@ the task's author wrote, which stay in the task folder and are never copied into
 1. **Start.** `ib start <task>`, or **Start round** in the GUI. ib copies the starter code to
    `~/ib-workspaces/<task>`, makes it a git repo, opens it in your editor and starts the clock.
 2. **Read `TASK.md`.** It holds the time limit, the commands and the stage 1 brief. In VS Code,
-   Cursor or Windsurf, the commands are also under *Terminal > Run Task*.
+   Cursor, Windsurf or Qoder, the commands are also under *Terminal > Run Task*.
 3. **Work with your AI tools.** Open only the workspace folder, so your assistant can't read the
    hidden tests. Any assistant is allowed. Write what you found and why in `NOTES.md`: it is graded.
 4. **Run your tests: `ib test`.** It runs the tests in your workspace, including any you add, the
@@ -133,8 +133,11 @@ the task's author wrote, which stay in the task folder and are never copied into
 
    ```bash
    ib break --prompt
-   ib break ../attack_test.py
+   ib break ../test_attack.py
    ```
+
+   Name the file so the task's test runner collects it: `ib break --prompt` prints a name
+   (`test_attack.py` for the Python tasks, `attack.test.ts` for the TypeScript ones).
 
    The terminal prints the same verdicts as the GUI's **Break it** panel:
 
@@ -150,14 +153,14 @@ cloud credentials). The default, `--runner auto`, uses Docker if it runs Linux c
 
 ## The tasks
 
-| Task | What it is | Category | Language | Level | Time |
-|---|---|---|---|---|---|
-| `rate-limiter` | Per-key token-bucket rate limiter | backend | Python | mid | 60 min |
-| `flight-search-aggregator` | Multi-supplier flight search: nested fares, DB-backed paging, 1 s budget | backend | TypeScript (Node.js) | senior | 180 min |
-| `campaign-console` | Full-stack campaign console (TypeScript server, Preact client) | frontend | TypeScript (Node.js, Preact) | senior | 240 min |
-| `cluster-cutover` | Platform repo after a Compose-to-Kubernetes cutover: firewall, kubeadm, RBAC, Vault, a payments service | devops | YAML, HCL, Python (Kubernetes, Vault) | senior | 180 min |
+| Task | What it is | Category | Language | Level | Time | Author |
+|---|---|---|---|---|---|---|
+| `rate-limiter` | Per-key token-bucket rate limiter | backend | Python | mid | 60 min | [@Samiur-UTI](https://github.com/Samiur-UTI) |
+| `flight-search-aggregator` | Multi-supplier flight search: nested fares, DB-backed paging, 1 s budget | backend | TypeScript (Node.js) | senior | 180 min | [@Samiur-UTI](https://github.com/Samiur-UTI) |
+| `campaign-console` | Full-stack campaign console (TypeScript server, Preact client) | frontend | TypeScript (Node.js, Preact) | senior | 240 min | [@Samiur-UTI](https://github.com/Samiur-UTI) |
+| `cluster-cutover` | Platform repo after a Compose-to-Kubernetes cutover: firewall, kubeadm, RBAC, Vault, a payments service | devops | YAML, HCL, Python (Kubernetes, Vault) | senior | 180 min | [@Samiur-UTI](https://github.com/Samiur-UTI) |
 
-`ib list` shows the same, with tags. Filter it with `ib list --category backend --tag python`.
+`ib list` shows the same tasks, with tags. Filter it with `ib list --category backend --tag python`.
 
 ## Commands
 
@@ -174,7 +177,7 @@ cloud credentials). The default, `--runner auto`, uses Docker if it runs Linux c
 | `ib grade --judge` | Also score the judge criteria with an AI model. See `--judge-export` and `--judge-reply`. |
 | `ib grade --all-stages` | Show failing hidden tests for every stage, for an interviewer grading a hand-back. |
 | `ib break [<file>] [--prompt]` | Run attack tests on your code and on the reference. |
-| `ib new <id> --category C` | Create a task skeleton from a template. Needs a clone or `IB_ROOT`. |
+| `ib new <id> --category C` | Create a task skeleton from a template (`--template T`). Needs a clone or `IB_ROOT`. |
 | `ib validate [<id>...] [--run]` | Check tasks against [the task format](docs/TASK_FORMAT.md); `--run` also runs their tests. |
 | `ib version`, `ib --version` | Print the version. |
 

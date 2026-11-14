@@ -6,7 +6,7 @@ multi_step_reward_strategy = "mean"
 name = "interviewbench/cluster-cutover"
 version = "1.0.0"
 description = "Platform repo after a Compose-to-Kubernetes cutover (firewall, kubeadm, RBAC, Vault, a Python payments service): an exposed cluster, then two follow-ups"
-authors = [{ name = "interviewbench" }]
+authors = [{ name = "Samiur-UTI" }]
 keywords = ["kubernetes", "vault", "security", "rbac", "firewall", "secrets", "python"]
 
 [metadata]

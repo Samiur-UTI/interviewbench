@@ -327,9 +327,11 @@ def break_code(
     task, marker = _workspace_or_exit(dir)
     if write_prompt:
         path = escape(str(rounds.write_attack_prompt(task, dir, marker)))
+        # A name the task's test runner collects: the TypeScript tasks only run tests/**/*.test.ts.
+        name = escape(rounds.suggested_attack_file(task))
         console.print(
             f"Wrote [green]{path}[/green]. Give it to any chatbot or coding agent, save the test file it writes "
-            f"[bold]outside[/bold] this folder (e.g. ../attack_test.py), then run [bold]ib break ../attack_test.py[/bold]."
+            f"[bold]outside[/bold] this folder (e.g. ../{name}), then run [bold]ib break ../{name}[/bold]."
         )
         return
     if attack is None:

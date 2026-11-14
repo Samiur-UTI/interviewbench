@@ -6,7 +6,7 @@ multi_step_reward_strategy = "mean"
 name = "interviewbench/flight-search-aggregator"
 version = "2.0.0"
 description = "Multi-supplier flight search: nested fares, DB-backed paging, 1 s budget"
-authors = [{ name = "interviewbench" }]
+authors = [{ name = "Samiur-UTI" }]
 keywords = ["typescript", "nodejs", "sqlite", "pagination", "worker-threads", "performance"]
 
 [metadata]
