@@ -6,7 +6,7 @@ multi_step_reward_strategy = "mean"
 name = "interviewbench/campaign-console"
 version = "1.0.0"
 description = "Full-stack campaign console (TypeScript server, Preact client): phantom disconnects, a pentest finding, reconnect-and-resume, probes shared across dashboards"
-authors = [{ name = "interviewbench" }]
+authors = [{ name = "Samiur-UTI" }]
 keywords = ["typescript", "preact", "ssr", "websocket", "security", "xss", "resilience", "fullstack"]
 
 [metadata]

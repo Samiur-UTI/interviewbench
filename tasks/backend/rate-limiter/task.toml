@@ -6,7 +6,7 @@ multi_step_reward_strategy = "mean"
 name = "interviewbench/rate-limiter"
 version = "1.0.0"
 description = "Per-key token-bucket rate limiter"
-authors = [{ name = "interviewbench" }]
+authors = [{ name = "Samiur-UTI" }]
 keywords = ["python", "algorithms", "performance"]
 
 [metadata]
